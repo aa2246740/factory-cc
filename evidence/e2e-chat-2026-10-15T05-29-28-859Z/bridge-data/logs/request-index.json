@@ -1,0 +1,30 @@
+[
+  {
+    "at": "2026-10-15T05:29:32.055Z",
+    "method": "POST",
+    "path": "/v1/messages",
+    "role": "chat",
+    "authOk": true,
+    "sessionHint": "sess_c16bda50-de4c-45d8-bc75-33606c59c0e5",
+    "model": "relay-chat",
+    "stream": true,
+    "toolNames": [
+      "Read",
+      "LS",
+      "Execute",
+      "Edit",
+      "Grep",
+      "Glob",
+      "Create",
+      "TaskOutput",
+      "TaskStop",
+      "ToolSearch",
+      "Skill",
+      "Task"
+    ],
+    "messageCount": 2,
+    "notes": [
+      "new-session"
+    ]
+  }
+]

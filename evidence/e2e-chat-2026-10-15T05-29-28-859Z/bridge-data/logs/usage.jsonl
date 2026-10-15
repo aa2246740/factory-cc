@@ -1,0 +1,2 @@
+{"at":"2026-10-15T05:29:35.623Z","input_tokens":3781,"output_tokens":0,"cache_creation_input_tokens":1294,"cache_read_input_tokens":17427,"sessionId":"sess_c16bda50-de4c-45d8-bc75-33606c59c0e5","role":"chat","model":"MiniMax-M2.5","provider":"minimax","cache_hit_ratio":0.7745}
+{"at":"2026-10-15T05:29:36.532Z","input_tokens":0,"output_tokens":49,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"sessionId":"sess_c16bda50-de4c-45d8-bc75-33606c59c0e5","role":"chat","model":"MiniMax-M2.5","provider":"minimax","cache_hit_ratio":0}

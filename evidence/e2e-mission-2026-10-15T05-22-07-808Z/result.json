@@ -1,0 +1,90 @@
+{
+  "suite": "e2e-mission",
+  "status": "PASS",
+  "nonClaudeModel": true,
+  "provider": "minimax",
+  "model": "MiniMax-M2.5",
+  "baseUrl": "https://api.minimaxi.com/anthropic",
+  "tokenEnv": "MINIMAXCN_API_KEY",
+  "durationSec": 306,
+  "requestCount": 17,
+  "droid": {
+    "code": 0,
+    "stdout": "[Edit] Edit /tmp/relay-e2e-home-cIRtWM/.factory/missions/a7680511-99bf-438d-8033-084f158f5d98/features.json\n\n[Read] Read /tmp/relay-e2e-home-cIRtWM/.factory/missions/a7680511-99bf-438d-8033-084f158f5d98/features.json\n\n[Edit] Edit /tmp/relay-e2e-home-cIRtWM/.factory/missions/a7680511-99bf-438d-8033-084f158f5d98/features.json\nNow let me check if the mission is complete. All features are completed and both assertions (VAL-FILTER-001 and VAL-COUNTS-001) are \"passed\" in validation-state.json. Let me verify and then check the README:\n\n[Glob] Glob /tmp/relay-e2e-ws-PSJwBQ/tiny-tasks\n\n[Glob] Glob /tmp/relay-e2e-ws-PSJwBQ/tiny-tasks\n\n[Read] Read /tmp/relay-e2e-ws-PSJwBQ/tiny-tasks/MISSION.md\nThe mission is complete. All features passed:\n- **fix-completed-filter-defect**: Fixed visibleTasks and counts in src/store.ts\n- **scrutiny-validator-fix-defect**: Tests pass (6/6)\n- **user-testing-validator-fix-defect**: Assertions verified (VAL-FILTER-001 and VAL-COUNTS-001 are \"passed\")\n\nNow I need to create a README.md in the repository root as per the end-of-mission gate:\n\n[Write] Write /tmp/relay-e2e-ws-PSJwBQ/tiny-tasks/README.md\nMission complete! Here's the summary:\n\n## ✅ Mission Complete: tiny-tasks completed-filter defect\n\n### Fixed\n- **src/store.ts**: `visibleTasks` now filters by `task.completed === true` when filter is `'completed'`\n- **src/store.ts**: `counts.completed` returns actual completed task count\n\n### Validated\n- **Tests**: 6/6 passed\n- **Assertions**: Both VAL-FILTER-001 and VAL-COUNTS-001 are \"passed\" in validation-state.json\n\n### Files Changed\n- `/tmp/relay-e2e-ws-PSJwBQ/tiny-tasks/src/store.ts` - Fixed the filter logic\n- `/tmp/relay-e2e-ws-PSJwBQ/tiny-tasks/README.md` - Created\n\nThe completed filter now correctly shows only completed tasks, not active tasks.\n",
+    "stderr": ""
+  },
+  "tests": {
+    "code": 0,
+    "stdout": "\n> tiny-tasks@1.0.0 test\n> vitest run\n\n\n RUN  v3.2.7 /tmp/relay-e2e-ws-PSJwBQ/tiny-tasks\n\n ✓ tests/acceptance.test.ts (6 tests) 5ms\n\n Test Files  1 passed (1)\n      Tests  6 passed (6)\n   Start at  05:27:13\n   Duration  402ms (transform 31ms, setup 0ms, collect 28ms, tests 5ms, environment 231ms, prepare 42ms)\n\n",
+    "stderr": ""
+  },
+  "roles": [
+    "orchestrator",
+    "worker",
+    "worker",
+    "worker",
+    "validator",
+    "validator",
+    "validator",
+    "orchestrator",
+    "orchestrator",
+    "orchestrator",
+    "orchestrator",
+    "validator",
+    "validator",
+    "validator",
+    "orchestrator",
+    "orchestrator",
+    "orchestrator"
+  ],
+  "uniqueRoles": [
+    "orchestrator",
+    "worker",
+    "validator"
+  ],
+  "threeRoles": true,
+  "validationGreen": true,
+  "featuresDone": true,
+  "testsGreen": true,
+  "validation": [
+    {
+      "id": "VAL-FILTER-001",
+      "status": "passed"
+    },
+    {
+      "id": "VAL-COUNTS-001",
+      "status": "passed"
+    }
+  ],
+  "features": [
+    {
+      "id": "user-testing-validator-fix-defect",
+      "status": "completed"
+    },
+    {
+      "id": "fix-completed-filter-defect",
+      "status": "completed"
+    },
+    {
+      "id": "scrutiny-validator-fix-defect",
+      "status": "completed"
+    }
+  ],
+  "missionState": "completed",
+  "seededMissionDir": "/tmp/relay-e2e-home-cIRtWM/.factory/missions/a7680511-99bf-438d-8033-084f158f5d98",
+  "cache": {
+    "input_tokens": 1788772,
+    "output_tokens": 64422,
+    "cache_creation_input_tokens": 49331,
+    "cache_read_input_tokens": 2497868,
+    "cache_hit_ratio": 0.5761,
+    "requests": 269,
+    "representativeOfClaude": false
+  },
+  "notes": [
+    "PASS requires three roles, validation-state all passed, and npm test green.",
+    "No short exec timeout; droid runs until it exits.",
+    "Claude login unused. Official Anthropic billing unused.",
+    "Cache hit ratio is from MiniMax-compatible usage fields; it is not representative of Claude prompt cache."
+  ]
+}

@@ -1,0 +1,272 @@
+[
+  {
+    "bridgeSessionId": "sess_41ad9631-c183-4ef6-8c3b-1ef2295d5704",
+    "role": "orchestrator",
+    "state": "IDLE",
+    "model": "relay-orchestrator",
+    "historyHash": "9dfc46724c3f85cd1201c22e688589d349cd070d7cad60f01f64c29663f7a1a2",
+    "toolNames": [
+      "Read",
+      "LS",
+      "Execute",
+      "Edit",
+      "Grep",
+      "Glob",
+      "Create",
+      "TaskOutput",
+      "TaskStop",
+      "ToolSearch",
+      "Skill",
+      "ProposeMission",
+      "StartMissionRun",
+      "DismissHandoffItems",
+      "Task"
+    ],
+    "createdAt": "2026-10-15T05:22:11.093Z",
+    "updatedAt": "2026-10-15T05:26:56.760Z",
+    "pendingToolIds": [],
+    "cancelRequested": false,
+    "notes": [
+      "artifact:features.json",
+      "artifact:validation-contract.md",
+      "artifact:validation-state.json",
+      "artifact:AGENTS.md",
+      "artifact:services.yaml",
+      "artifact:SKILL.md",
+      "mission-run-started",
+      "mission-spawned",
+      "sdk-mission-start-when-ready",
+      "sdk: droid MCP tool_use; Claude Code built-ins already executed"
+    ],
+    "usage": {
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "estimated": true
+    }
+  },
+  {
+    "bridgeSessionId": "sess_0aee816f-d6ba-4abd-b1a3-1b07aba7032f",
+    "role": "worker",
+    "state": "IDLE",
+    "model": "relay-worker",
+    "historyHash": "69627889b5f548283c1b8191441547e214aa2150ffda5171357d4f130e0e262c",
+    "toolNames": [],
+    "createdAt": "2026-10-15T05:22:11.391Z",
+    "updatedAt": "2026-10-15T05:25:26.794Z",
+    "pendingToolIds": [],
+    "cancelRequested": false,
+    "notes": [
+      "artifact:features.json",
+      "artifact:validation-contract.md",
+      "artifact:validation-state.json",
+      "artifact:AGENTS.md",
+      "artifact:services.yaml",
+      "artifact:SKILL.md"
+    ],
+    "usage": {
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "estimated": true
+    }
+  },
+  {
+    "bridgeSessionId": "sess_d98d3c2c-4021-49b9-bbc0-c69978946822",
+    "role": "worker",
+    "state": "IDLE",
+    "model": "relay-worker",
+    "historyHash": "6d9aa20b15489268c91a0b956af5040938760bc7258cd2aeb5076b7c23297f2a",
+    "toolNames": [
+      "Read",
+      "LS",
+      "Execute",
+      "Edit",
+      "Grep",
+      "Glob",
+      "Create",
+      "ExitSpecMode",
+      "TaskOutput",
+      "TaskStop",
+      "ToolSearch",
+      "Skill",
+      "EndFeatureRun",
+      "Task"
+    ],
+    "createdAt": "2026-10-15T05:22:11.410Z",
+    "updatedAt": "2026-10-15T05:24:16.954Z",
+    "pendingToolIds": [],
+    "cancelRequested": false,
+    "notes": [
+      "artifact:features.json",
+      "artifact:validation-contract.md",
+      "artifact:validation-state.json",
+      "artifact:AGENTS.md",
+      "artifact:services.yaml",
+      "artifact:SKILL.md",
+      "sdk: droid MCP tool_use; Claude Code built-ins already executed"
+    ],
+    "usage": {
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "estimated": true
+    }
+  },
+  {
+    "bridgeSessionId": "sess_09bf93e1-7aba-477e-b5fb-a0efd9f5bd43",
+    "role": "validator",
+    "state": "IDLE",
+    "model": "relay-validator",
+    "historyHash": "f55e6aa42626fa58ba04aafde3349654dc47759d655dee765b6bc70fd462eaba",
+    "toolNames": [],
+    "createdAt": "2026-10-15T05:24:13.667Z",
+    "updatedAt": "2026-10-15T05:26:13.141Z",
+    "pendingToolIds": [],
+    "cancelRequested": false,
+    "notes": [
+      "artifact:features.json",
+      "artifact:validation-contract.md",
+      "artifact:validation-state.json",
+      "artifact:AGENTS.md",
+      "artifact:services.yaml",
+      "artifact:SKILL.md"
+    ],
+    "usage": {
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "estimated": true
+    }
+  },
+  {
+    "bridgeSessionId": "sess_292ed3ca-1074-41d6-ba2a-85463c9b3d07",
+    "role": "validator",
+    "state": "IDLE",
+    "model": "relay-validator",
+    "historyHash": "1784e86a8231c604e6b3887d1b431571e9d721ae1f44794ebb93f2155cbf6df7",
+    "toolNames": [
+      "Read",
+      "LS",
+      "Execute",
+      "Edit",
+      "Grep",
+      "Glob",
+      "Create",
+      "ExitSpecMode",
+      "TaskOutput",
+      "TaskStop",
+      "ToolSearch",
+      "Skill",
+      "EndFeatureRun",
+      "Task"
+    ],
+    "createdAt": "2026-10-15T05:24:13.682Z",
+    "updatedAt": "2026-10-15T05:24:54.336Z",
+    "pendingToolIds": [],
+    "cancelRequested": false,
+    "notes": [
+      "artifact:features.json",
+      "artifact:validation-contract.md",
+      "artifact:validation-state.json",
+      "artifact:AGENTS.md",
+      "artifact:services.yaml",
+      "artifact:SKILL.md",
+      "sdk: droid MCP tool_use; Claude Code built-ins already executed"
+    ],
+    "usage": {
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "estimated": true
+    }
+  },
+  {
+    "bridgeSessionId": "sess_0b33cc44-8963-4cd8-ad23-a6ff43e2b2a3",
+    "role": "validator",
+    "state": "IDLE",
+    "model": "relay-validator",
+    "historyHash": "2b93fe9a79c91739d8dc7588570e04302e0b8ab6a6447c8ac1989118446d4663",
+    "toolNames": [],
+    "createdAt": "2026-10-15T05:25:19.514Z",
+    "updatedAt": "2026-10-15T05:26:05.281Z",
+    "pendingToolIds": [],
+    "cancelRequested": false,
+    "notes": [
+      "artifact:features.json",
+      "artifact:validation-contract.md",
+      "artifact:validation-state.json",
+      "artifact:AGENTS.md",
+      "artifact:services.yaml",
+      "artifact:SKILL.md"
+    ],
+    "usage": {
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "estimated": true
+    }
+  },
+  {
+    "bridgeSessionId": "sess_d3dfb09c-21f1-4a9f-9423-18185577d101",
+    "role": "validator",
+    "state": "WAITING_DROID_TOOL",
+    "model": "relay-validator",
+    "historyHash": "1e8bda029fcbf43204bd2bbff9649e7c3289908c4d0d2d4a90d57237cc272354",
+    "toolNames": [
+      "Read",
+      "LS",
+      "Execute",
+      "Edit",
+      "Grep",
+      "Glob",
+      "Create",
+      "ExitSpecMode",
+      "TaskOutput",
+      "TaskStop",
+      "ToolSearch",
+      "Skill",
+      "EndFeatureRun",
+      "Task"
+    ],
+    "createdAt": "2026-10-15T05:25:19.531Z",
+    "updatedAt": "2026-10-15T05:25:50.556Z",
+    "pendingToolIds": [
+      "call_function_8988cnaxb8kh_1"
+    ],
+    "cancelRequested": false,
+    "notes": [
+      "artifact:features.json",
+      "artifact:validation-contract.md",
+      "artifact:validation-state.json",
+      "artifact:AGENTS.md",
+      "artifact:services.yaml",
+      "artifact:SKILL.md",
+      "sdk: droid MCP tool_use; Claude Code built-ins already executed"
+    ],
+    "usage": {
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "estimated": true
+    }
+  },
+  {
+    "bridgeSessionId": "sess_104e2c23-3c3f-4b78-93a5-e8853633e20f",
+    "role": "orchestrator",
+    "state": "IDLE",
+    "model": "relay-orchestrator",
+    "historyHash": "740411e502662a05ff50bcca0b09ac274aa7ee84e35e6c967976cc2644059746",
+    "toolNames": [],
+    "createdAt": "2026-10-15T05:26:56.772Z",
+    "updatedAt": "2026-10-15T05:27:12.860Z",
+    "pendingToolIds": [],
+    "cancelRequested": false,
+    "notes": [
+      "artifact:features.json",
+      "artifact:validation-contract.md",
+      "artifact:validation-state.json",
+      "artifact:AGENTS.md",
+      "artifact:services.yaml",
+      "artifact:SKILL.md"
+    ],
+    "usage": {
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "estimated": true
+    }
+  }
+]

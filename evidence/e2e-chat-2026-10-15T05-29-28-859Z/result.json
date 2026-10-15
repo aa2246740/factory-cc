@@ -1,0 +1,49 @@
+{
+  "suite": "e2e-chat",
+  "status": "PASS",
+  "nonClaudeModel": true,
+  "provider": "minimax",
+  "model": "MiniMax-M2.5",
+  "baseUrl": "https://api.minimaxi.com/anthropic",
+  "tokenEnv": "MINIMAXCN_API_KEY",
+  "droid": {
+    "code": 0,
+    "stdout": "RELAY_CHAT_OK\n",
+    "stderr": ""
+  },
+  "roles": [
+    "chat"
+  ],
+  "requests": 1,
+  "health": {
+    "ok": true,
+    "mode": "sdk",
+    "sdk": true,
+    "upstream": {
+      "kind": "sdk",
+      "authMode": "byok",
+      "permissionMode": "bypass",
+      "prompt": {
+        "systemPrompt": "preset:claude_code + stable append",
+        "previousLayout": "custom full-replace (disabled Claude Code default prompt)",
+        "dynamicPlacement": "end of user prompt",
+        "tools": "preset:claude_code built-ins + Droid-exclusive MCP"
+      },
+      "tools": "preset:claude_code + droid-exclusive MCP",
+      "includePartialMessages": true,
+      "overridesAnthropicEnv": true,
+      "upstream": {
+        "provider": "minimax",
+        "label": "https://api.minimaxi.com/anthropic",
+        "baseUrl": "https://api.minimaxi.com/anthropic",
+        "model": "MiniMax-M2.5",
+        "tokenEnv": "MINIMAXCN_API_KEY",
+        "authHeader": "authorization"
+      }
+    }
+  },
+  "notes": [
+    "stdout contained RELAY_CHAT_OK",
+    "Claude login unused. Official Anthropic billing unused."
+  ]
+}

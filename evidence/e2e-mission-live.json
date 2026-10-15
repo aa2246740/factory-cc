@@ -1,7 +1,7 @@
 {
-  "at": "2026-10-15T03:26:23.395Z",
-  "elapsedSec": 482,
-  "requests": 118,
+  "at": "2026-10-15T05:27:10.677Z",
+  "elapsedSec": 303,
+  "requests": 17,
   "uniqueRoles": [
     "orchestrator",
     "worker",
@@ -19,15 +19,15 @@
   ],
   "features": [
     {
+      "id": "user-testing-validator-fix-defect",
+      "status": "completed"
+    },
+    {
       "id": "fix-completed-filter-defect",
       "status": "completed"
     },
     {
       "id": "scrutiny-validator-fix-defect",
-      "status": "completed"
-    },
-    {
-      "id": "user-testing-validator-fix-defect",
       "status": "completed"
     }
   ],

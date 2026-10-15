@@ -10,7 +10,7 @@
 
 - `POST /v1/messages`：Anthropic Messages JSON 与 SSE
 - 原生 `tool_use` / `tool_result` 跨 HTTP 请求接力（先结束本次响应，SDK 回调继续等）
-- 按 Droid 当前请求动态注册 MCP 工具；Claude Code 内置工具用 `tools: []` 去掉
+- Claude Code 内置 Read/Edit/Bash 自己执行；只有 Mission 等 Droid 专有工具按当前请求注册为 MCP
 - 干净 HOME 下探测 `FACTORY_AIRGAP_ENABLED=1`
 - Tiny Tasks 验收夹具（参考实现，不是 Mission 产物）
 

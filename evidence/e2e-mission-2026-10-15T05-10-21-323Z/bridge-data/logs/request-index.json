@@ -1,0 +1,627 @@
+[
+  {
+    "at": "2026-10-15T05:10:24.595Z",
+    "method": "POST",
+    "path": "/v1/messages",
+    "role": "orchestrator",
+    "authOk": true,
+    "sessionHint": "sess_9cce83d4-69a5-4c8d-9e4a-bf403fc17e43",
+    "model": "relay-orchestrator",
+    "stream": true,
+    "toolNames": [
+      "Read",
+      "LS",
+      "Execute",
+      "Edit",
+      "Grep",
+      "Glob",
+      "Create",
+      "TaskOutput",
+      "TaskStop",
+      "ToolSearch",
+      "Skill",
+      "ProposeMission",
+      "StartMissionRun",
+      "DismissHandoffItems",
+      "Task"
+    ],
+    "messageCount": 2,
+    "notes": [
+      "new-session"
+    ]
+  },
+  {
+    "at": "2026-10-15T05:10:24.944Z",
+    "method": "POST",
+    "path": "/v1/messages",
+    "role": "worker",
+    "authOk": true,
+    "sessionHint": "sess_2c77760b-894a-437e-a96b-496b61fed8ce",
+    "model": "relay-worker",
+    "stream": true,
+    "toolNames": [],
+    "messageCount": 1,
+    "notes": [
+      "new-session"
+    ]
+  },
+  {
+    "at": "2026-10-15T05:10:24.974Z",
+    "method": "POST",
+    "path": "/v1/messages",
+    "role": "worker",
+    "authOk": true,
+    "sessionHint": "sess_495313a0-1e0e-41de-8166-1e9c4174ede5",
+    "model": "relay-worker",
+    "stream": true,
+    "toolNames": [
+      "Read",
+      "LS",
+      "Execute",
+      "Edit",
+      "Grep",
+      "Glob",
+      "Create",
+      "ExitSpecMode",
+      "TaskOutput",
+      "TaskStop",
+      "ToolSearch",
+      "Skill",
+      "EndFeatureRun",
+      "Task"
+    ],
+    "messageCount": 2,
+    "notes": [
+      "new-session"
+    ]
+  },
+  {
+    "at": "2026-10-15T05:12:25.875Z",
+    "method": "POST",
+    "path": "/v1/messages",
+    "role": "worker",
+    "authOk": true,
+    "sessionHint": "sess_495313a0-1e0e-41de-8166-1e9c4174ede5",
+    "model": "relay-worker",
+    "stream": true,
+    "toolNames": [
+      "Read",
+      "LS",
+      "Execute",
+      "Edit",
+      "Grep",
+      "Glob",
+      "Create",
+      "ExitSpecMode",
+      "TaskOutput",
+      "TaskStop",
+      "ToolSearch",
+      "Skill",
+      "EndFeatureRun",
+      "Task"
+    ],
+    "messageCount": 4,
+    "notes": [
+      "tool-use-id"
+    ]
+  },
+  {
+    "at": "2026-10-15T05:12:26.142Z",
+    "method": "POST",
+    "path": "/v1/messages",
+    "role": "validator",
+    "authOk": true,
+    "sessionHint": "sess_8a91553d-64e9-4198-bfe3-8fef16d83102",
+    "model": "relay-validator",
+    "stream": true,
+    "toolNames": [],
+    "messageCount": 1,
+    "notes": [
+      "new-session"
+    ]
+  },
+  {
+    "at": "2026-10-15T05:12:26.157Z",
+    "method": "POST",
+    "path": "/v1/messages",
+    "role": "validator",
+    "authOk": true,
+    "sessionHint": "sess_0151057c-a593-4b4a-8a73-9c7129ec86ad",
+    "model": "relay-validator",
+    "stream": true,
+    "toolNames": [
+      "Read",
+      "LS",
+      "Execute",
+      "Edit",
+      "Grep",
+      "Glob",
+      "Create",
+      "ExitSpecMode",
+      "TaskOutput",
+      "TaskStop",
+      "ToolSearch",
+      "Skill",
+      "EndFeatureRun",
+      "Task"
+    ],
+    "messageCount": 2,
+    "notes": [
+      "new-session"
+    ]
+  },
+  {
+    "at": "2026-10-15T05:12:37.326Z",
+    "method": "POST",
+    "path": "/v1/messages",
+    "role": "validator",
+    "authOk": true,
+    "sessionHint": "sess_0151057c-a593-4b4a-8a73-9c7129ec86ad",
+    "model": "relay-validator",
+    "stream": true,
+    "toolNames": [
+      "Read",
+      "LS",
+      "Execute",
+      "Edit",
+      "Grep",
+      "Glob",
+      "Create",
+      "ExitSpecMode",
+      "TaskOutput",
+      "TaskStop",
+      "ToolSearch",
+      "Skill",
+      "EndFeatureRun",
+      "Task"
+    ],
+    "messageCount": 4,
+    "notes": [
+      "tool-use-id"
+    ]
+  },
+  {
+    "at": "2026-10-15T05:12:37.351Z",
+    "method": "POST",
+    "path": "/v1/messages",
+    "role": "orchestrator",
+    "authOk": true,
+    "sessionHint": "sess_9cce83d4-69a5-4c8d-9e4a-bf403fc17e43",
+    "model": "relay-orchestrator",
+    "stream": true,
+    "toolNames": [
+      "Read",
+      "LS",
+      "Execute",
+      "Edit",
+      "Grep",
+      "Glob",
+      "Create",
+      "TaskOutput",
+      "TaskStop",
+      "ToolSearch",
+      "Skill",
+      "ProposeMission",
+      "StartMissionRun",
+      "DismissHandoffItems",
+      "Task"
+    ],
+    "messageCount": 4,
+    "notes": [
+      "tool-use-id"
+    ]
+  },
+  {
+    "at": "2026-10-15T05:14:34.313Z",
+    "method": "POST",
+    "path": "/v1/messages",
+    "role": "orchestrator",
+    "authOk": true,
+    "sessionHint": "sess_9cce83d4-69a5-4c8d-9e4a-bf403fc17e43",
+    "model": "relay-orchestrator",
+    "stream": true,
+    "toolNames": [
+      "Read",
+      "LS",
+      "Execute",
+      "Edit",
+      "Grep",
+      "Glob",
+      "Create",
+      "TaskOutput",
+      "TaskStop",
+      "ToolSearch",
+      "Skill",
+      "ProposeMission",
+      "StartMissionRun",
+      "DismissHandoffItems",
+      "Task"
+    ],
+    "messageCount": 6,
+    "notes": [
+      "tool-use-id"
+    ]
+  },
+  {
+    "at": "2026-10-15T05:15:01.002Z",
+    "method": "POST",
+    "path": "/v1/messages",
+    "role": "orchestrator",
+    "authOk": true,
+    "sessionHint": "sess_9cce83d4-69a5-4c8d-9e4a-bf403fc17e43",
+    "model": "relay-orchestrator",
+    "stream": true,
+    "toolNames": [
+      "Read",
+      "LS",
+      "Execute",
+      "Edit",
+      "Grep",
+      "Glob",
+      "Create",
+      "TaskOutput",
+      "TaskStop",
+      "ToolSearch",
+      "Skill",
+      "ProposeMission",
+      "StartMissionRun",
+      "DismissHandoffItems",
+      "Task"
+    ],
+    "messageCount": 8,
+    "notes": [
+      "tool-use-id"
+    ]
+  },
+  {
+    "at": "2026-10-15T05:15:05.626Z",
+    "method": "POST",
+    "path": "/v1/messages",
+    "role": "orchestrator",
+    "authOk": true,
+    "sessionHint": "sess_9cce83d4-69a5-4c8d-9e4a-bf403fc17e43",
+    "model": "relay-orchestrator",
+    "stream": true,
+    "toolNames": [
+      "Read",
+      "LS",
+      "Execute",
+      "Edit",
+      "Grep",
+      "Glob",
+      "Create",
+      "TaskOutput",
+      "TaskStop",
+      "ToolSearch",
+      "Skill",
+      "ProposeMission",
+      "StartMissionRun",
+      "DismissHandoffItems",
+      "Task"
+    ],
+    "messageCount": 10,
+    "notes": [
+      "tool-use-id"
+    ]
+  },
+  {
+    "at": "2026-10-15T05:15:08.935Z",
+    "method": "POST",
+    "path": "/v1/messages",
+    "role": "validator",
+    "authOk": true,
+    "sessionHint": "sess_2c63d114-088f-43c9-96ad-d1ab869f1c1d",
+    "model": "relay-validator",
+    "stream": true,
+    "toolNames": [],
+    "messageCount": 1,
+    "notes": [
+      "new-session"
+    ]
+  },
+  {
+    "at": "2026-10-15T05:15:08.951Z",
+    "method": "POST",
+    "path": "/v1/messages",
+    "role": "validator",
+    "authOk": true,
+    "sessionHint": "sess_776c9e5a-3458-497e-90cd-946e94689d46",
+    "model": "relay-validator",
+    "stream": true,
+    "toolNames": [
+      "Read",
+      "LS",
+      "Execute",
+      "Edit",
+      "Grep",
+      "Glob",
+      "Create",
+      "ExitSpecMode",
+      "TaskOutput",
+      "TaskStop",
+      "ToolSearch",
+      "Skill",
+      "EndFeatureRun",
+      "Task"
+    ],
+    "messageCount": 2,
+    "notes": [
+      "new-session"
+    ]
+  },
+  {
+    "at": "2026-10-15T05:15:18.142Z",
+    "method": "POST",
+    "path": "/v1/messages",
+    "role": "validator",
+    "authOk": true,
+    "sessionHint": "sess_776c9e5a-3458-497e-90cd-946e94689d46",
+    "model": "relay-validator",
+    "stream": true,
+    "toolNames": [
+      "Read",
+      "LS",
+      "Execute",
+      "Edit",
+      "Grep",
+      "Glob",
+      "Create",
+      "ExitSpecMode",
+      "TaskOutput",
+      "TaskStop",
+      "ToolSearch",
+      "Skill",
+      "EndFeatureRun",
+      "Task"
+    ],
+    "messageCount": 4,
+    "notes": [
+      "tool-use-id"
+    ]
+  },
+  {
+    "at": "2026-10-15T05:15:18.159Z",
+    "method": "POST",
+    "path": "/v1/messages",
+    "role": "orchestrator",
+    "authOk": true,
+    "sessionHint": "sess_9cce83d4-69a5-4c8d-9e4a-bf403fc17e43",
+    "model": "relay-orchestrator",
+    "stream": true,
+    "toolNames": [
+      "Read",
+      "LS",
+      "Execute",
+      "Edit",
+      "Grep",
+      "Glob",
+      "Create",
+      "TaskOutput",
+      "TaskStop",
+      "ToolSearch",
+      "Skill",
+      "ProposeMission",
+      "StartMissionRun",
+      "DismissHandoffItems",
+      "Task"
+    ],
+    "messageCount": 12,
+    "notes": [
+      "tool-use-id"
+    ]
+  },
+  {
+    "at": "2026-10-15T05:15:27.273Z",
+    "method": "POST",
+    "path": "/v1/messages",
+    "role": "orchestrator",
+    "authOk": true,
+    "sessionHint": "sess_9cce83d4-69a5-4c8d-9e4a-bf403fc17e43",
+    "model": "relay-orchestrator",
+    "stream": true,
+    "toolNames": [
+      "Read",
+      "LS",
+      "Execute",
+      "Edit",
+      "Grep",
+      "Glob",
+      "Create",
+      "TaskOutput",
+      "TaskStop",
+      "ToolSearch",
+      "Skill",
+      "ProposeMission",
+      "StartMissionRun",
+      "DismissHandoffItems",
+      "Task"
+    ],
+    "messageCount": 14,
+    "notes": [
+      "tool-use-id"
+    ]
+  },
+  {
+    "at": "2026-10-15T05:15:30.415Z",
+    "method": "POST",
+    "path": "/v1/messages",
+    "role": "validator",
+    "authOk": true,
+    "sessionHint": "sess_5242f408-60d1-4206-82e1-2c4c1ae94bd6",
+    "model": "relay-validator",
+    "stream": true,
+    "toolNames": [],
+    "messageCount": 1,
+    "notes": [
+      "new-session"
+    ]
+  },
+  {
+    "at": "2026-10-15T05:15:30.430Z",
+    "method": "POST",
+    "path": "/v1/messages",
+    "role": "validator",
+    "authOk": true,
+    "sessionHint": "sess_2eb2a483-a07f-4f21-bda5-d0697146e4bd",
+    "model": "relay-validator",
+    "stream": true,
+    "toolNames": [
+      "Read",
+      "LS",
+      "Execute",
+      "Edit",
+      "Grep",
+      "Glob",
+      "Create",
+      "ExitSpecMode",
+      "TaskOutput",
+      "TaskStop",
+      "ToolSearch",
+      "Skill",
+      "EndFeatureRun",
+      "Task"
+    ],
+    "messageCount": 2,
+    "notes": [
+      "new-session"
+    ]
+  },
+  {
+    "at": "2026-10-15T05:15:45.890Z",
+    "method": "POST",
+    "path": "/v1/messages",
+    "role": "validator",
+    "authOk": true,
+    "sessionHint": "sess_2eb2a483-a07f-4f21-bda5-d0697146e4bd",
+    "model": "relay-validator",
+    "stream": true,
+    "toolNames": [
+      "Read",
+      "LS",
+      "Execute",
+      "Edit",
+      "Grep",
+      "Glob",
+      "Create",
+      "ExitSpecMode",
+      "TaskOutput",
+      "TaskStop",
+      "ToolSearch",
+      "Skill",
+      "EndFeatureRun",
+      "Task"
+    ],
+    "messageCount": 4,
+    "notes": [
+      "tool-use-id"
+    ]
+  },
+  {
+    "at": "2026-10-15T05:15:45.907Z",
+    "method": "POST",
+    "path": "/v1/messages",
+    "role": "orchestrator",
+    "authOk": true,
+    "sessionHint": "sess_9cce83d4-69a5-4c8d-9e4a-bf403fc17e43",
+    "model": "relay-orchestrator",
+    "stream": true,
+    "toolNames": [
+      "Read",
+      "LS",
+      "Execute",
+      "Edit",
+      "Grep",
+      "Glob",
+      "Create",
+      "TaskOutput",
+      "TaskStop",
+      "ToolSearch",
+      "Skill",
+      "ProposeMission",
+      "StartMissionRun",
+      "DismissHandoffItems",
+      "Task"
+    ],
+    "messageCount": 16,
+    "notes": [
+      "tool-use-id"
+    ]
+  },
+  {
+    "at": "2026-10-15T05:16:01.908Z",
+    "method": "POST",
+    "path": "/v1/messages",
+    "role": "orchestrator",
+    "authOk": true,
+    "sessionHint": "sess_9cce83d4-69a5-4c8d-9e4a-bf403fc17e43",
+    "model": "relay-orchestrator",
+    "stream": true,
+    "toolNames": [
+      "Read",
+      "LS",
+      "Execute",
+      "Edit",
+      "Grep",
+      "Glob",
+      "Create",
+      "TaskOutput",
+      "TaskStop",
+      "ToolSearch",
+      "Skill",
+      "ProposeMission",
+      "StartMissionRun",
+      "DismissHandoffItems",
+      "Task"
+    ],
+    "messageCount": 18,
+    "notes": [
+      "tool-use-id"
+    ]
+  },
+  {
+    "at": "2026-10-15T05:16:20.420Z",
+    "method": "POST",
+    "path": "/v1/messages",
+    "role": "orchestrator",
+    "authOk": true,
+    "sessionHint": "sess_9cce83d4-69a5-4c8d-9e4a-bf403fc17e43",
+    "model": "relay-orchestrator",
+    "stream": true,
+    "toolNames": [
+      "Read",
+      "LS",
+      "Execute",
+      "Edit",
+      "Grep",
+      "Glob",
+      "Create",
+      "TaskOutput",
+      "TaskStop",
+      "ToolSearch",
+      "Skill",
+      "ProposeMission",
+      "StartMissionRun",
+      "DismissHandoffItems",
+      "Task"
+    ],
+    "messageCount": 20,
+    "notes": [
+      "tool-use-id"
+    ]
+  },
+  {
+    "at": "2026-10-15T05:16:48.233Z",
+    "method": "POST",
+    "path": "/v1/messages",
+    "role": "orchestrator",
+    "authOk": true,
+    "sessionHint": "sess_d7fa0771-13d0-409b-a4cc-870d357b0d46",
+    "model": "relay-orchestrator",
+    "stream": true,
+    "toolNames": [],
+    "messageCount": 1,
+    "notes": [
+      "new-session"
+    ]
+  }
+]
