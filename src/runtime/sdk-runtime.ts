@@ -64,6 +64,7 @@ export class SdkRuntime implements BridgeRuntime {
   readonly kind = "sdk" as const;
   private sdk: SdkHandle | undefined;
   private selection: UpstreamSelection | undefined;
+  private readonly failedProviders: string[] = [];
   private readonly lives = new Map<string, LiveSdk>();
 
   constructor(
@@ -82,11 +83,13 @@ export class SdkRuntime implements BridgeRuntime {
       model: this.config.upstreamModel,
       tokenEnv: this.config.upstreamTokenEnv,
     });
-    if (fromConfig) {
+    if (fromConfig && !this.failedProviders.includes(fromConfig.provider.id)) {
       this.selection = fromConfig;
       return fromConfig;
     }
-    const { selection, attempts } = await selectUpstream();
+    const { selection, attempts } = await selectUpstream({
+      providerIds: this.failedProviders,
+    });
     this.logger.info("upstream-select", {
       attempts: attempts.map((item) => ({
         provider: item.provider,
@@ -321,7 +324,29 @@ export class SdkRuntime implements BridgeRuntime {
       live.loop = this.consume(live, input, iterator);
     } catch (error) {
       live.started = false;
+      if (await this.failover(error)) {
+        await this.startQuery(input, live);
+        return;
+      }
       throw mapSdkError(error);
+    }
+  }
+
+  private async failover(error: unknown): Promise<boolean> {
+    const mapped = mapSdkError(error);
+    if (mapped.code !== "blocked_auth" || !this.selection) return false;
+    const from = this.selection.provider.id;
+    if (!this.failedProviders.includes(from)) this.failedProviders.push(from);
+    this.logger.warn("upstream-failover", { from, error: mapped.message });
+    this.selection = undefined;
+    this.config.upstreamBaseUrl = undefined;
+    this.config.upstreamModel = undefined;
+    this.config.upstreamTokenEnv = undefined;
+    try {
+      await this.ensureSelection();
+      return true;
+    } catch {
+      return false;
     }
   }
 

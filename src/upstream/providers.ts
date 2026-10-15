@@ -209,9 +209,11 @@ function modelsFor(id: UpstreamProvider["id"], fallback: string): string[] {
   return [fallback];
 }
 
-export async function selectUpstream(): Promise<{ selection?: UpstreamSelection; attempts: ProbeAttempt[] }> {
+export async function selectUpstream(exclude: { providerIds?: string[]; tokenEnvs?: string[] } = {}): Promise<{ selection?: UpstreamSelection; attempts: ProbeAttempt[] }> {
   const attempts: ProbeAttempt[] = [];
   for (const provider of listUsableProviders()) {
+    if (exclude.providerIds?.includes(provider.id)) continue;
+    if (exclude.tokenEnvs?.includes(provider.tokenEnv)) continue;
     for (const model of modelsFor(provider.id, provider.model)) {
       const result = await probeProvider(provider, model);
       attempts.push({
@@ -286,7 +288,7 @@ export function sdkEnv(selection: UpstreamSelection, bridgeListen: string): Reco
   env.ANTHROPIC_API_KEY = "";
   Object.assign(env, selection.modelSlots);
   env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1";
-  env.API_TIMEOUT_MS = env.API_TIMEOUT_MS ?? "180000";
+  env.API_TIMEOUT_MS = env.API_TIMEOUT_MS ?? "600000";
   env.CLAUDE_AGENT_SDK_CLIENT_APP = env.CLAUDE_AGENT_SDK_CLIENT_APP ?? "relay-bridge/0.1.0";
   if (env.ANTHROPIC_BASE_URL.includes(bridgeListen) || /127\.0\.0\.1:1878/.test(env.ANTHROPIC_BASE_URL)) {
     throw new Error("refusing to point Claude Code ANTHROPIC_BASE_URL at Relay Bridge");

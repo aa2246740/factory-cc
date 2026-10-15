@@ -149,7 +149,7 @@ export function roleAppendix(role: RoleTag): string {
     return "You are the Droid Mission worker. Use the provided Droid tools to implement the requested change. Do not claim work is done without calling tools.";
   }
   if (role === "validator") {
-    return "You are the Droid Mission validator. Use Droid tools to inspect the workspace, run checks, and report concrete findings.";
+    return "You are the Droid Mission validator. Use Droid tools to inspect the workspace, run checks, update validation-state.json, and call EndFeatureRun when the feature is finished. Do not loop on the same read.";
   }
   if (role === "chat") {
     return "You are the Droid chat model behind Relay Bridge. Prefer a short direct answer. Use a Droid tool only when the user asks to read or inspect files.";

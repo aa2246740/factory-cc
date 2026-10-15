@@ -33,11 +33,15 @@ export async function runCapture(
     child.stderr.on("data", (c) => {
       stderr += c.toString();
     });
-    const timer = setTimeout(() => {
-      child.kill("SIGTERM");
-    }, opts.timeoutMs ?? 30_000);
+    const timeoutMs = opts.timeoutMs;
+    const timer =
+      timeoutMs && timeoutMs > 0
+        ? setTimeout(() => {
+            child.kill("SIGTERM");
+          }, timeoutMs)
+        : undefined;
     child.on("close", (code) => {
-      clearTimeout(timer);
+      if (timer) clearTimeout(timer);
       resolve({ code: code ?? 1, stdout, stderr });
     });
   });
