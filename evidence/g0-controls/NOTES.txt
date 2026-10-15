@@ -1,0 +1,2 @@
+no-models-no-airgap: Authentication failed / login or FACTORY_API_KEY
+no-models-airgap: Airgap Mode enabled; default model routes through Factory LLM proxy; configure BYOK

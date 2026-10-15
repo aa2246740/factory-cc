@@ -1,0 +1,20 @@
+isAirgapEnabled
+airgapSuffix
+ - Airgap
+airgapEnabled
+Airgap Mode is enabled. Model "
+[sentry] Airgap Mode is enabled; skipping Sentry init
+airgap
+Auto-update skipped: Airgap Mode is enabled
+common:deploymentLogin.airgapChangesUnavailable
+<runtime-context airgap-enabled="true">
+Airgap Mode is enabled by the CLI's resolved runtime configuration. This signal is authoritative, including for binaries compiled with --airgap. Do not probe public connectivity. Follow the skill's airgap path before any network, prior-art, registry, disclosure-target, or model-family operation.
+- Airgap Mode: this machine is on an isolated network. Factory services and the public internet must be treated as unreachable. Do not fetch public URLs, download from the internet, or propose solutions that depend on public-internet access; when a task needs one, say so and offer an offline alternative.
+<runtime-context airgap-enabled="true">
+Airgap mode is enabled by the CLI's resolved runtime configuration. This signal is authoritative, including for binaries compiled with --airgap. Do not probe the public network. For this shallow security review, skip all registry-backed supply-chain lookups: do not run npm, Python, curl, or package-manager metadata commands against a registry. Record each skipped lookup as SKIPPED-AIRGAP and continue repository-local supply-chain checks.
+commands:slashMessages.bugReportAirgapBlocked
+airgapBlocked
+Cannot destructure property 'airgapEnabled' from null or undefined value6
+[SettingsManager] Airgap Mode is enabled; skipping org settings fetch
+[FeatureFlags] Airgap Mode is enabled; using default flag valuesC
+Bug reports are unavailable in Airgap Mode because they upload session data and logs to Factory.

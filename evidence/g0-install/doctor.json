@@ -1,0 +1,27 @@
+{
+  "at": "2026-10-15T02:22:05.718Z",
+  "os": "linux x64",
+  "node": "v22.14.0",
+  "git": "git version 2.43.0",
+  "commit": "737ba2e8b85785dfc3aa18efc92c3169e0b33a41",
+  "droid": "0.241.1",
+  "claude": "2.1.292 (Claude Code)",
+  "sdkVersion": "0.3.300",
+  "bridgeMode": "unset",
+  "endpoints": {
+    "healthz": "GET /healthz",
+    "messages": "POST /v1/messages"
+  },
+  "auth": {
+    "anthropicApiKey": "unset",
+    "factoryApiKey": "unset",
+    "bridgeClientToken": "unset",
+    "claudeConfigDirExists": true,
+    "defaultFactoryDirExists": true,
+    "tokensRead": false
+  },
+  "notes": [
+    "Doctor never reads Claude or Factory credential files.",
+    "Real SDK/Claude turns require a user-completed official login."
+  ]
+}

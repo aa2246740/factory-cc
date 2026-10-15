@@ -1,0 +1,177 @@
+[
+  {
+    "at": "2026-10-15T02:20:53.923Z",
+    "method": "POST",
+    "path": "/v1/messages",
+    "role": "chat",
+    "authOk": true,
+    "sessionHint": "sess_ec961a37-6dcc-4439-9dff-95780d9f8254",
+    "model": "relay-probe",
+    "stream": true,
+    "toolNames": [
+      "Read",
+      "LS",
+      "Execute",
+      "Grep",
+      "Glob",
+      "ToolSearch",
+      "Skill"
+    ],
+    "messageCount": 2,
+    "notes": [
+      "new-session"
+    ]
+  },
+  {
+    "at": "2026-10-15T02:20:53.966Z",
+    "method": "POST",
+    "path": "/v1/messages",
+    "role": "chat",
+    "authOk": true,
+    "sessionHint": "sess_ec961a37-6dcc-4439-9dff-95780d9f8254",
+    "model": "relay-probe",
+    "stream": true,
+    "toolNames": [
+      "Read",
+      "LS",
+      "Execute",
+      "Grep",
+      "Glob",
+      "ToolSearch",
+      "Skill"
+    ],
+    "messageCount": 5,
+    "notes": [
+      "tool-use-id"
+    ]
+  },
+  {
+    "at": "2026-10-15T02:21:00.067Z",
+    "method": "POST",
+    "path": "/v1/messages",
+    "role": "chat",
+    "authOk": true,
+    "sessionHint": "sess_33595273-0a43-4728-8ed0-fcf3d9850550",
+    "model": "relay-probe",
+    "stream": true,
+    "toolNames": [
+      "Read",
+      "LS",
+      "Execute",
+      "Grep",
+      "Glob",
+      "Skill"
+    ],
+    "messageCount": 2,
+    "notes": [
+      "new-session"
+    ]
+  },
+  {
+    "at": "2026-10-15T02:21:00.103Z",
+    "method": "POST",
+    "path": "/v1/messages",
+    "role": "chat",
+    "authOk": true,
+    "sessionHint": "sess_33595273-0a43-4728-8ed0-fcf3d9850550",
+    "model": "relay-probe",
+    "stream": true,
+    "toolNames": [
+      "Read",
+      "LS",
+      "Execute",
+      "Grep",
+      "Glob",
+      "Skill"
+    ],
+    "messageCount": 5,
+    "notes": [
+      "tool-use-id"
+    ]
+  },
+  {
+    "at": "2026-10-15T02:21:00.433Z",
+    "method": "POST",
+    "path": "/v1/messages",
+    "role": "unknown",
+    "authOk": false,
+    "notes": [
+      "auth-failed-no-sdk"
+    ]
+  },
+  {
+    "at": "2026-10-15T02:21:00.955Z",
+    "method": "POST",
+    "path": "/v1/messages",
+    "role": "chat",
+    "authOk": true,
+    "sessionHint": "sess_7f6f98d4-cbee-4f23-ba71-37231b3186d6",
+    "model": "relay-probe",
+    "stream": true,
+    "toolNames": [
+      "Read",
+      "LS",
+      "Execute",
+      "Grep",
+      "Glob",
+      "Skill"
+    ],
+    "messageCount": 2,
+    "notes": [
+      "new-session"
+    ]
+  },
+  {
+    "at": "2026-10-15T02:21:00.988Z",
+    "method": "POST",
+    "path": "/v1/messages",
+    "role": "chat",
+    "authOk": true,
+    "sessionHint": "sess_7f6f98d4-cbee-4f23-ba71-37231b3186d6",
+    "model": "relay-probe",
+    "stream": true,
+    "toolNames": [
+      "Read",
+      "LS",
+      "Execute",
+      "Grep",
+      "Glob",
+      "Skill"
+    ],
+    "messageCount": 4,
+    "notes": [
+      "tool-use-id"
+    ]
+  },
+  {
+    "at": "2026-10-15T02:21:01.347Z",
+    "method": "POST",
+    "path": "/v1/messages",
+    "role": "chat",
+    "authOk": true,
+    "sessionHint": "sess_998f1797-006b-465b-8bae-bc5142dab001",
+    "model": "relay-probe",
+    "stream": true,
+    "toolNames": [
+      "Read",
+      "LS",
+      "Execute",
+      "Edit",
+      "Grep",
+      "Glob",
+      "Create",
+      "TaskOutput",
+      "TaskStop",
+      "ToolSearch",
+      "Skill",
+      "ProposeMission",
+      "StartMissionRun",
+      "DismissHandoffItems",
+      "Task"
+    ],
+    "messageCount": 2,
+    "notes": [
+      "new-session"
+    ]
+  }
+]

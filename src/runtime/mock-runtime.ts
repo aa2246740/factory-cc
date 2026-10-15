@@ -42,8 +42,8 @@ export class MockRuntime implements BridgeRuntime {
     }
 
     const userText = lastUserText(input.request.messages);
-    const wantsTool = /RELAY_TOOL_PROBE|read the canary|use a tool|list tools/i.test(userText);
-    if (wantsTool || (input.request.tools?.length && /RELAY_/.test(userText))) {
+    const wantsTool = /RELAY_TOOL_PROBE|read the canary|use a tool/i.test(userText);
+    if (wantsTool) {
       const picked = pickSafeReadonlyTool(input.request.tools, extractPath(userText) ?? this.canaryPath);
       if (!picked.plan) {
         throw new BridgeError(422, "no_safe_tool", picked.error ?? "no safe tool", {

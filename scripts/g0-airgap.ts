@@ -29,7 +29,7 @@ async function main(): Promise<void> {
   const config = loadConfig({
     mode: "mock",
     host: "127.0.0.1",
-    port: 18787,
+    port: 18789,
     clientToken: token,
     dataDir: join(evidenceDir, "bridge-data"),
     persistSessions: true,
@@ -50,7 +50,7 @@ async function main(): Promise<void> {
           {
             model: "relay-probe",
             displayName: "Relay Probe",
-            baseUrl: "http://127.0.0.1:18787",
+            baseUrl: "http://127.0.0.1:18789",
             apiKey: "${BRIDGE_CLIENT_TOKEN}",
             provider: "anthropic",
             authMode: "bearer",

@@ -1,0 +1,57 @@
+droid doctor
+Running diagnostics (per-probe timeout 10000ms)...
+
+✓ Configuration     1 passed
+  ✓ Configuration files
+
+✓ Environment       1 passed
+  ✓ Droid environment: v0.241.1 on linux x64 (bun 1.4.3)
+
+✓ Local system      8 passed, 1 skipped
+  ✓ Last crash breadcrumb (13ms)
+  ✓ Ripgrep executable (18ms)
+  ✓ Execute shell (18ms)
+  ✓ Factory disk space (13ms)
+  ✓ Writable Factory directory (7ms)
+  ✓ Writable logs directory (7ms)
+  ✓ Writable sessions directory (9ms)
+  ✓ Writable bin directory (9ms)
+  - Hook commands: No hooks are configured.
+
+✓ Updates           1 passed, 1 skipped
+  ✓ CLI installation: Installed 0.241.1; executable: /home/ubuntu/.local/bin/droid.
+  - Latest main binary release: Airgap Mode forbids release requests.
+
+- Custom models     1 skipped
+  - opt-in: --checks custom-models (can cost money)
+
+✓ Proxy             1 passed, 1 skipped
+  ✓ Proxy environment variables
+  - System proxy configuration: no OS-level proxy store on linux; only HTTP(S)_PROXY environment variables apply
+
+✓ Certificates      5 passed
+  ✓ Trusted certificate authorities
+  ✓ FACTORY_EXTRA_CA_CERTS
+  ✓ NODE_EXTRA_CA_CERTS
+  ✓ NODE_TLS_REJECT_UNAUTHORIZED
+  ✓ System certificate cache
+
+- Connectivity      1 skipped
+  - Hosted connectivity: Skipped because Airgap Mode forbids hosted requests.
+
+- Authentication    1 skipped
+  - Hosted authentication: Skipped because Airgap Mode forbids hosted requests.
+
+✓ Daemon transport  1 passed
+  ✓ Loopback TCP (daemon transport) (26ms)
+
+- LLM streaming     1 skipped
+  - opt-in: --checks inference (can cost money)
+
+- MCP servers       1 skipped
+  - opt-in: --checks mcp (can cost money)
+
+- Exec full turn    1 skipped
+  - opt-in: --checks exec (can cost money)
+
+All checks passed

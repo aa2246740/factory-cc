@@ -1,0 +1,124 @@
+[
+  {
+    "id": "A0",
+    "purpose": "public CLI auth gate without airgap",
+    "factoryCreds": "none",
+    "airgap": false,
+    "token": "valid",
+    "command": [
+      "droid",
+      "exec",
+      "-m",
+      "relay-probe",
+      "RELAY_TEXT_PROBE"
+    ],
+    "code": 0,
+    "stdout": "relay-bridge mock: tool result accepted; canary=present\n",
+    "stderr": "",
+    "bridgeRequests": 2,
+    "notes": []
+  },
+  {
+    "id": "A1",
+    "purpose": "airgap env + mock BYOK text",
+    "factoryCreds": "none",
+    "airgap": true,
+    "token": "valid",
+    "command": [
+      "droid",
+      "exec",
+      "-m",
+      "relay-probe",
+      "RELAY_TEXT_PROBE"
+    ],
+    "code": 0,
+    "stdout": "relay-bridge mock: tool result accepted; canary=present\n",
+    "stderr": "",
+    "bridgeRequests": 2,
+    "notes": []
+  },
+  {
+    "id": "A2",
+    "purpose": "airgap + wrong local token",
+    "factoryCreds": "none",
+    "airgap": true,
+    "token": "invalid",
+    "command": [
+      "droid",
+      "exec",
+      "-m",
+      "relay-probe",
+      "RELAY_TEXT_PROBE"
+    ],
+    "code": 1,
+    "stdout": "",
+    "stderr": "Error during droid execution: 401 {\"type\":\"error\",\"error\":{\"type\":\"authentication_error\",\"message\":\"invalid bridge client token\"}}\n",
+    "bridgeRequests": 1,
+    "notes": []
+  },
+  {
+    "id": "A3",
+    "purpose": "airgap + readonly tool roundtrip",
+    "factoryCreds": "none",
+    "airgap": true,
+    "token": "valid",
+    "command": [
+      "droid",
+      "exec",
+      "-m",
+      "relay-probe",
+      "--list-tools"
+    ],
+    "code": 0,
+    "stdout": "Available tools for Relay Probe\nAutonomy: read-only\n\nRead\n  • DismissHandoffItems (Dismiss Handoff Items) - status: blocked\n  • EndFeatureRun (End Feature Run) - status: blocked\n  • ExitSpecMode (Propose Specification) - status: blocked\n  • Glob - status: allowed\n  • Grep - status: allowed\n  • LS - status: allowed\n  • ProposeMission (Propose Mission) - status: blocked\n  • Read - status: allowed\n  • StageSettingsChanges (Stage Settings Changes) - status: allowed\n  • StartMissionRun (Start Mission Run) - status: blocked\n  • TodoWrite (Plan) - status: allowed\n\nEdit\n  • Create - status: blocked\n  • Edit - status: blocked\n\nExecute\n  • Execute - status: allowed\n  • Loop - status: blocked\n  • Skill - status: allowed\n  • Task - status: blocked\n  • TaskOutput (Result) - status: blocked\n  • TaskStop - status: blocked\n  • ToolSearch - status: allowed\n\n",
+    "stderr": "",
+    "bridgeRequests": 0,
+    "notes": []
+  },
+  {
+    "id": "A3b",
+    "purpose": "airgap + tool probe prompt",
+    "factoryCreds": "none",
+    "airgap": true,
+    "token": "valid",
+    "command": [
+      "droid",
+      "exec",
+      "-m",
+      "relay-probe",
+      "RELAY_TOOL_PROBE read CANARY.txt RELAY_CANARY_G0FIXED CANARY_PATH=CANARY.txt"
+    ],
+    "code": 0,
+    "stdout": "relay-bridge mock: tool result accepted; canary_mismatch\n",
+    "stderr": "",
+    "bridgeRequests": 2,
+    "notes": []
+  },
+  {
+    "id": "A4",
+    "purpose": "airgap Mission initial request only",
+    "factoryCreds": "none",
+    "airgap": true,
+    "token": "valid",
+    "command": [
+      "droid",
+      "exec",
+      "--mission",
+      "-m",
+      "relay-probe",
+      "--worker-model",
+      "relay-probe",
+      "--validator-model",
+      "relay-probe",
+      "--auto",
+      "high",
+      "-f",
+      "MISSION.md"
+    ],
+    "code": 0,
+    "stdout": "relay-bridge mock: text probe ok\n",
+    "stderr": "",
+    "bridgeRequests": 1,
+    "notes": []
+  }
+]

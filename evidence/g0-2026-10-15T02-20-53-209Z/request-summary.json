@@ -1,0 +1,146 @@
+[
+  {
+    "i": 0,
+    "path": "/v1/messages",
+    "model": "relay-probe",
+    "stream": true,
+    "tools": [
+      "Read",
+      "LS",
+      "Execute",
+      "Grep",
+      "Glob",
+      "ToolSearch",
+      "Skill"
+    ],
+    "messageCount": 2,
+    "userAgent": "factory-cli/0.241.1",
+    "anthropicVersion": "2023-06-01",
+    "roleHeader": "chat",
+    "host": "127.0.0.1:18789"
+  },
+  {
+    "i": 1,
+    "path": "/v1/messages",
+    "model": "relay-probe",
+    "stream": true,
+    "tools": [
+      "Read",
+      "LS",
+      "Execute",
+      "Grep",
+      "Glob",
+      "ToolSearch",
+      "Skill"
+    ],
+    "messageCount": 5,
+    "userAgent": "factory-cli/0.241.1",
+    "anthropicVersion": "2023-06-01",
+    "roleHeader": "chat",
+    "host": "127.0.0.1:18789"
+  },
+  {
+    "i": 2,
+    "path": "/v1/messages",
+    "model": "relay-probe",
+    "stream": true,
+    "tools": [
+      "Read",
+      "LS",
+      "Execute",
+      "Grep",
+      "Glob",
+      "Skill"
+    ],
+    "messageCount": 2,
+    "userAgent": "factory-cli/0.241.1",
+    "anthropicVersion": "2023-06-01",
+    "roleHeader": "chat",
+    "host": "127.0.0.1:18789"
+  },
+  {
+    "i": 3,
+    "path": "/v1/messages",
+    "model": "relay-probe",
+    "stream": true,
+    "tools": [
+      "Read",
+      "LS",
+      "Execute",
+      "Grep",
+      "Glob",
+      "Skill"
+    ],
+    "messageCount": 5,
+    "userAgent": "factory-cli/0.241.1",
+    "anthropicVersion": "2023-06-01",
+    "roleHeader": "chat",
+    "host": "127.0.0.1:18789"
+  },
+  {
+    "i": 4,
+    "path": "/v1/messages",
+    "model": "relay-probe",
+    "stream": true,
+    "tools": [
+      "Read",
+      "LS",
+      "Execute",
+      "Grep",
+      "Glob",
+      "Skill"
+    ],
+    "messageCount": 2,
+    "userAgent": "factory-cli/0.241.1",
+    "anthropicVersion": "2023-06-01",
+    "roleHeader": "chat",
+    "host": "127.0.0.1:18789"
+  },
+  {
+    "i": 5,
+    "path": "/v1/messages",
+    "model": "relay-probe",
+    "stream": true,
+    "tools": [
+      "Read",
+      "LS",
+      "Execute",
+      "Grep",
+      "Glob",
+      "Skill"
+    ],
+    "messageCount": 4,
+    "userAgent": "factory-cli/0.241.1",
+    "anthropicVersion": "2023-06-01",
+    "roleHeader": "chat",
+    "host": "127.0.0.1:18789"
+  },
+  {
+    "i": 6,
+    "path": "/v1/messages",
+    "model": "relay-probe",
+    "stream": true,
+    "tools": [
+      "Read",
+      "LS",
+      "Execute",
+      "Edit",
+      "Grep",
+      "Glob",
+      "Create",
+      "TaskOutput",
+      "TaskStop",
+      "ToolSearch",
+      "Skill",
+      "ProposeMission",
+      "StartMissionRun",
+      "DismissHandoffItems",
+      "Task"
+    ],
+    "messageCount": 2,
+    "userAgent": "factory-cli/0.241.1",
+    "anthropicVersion": "2023-06-01",
+    "roleHeader": "chat",
+    "host": "127.0.0.1:18789"
+  }
+]

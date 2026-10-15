@@ -1,0 +1,77 @@
+[
+  {
+    "at": "2026-10-15T02:21:54.808Z",
+    "method": "POST",
+    "path": "/v1/messages",
+    "role": "chat",
+    "authOk": true,
+    "sessionHint": "sess_94b4480b-5333-4ac4-80c2-b95a877ac3d7",
+    "model": "relay-chat",
+    "stream": true,
+    "toolNames": [
+      "Read",
+      "LS",
+      "Execute",
+      "Grep",
+      "Glob",
+      "Skill"
+    ],
+    "messageCount": 2,
+    "notes": [
+      "new-session"
+    ]
+  },
+  {
+    "at": "2026-10-15T02:21:54.846Z",
+    "method": "POST",
+    "path": "/v1/messages",
+    "role": "chat",
+    "authOk": true,
+    "sessionHint": "sess_94b4480b-5333-4ac4-80c2-b95a877ac3d7",
+    "model": "relay-chat",
+    "stream": true,
+    "toolNames": [
+      "Read",
+      "LS",
+      "Execute",
+      "Grep",
+      "Glob",
+      "Skill"
+    ],
+    "messageCount": 5,
+    "notes": [
+      "tool-use-id"
+    ]
+  },
+  {
+    "at": "2026-10-15T02:21:55.189Z",
+    "method": "POST",
+    "path": "/v1/messages",
+    "role": "orchestrator",
+    "authOk": true,
+    "sessionHint": "sess_e1d92fb4-6c5f-4e38-b94b-ea98c539b9c5",
+    "model": "relay-orchestrator",
+    "stream": true,
+    "toolNames": [
+      "Read",
+      "LS",
+      "Execute",
+      "Edit",
+      "Grep",
+      "Glob",
+      "Create",
+      "TaskOutput",
+      "TaskStop",
+      "ToolSearch",
+      "Skill",
+      "ProposeMission",
+      "StartMissionRun",
+      "DismissHandoffItems",
+      "Task"
+    ],
+    "messageCount": 2,
+    "notes": [
+      "new-session"
+    ]
+  }
+]

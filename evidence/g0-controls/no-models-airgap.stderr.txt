@@ -1,0 +1,1 @@
+Error during droid execution: Airgap Mode is enabled. Model "gpt-6-sol" routes through Factory's LLM proxy and cannot be used. Configure a BYOK custom model in settings.json to continue. See https://docs.factory.ai/cli/byok/overview

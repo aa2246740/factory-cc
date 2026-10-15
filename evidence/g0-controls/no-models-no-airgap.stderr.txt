@@ -1,0 +1,1 @@
+Error during droid execution: Authentication failed. Please log in using /login or set a valid FACTORY_API_KEY environment variable.

@@ -1,0 +1,63 @@
+[
+  {
+    "bridgeSessionId": "sess_94b4480b-5333-4ac4-80c2-b95a877ac3d7",
+    "role": "chat",
+    "state": "IDLE",
+    "model": "relay-chat",
+    "historyHash": "a40d2417754c20def77355b5ae80e8727dbba368b0d5c8eb13b8ff21599bdc25",
+    "toolNames": [
+      "Read",
+      "LS",
+      "Execute",
+      "Grep",
+      "Glob",
+      "Skill"
+    ],
+    "createdAt": "2026-10-15T02:21:54.807Z",
+    "updatedAt": "2026-10-15T02:21:54.847Z",
+    "pendingToolIds": [],
+    "cancelRequested": false,
+    "notes": [
+      "illegal transition RESUMING -> IDLE"
+    ],
+    "usage": {
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "estimated": true
+    }
+  },
+  {
+    "bridgeSessionId": "sess_e1d92fb4-6c5f-4e38-b94b-ea98c539b9c5",
+    "role": "orchestrator",
+    "state": "IDLE",
+    "model": "relay-orchestrator",
+    "historyHash": "bad1d7143800bb9777fbfade10ba0dfc8de42d13605f6a6e424926cbe7eaaffc",
+    "toolNames": [
+      "Read",
+      "LS",
+      "Execute",
+      "Edit",
+      "Grep",
+      "Glob",
+      "Create",
+      "TaskOutput",
+      "TaskStop",
+      "ToolSearch",
+      "Skill",
+      "ProposeMission",
+      "StartMissionRun",
+      "DismissHandoffItems",
+      "Task"
+    ],
+    "createdAt": "2026-10-15T02:21:55.188Z",
+    "updatedAt": "2026-10-15T02:21:55.190Z",
+    "pendingToolIds": [],
+    "cancelRequested": false,
+    "notes": [],
+    "usage": {
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "estimated": true
+    }
+  }
+]
