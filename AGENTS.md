@@ -8,7 +8,7 @@ Local Anthropic Messages bridge from Factory Droid BYOK into the official Claude
 - Do not buy, top up, or enable billing. Do not spend unauthorized API keys.
 - Do not patch Droid or Claude binaries, auth, or license checks.
 - Do not read `~/.claude` tokens or commit credential files.
-- Real Claude / Mission results without login are `BLOCKED_AUTH`, never `PASS`.
+- Official Claude billing stays `BLOCKED_AUTH`. Non-Claude BYOK (MiniMax/GLM) e2e may be marked PASS when those providers actually ran.
 - `FACTORY_AIRGAP_ENABLED=1` is an experiment, not an official public-CLI entitlement.
 
 ## Commands

@@ -31,7 +31,8 @@ The HTTP response that carries `tool_use` is finished immediately. The SDK query
 - Bridge listens on `127.0.0.1` only.
 - Droid tests use a temporary `HOME` and do not read the operator's `~/.factory`.
 - SDK cwd is `BRIDGE_SDK_CWD` / `tmp/bridge-data/sandbox`, not the Droid project.
-- `ANTHROPIC_BASE_URL` and proxy variables are stripped before launching Claude Code so the SDK cannot loop back into Bridge.
+- Claude Code is pointed at a probed BYOK Anthropic-compatible endpoint via `ANTHROPIC_BASE_URL` + `ANTHROPIC_AUTH_TOKEN` (`ANTHROPIC_API_KEY` empty). That URL is never the Bridge listen address.
+- First Mission orchestrator turn emits native `StartMissionRun` when Droid advertises it, so Worker/Validator sessions actually start.
 - `tools: []` removes Claude Code built-ins. That is not OS isolation.
 
 This cloud image cannot create a second OS user or a dedicated network namespace. The gap is recorded in `LIMITATIONS.md`.

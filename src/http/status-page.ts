@@ -34,7 +34,7 @@ export function statusPageHtml(opts: {
 <body>
   <main>
     <h1>Relay Bridge</h1>
-    <p>本机 Anthropic Messages 兼容入口。Droid 通过 BYOK <code>customModels</code> 连到这里，工具仍由 Droid 审批执行，模型推理走官方 Claude Agent SDK / Claude Code。</p>
+    <p>本机 Anthropic Messages 兼容入口。Droid 通过 BYOK <code>customModels</code> 连到这里，工具仍由 Droid 审批执行。推理走官方 Claude Agent SDK；本环境用 MiniMax / GLM 等 Anthropic 兼容端点，不走官方 Claude 账单。</p>
     <div class="grid">
       <div class="card"><div class="label">Health</div><div class="value ${opts.healthy ? "ok" : "warn"}">${opts.healthy ? "ok" : "down"}</div></div>
       <div class="card"><div class="label">Mode</div><div class="value">${escapeHtml(opts.mode)}</div></div>
@@ -50,7 +50,7 @@ export function statusPageHtml(opts: {
         <li><code>POST /v1/messages/count_tokens</code> 明确不支持精确计数</li>
         <li><code>GET /internal/sessions</code> 管理接口，需要管理员令牌</li>
       </ul>
-      <p>当前没有 Anthropic 登录时使用 <code>BRIDGE_MODE=mock</code> 或 <code>fake</code>。真实 Claude 路径会标成 BLOCKED_AUTH，不会回退到 Factory 或其他供应商。</p>
+      <p><code>mock</code> / <code>fake</code> 零上游费用。<code>sdk</code> 把 Claude Code 指到已探测的 BYOK 兼容端点（<code>ANTHROPIC_BASE_URL</code> + <code>ANTHROPIC_AUTH_TOKEN</code>）。不要把该地址指回本 Bridge。</p>
     </div>
   </main>
 </body>

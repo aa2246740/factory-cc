@@ -79,6 +79,13 @@ export function jsonSchemaToZod(schema: Record<string, Json>, refs: Map<string, 
   return { schema: convert(schema, "$"), lossless, notes };
 }
 
+export function zodObjectShape(schema: ZodTypeAny): Record<string, ZodTypeAny> {
+  if (schema && typeof schema === "object" && "shape" in schema && schema.shape && typeof schema.shape === "object") {
+    return schema.shape as Record<string, ZodTypeAny>;
+  }
+  return {};
+}
+
 function resolveLocalRef(
   ref: string,
   root: Record<string, Json>,

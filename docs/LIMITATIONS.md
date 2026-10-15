@@ -1,6 +1,6 @@
 # Limitations
 
-- No Factory credentials and no Anthropic login were provided in this environment. Real Claude Code turns, ordinary chat acceptance C01–C10, and Mission G4 are `BLOCKED_AUTH`.
+- Official Anthropic / Claude login is unused. `sdk` mode is a non-Claude BYOK path (MiniMax, then GLM, then OpenRouter free). Real Claude-branded billing is still `BLOCKED_AUTH`.
 - Public `FACTORY_AIRGAP_ENABLED=1` is an experiment input. Official airgap docs describe an enterprise build that is not publicly distributed. A technical skip-login observation is not an authorization.
 - First-party Droid web, mobile, and desktop surfaces are out of scope.
 - OS-level isolation (separate user / container for Bridge vs Droid project) is not available on this cloud image.

@@ -20,6 +20,9 @@ export interface BridgeConfig {
   claudeExecutable?: string;
   sdkCwd: string;
   persistSessions: boolean;
+  upstreamBaseUrl?: string;
+  upstreamModel?: string;
+  upstreamTokenEnv?: string;
 }
 
 function env(name: string, fallback?: string): string | undefined {
@@ -57,12 +60,15 @@ export function loadConfig(overrides: Partial<BridgeConfig> = {}): BridgeConfig 
     logDir: resolve(dataDir, "logs"),
     sandboxDir: resolve(dataDir, "sandbox"),
     maxBodyBytes: overrides.maxBodyBytes ?? intEnv("BRIDGE_MAX_BODY_BYTES", 8 * 1024 * 1024),
-    maxSessions: overrides.maxSessions ?? intEnv("BRIDGE_MAX_SESSIONS", 8),
-    maxTurns: overrides.maxTurns ?? intEnv("BRIDGE_MAX_TURNS", 32),
+    maxSessions: overrides.maxSessions ?? intEnv("BRIDGE_MAX_SESSIONS", 16),
+    maxTurns: overrides.maxTurns ?? intEnv("BRIDGE_MAX_TURNS", 64),
     toolWaitMs: overrides.toolWaitMs ?? intEnv("BRIDGE_TOOL_WAIT_MS", 30 * 60 * 1000),
-    requestTimeoutMs: overrides.requestTimeoutMs ?? intEnv("BRIDGE_REQUEST_TIMEOUT_MS", 120_000),
+    requestTimeoutMs: overrides.requestTimeoutMs ?? intEnv("BRIDGE_REQUEST_TIMEOUT_MS", 180_000),
     claudeExecutable: overrides.claudeExecutable ?? env("BRIDGE_CLAUDE_EXECUTABLE"),
     sdkCwd: overrides.sdkCwd ?? env("BRIDGE_SDK_CWD", resolve(dataDir, "sandbox"))!,
     persistSessions: overrides.persistSessions ?? env("BRIDGE_PERSIST", "1") !== "0",
+    upstreamBaseUrl: overrides.upstreamBaseUrl ?? env("BRIDGE_UPSTREAM_BASE_URL"),
+    upstreamModel: overrides.upstreamModel ?? env("BRIDGE_UPSTREAM_MODEL"),
+    upstreamTokenEnv: overrides.upstreamTokenEnv ?? env("BRIDGE_UPSTREAM_TOKEN_ENV"),
   };
 }

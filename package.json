@@ -23,6 +23,7 @@
     "test:sdk-probes": "vitest run tests/sdk-probes",
     "test:e2e:chat": "tsx scripts/run-gated.ts e2e-chat",
     "test:e2e:mission": "tsx scripts/run-gated.ts e2e-mission",
+    "probe:upstream": "tsx scripts/probe-upstream.ts",
     "test:resilience": "vitest run tests/resilience",
     "test:g0": "tsx scripts/g0-airgap.ts",
     "evidence:pack": "tsx scripts/collect-evidence.ts",

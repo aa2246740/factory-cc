@@ -59,7 +59,12 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
       return;
     }
     if (req.method === "GET" && path === "/healthz") {
-      json(res, 200, { ok: true, mode: config.mode, sdk: config.mode === "sdk" });
+      json(res, 200, {
+        ok: true,
+        mode: config.mode,
+        sdk: config.mode === "sdk",
+        upstream: runtime.describe?.() ?? null,
+      });
       return;
     }
     if (req.method === "GET" && path === "/internal/sessions") {
@@ -134,8 +139,10 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
     );
 
     const turn = await runtime.handle({ request, role, session, headers });
+    if (turn.notes?.length) session.notes.push(...turn.notes.filter((note) => !session.notes.includes(note)));
     store.update(session.bridgeSessionId, {
       pendingToolIds: turn.pendingToolIds,
+      notes: session.notes,
       sdkSessionId: store.get(session.bridgeSessionId)?.sdkSessionId,
     });
     store.setState(session.bridgeSessionId, turn.pendingToolIds.length ? "WAITING_DROID_TOOL" : "IDLE");

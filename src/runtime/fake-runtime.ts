@@ -1,6 +1,7 @@
 import { collectToolResults, lastUserText, textFromBlocks } from "../protocol/content.js";
 import { assistantMessage, estimatedUsage } from "../protocol/messages.js";
 import { createToolNameMap } from "../protocol/tool-names.js";
+import { maybeForceMissionSpawn } from "./mission-tools.js";
 import { toolUseId } from "../relay/ids.js";
 import { ToolMailbox } from "../relay/mailbox.js";
 import type { ContentBlock } from "../types.js";
@@ -57,13 +58,17 @@ export class FakeRuntime implements BridgeRuntime {
     }
 
     const map = createToolNameMap(tools.map((t) => t.name));
-    const count = Math.min(requestedToolCount(lastUserText(input.request.messages)), tools.length);
+    const forced = maybeForceMissionSpawn(input.session.notes, tools, lastUserText(input.request.messages));
+    const selected = forced
+      ? tools.filter((tool) => tool.name === forced.name).slice(0, 1)
+      : tools.slice(0, Math.min(requestedToolCount(lastUserText(input.request.messages)), tools.length));
     const blocks: ContentBlock[] = [];
     const pending: string[] = [];
-    for (let i = 0; i < count; i += 1) {
-      const tool = tools[i]!;
+    for (const tool of selected) {
       const id = toolUseId();
-      const inputArgs = { nonce: lastUserText(input.request.messages) || `n${i}` };
+      const inputArgs = forced && tool.name === forced.name
+        ? forced.input
+        : { nonce: lastUserText(input.request.messages) || tool.name };
       query.mailbox.registerCall({
         callId: id,
         originalName: tool.name,
@@ -88,6 +93,10 @@ export class FakeRuntime implements BridgeRuntime {
       events: [...query.events],
       notes: ["fake-runtime: returned tool_use without waiting for query completion"],
     };
+  }
+
+  describe(): Record<string, unknown> {
+    return { kind: "fake" };
   }
 
   async cancel(sessionId: string, reason: string): Promise<void> {

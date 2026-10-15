@@ -4,6 +4,7 @@ import { toolUseId } from "../relay/ids.js";
 import { ToolMailbox } from "../relay/mailbox.js";
 import type { ContentBlock } from "../types.js";
 import { BridgeError } from "../types.js";
+import { maybeForceMissionSpawn } from "./mission-tools.js";
 import { pickSafeReadonlyTool } from "./safe-tools.js";
 import type { BridgeRuntime, RuntimeRequest, RuntimeTurn } from "./types.js";
 
@@ -42,6 +43,21 @@ export class MockRuntime implements BridgeRuntime {
     }
 
     const userText = lastUserText(input.request.messages);
+    const forced = maybeForceMissionSpawn(input.session.notes, input.request.tools, userText);
+    if (forced) {
+      const id = toolUseId();
+      mailbox.registerCall({ callId: id, originalName: forced.name, mcpName: forced.name, input: forced.input });
+      return {
+        response: assistantMessage(
+          input.request.model,
+          [{ type: "tool_use", id, name: forced.name, input: forced.input }],
+          "tool_use",
+          estimatedUsage(input.request, 32),
+        ),
+        pendingToolIds: [id],
+        notes: ["mock-mission-spawn"],
+      };
+    }
     const wantsTool = /RELAY_TOOL_PROBE|read the canary|use a tool/i.test(userText);
     if (wantsTool) {
       const picked = pickSafeReadonlyTool(input.request.tools, extractPath(userText) ?? this.canaryPath);
@@ -71,6 +87,10 @@ export class MockRuntime implements BridgeRuntime {
       pendingToolIds: [],
       notes: ["mock-text"],
     };
+  }
+
+  describe(): Record<string, unknown> {
+    return { kind: "mock" };
   }
 
   async cancel(sessionId: string): Promise<void> {

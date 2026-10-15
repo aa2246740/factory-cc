@@ -41,13 +41,17 @@ async function main(): Promise<void> {
       anthropicApiKey: process.env.ANTHROPIC_API_KEY ? "set" : "unset",
       factoryApiKey: process.env.FACTORY_API_KEY ? "set" : "unset",
       bridgeClientToken: process.env.BRIDGE_CLIENT_TOKEN ? "set" : "unset",
+      minimaxCnApiKey: process.env.MINIMAXCN_API_KEY ? "set" : "unset",
+      glmCnApiKey: process.env.GLM_CN_API_KEY ? "set" : "unset",
+      zaiCodingPlanKey: process.env.ZAI_CODING_PLAN_KEY ? "set" : "unset",
+      openrouterFreeKey: process.env.OPENROUTER_ONLYUSE_FREEMODEL_API_KEY ? "set" : "unset",
       claudeConfigDirExists: claudeCredPresent,
       defaultFactoryDirExists: factoryHomePresent,
       tokensRead: false,
     },
     notes: [
-      "Doctor never reads Claude or Factory credential files.",
-      "Real SDK/Claude turns require a user-completed official login.",
+      "Doctor never reads Claude or Factory credential files and never prints secret values.",
+      "sdk mode uses MiniMax/GLM Anthropic-compatible BYOK; official Claude login is optional.",
     ],
   };
 

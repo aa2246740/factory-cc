@@ -29,4 +29,5 @@ export interface BridgeRuntime {
     sessionId: string,
     results: Array<{ tool_use_id: string; content: string | ContentBlock[]; is_error?: boolean }>,
   ): Promise<Array<"accepted" | "duplicate">>;
+  describe?(): Record<string, unknown>;
 }
