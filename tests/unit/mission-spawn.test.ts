@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { postMessages, startTestBridge } from "../helpers/server.js";
 import type { BridgeApp } from "../../src/http/app.js";
+import { maybeForceStartWhenReady } from "../../src/runtime/mission-tools.js";
 
 const apps: BridgeApp[] = [];
 afterEach(async () => {
@@ -62,3 +63,28 @@ for (const mode of ["mock", "fake"] as const) {
     });
   });
 }
+
+describe("maybeForceStartWhenReady", () => {
+  const tools = [{ name: "StartMissionRun", input_schema: { type: "object", properties: {} } }];
+
+  it("does not start the runner before mission files exist", () => {
+    const notes: string[] = [];
+    expect(maybeForceStartWhenReady(notes, tools, "planning only")).toBeUndefined();
+    expect(notes.includes("mission-run-started")).toBe(false);
+  });
+
+  it("starts the runner after the required artifacts are written", () => {
+    const notes: string[] = [];
+    const blob = [
+      "The file /tmp/x/.factory/missions/m/features.json has been created successfully",
+      "The file /tmp/x/.factory/missions/m/validation-contract.md has been created successfully",
+      "The file /tmp/x/.factory/missions/m/validation-state.json has been updated successfully",
+      "The file /tmp/x/.factory/missions/m/AGENTS.md has been created successfully",
+      "The file /tmp/x/.factory/missions/m/services.yaml has been created successfully",
+    ].join("\n");
+    const forced = maybeForceStartWhenReady(notes, tools, blob);
+    expect(forced?.name).toBe("StartMissionRun");
+    expect(notes.includes("mission-run-started")).toBe(true);
+    expect(maybeForceStartWhenReady(notes, tools, blob)).toBeUndefined();
+  });
+});

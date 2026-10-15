@@ -10,7 +10,7 @@ import type { BridgeConfig } from "../config.js";
 import type { ContentBlock } from "../types.js";
 import { BridgeError } from "../types.js";
 import type { Logger } from "../logging.js";
-import { maybeForceMissionSpawn, orchestratorAppendix, roleAppendix } from "./mission-tools.js";
+import { maybeForceStartWhenReady, orchestratorAppendix, roleAppendix } from "./mission-tools.js";
 import type { BridgeRuntime, RuntimeEvent, RuntimeRequest, RuntimeTurn } from "./types.js";
 import {
   publicSelection,
@@ -111,40 +111,24 @@ export class SdkRuntime implements BridgeRuntime {
     const results = collectToolResults(input.request.messages);
 
     if (results.length > 0) {
+      const blob = JSON.stringify(input.request.messages);
+      const forced = maybeForceStartWhenReady(input.session.notes, input.request.tools, blob);
       for (const result of results) {
-        if (!live.mailbox.hasCall(result.tool_use_id)) {
+        if (live.mailbox.hasCall(result.tool_use_id)) {
+          live.mailbox.submitResult(result);
+          live.events.push({ at: now(), type: "tool_result_to_sdk", data: { id: result.tool_use_id } });
+        } else if (!forced) {
           throw new BridgeError(409, "unknown_tool_use_id", result.tool_use_id);
         }
-        live.mailbox.submitResult(result);
-        live.events.push({ at: now(), type: "tool_result_to_sdk", data: { id: result.tool_use_id } });
+      }
+      if (forced) {
+        await this.parkQuery(live, "mission-files-ready");
+        return this.synthesizedSpawn(input, live, forced, "sdk-mission-start-when-ready");
       }
       if (!live.started) {
         return this.startAndWait(input, live);
       }
       return this.waitForTurn(live, input, this.config.requestTimeoutMs);
-    }
-
-    const forced = maybeForceMissionSpawn(input.session.notes, input.request.tools, lastUserText(input.request.messages));
-    if (forced) {
-      const id = toolUseId();
-      live.mailbox.registerCall({
-        callId: id,
-        originalName: forced.name,
-        mcpName: forced.name,
-        input: forced.input,
-      });
-      live.events.push({ at: now(), type: "synthesized_mission_spawn", data: { name: forced.name, id } });
-      return {
-        response: assistantMessage(
-          input.request.model,
-          [{ type: "tool_use", id, name: forced.name, input: forced.input }],
-          "tool_use",
-          estimatedUsage(input.request, 32),
-        ),
-        pendingToolIds: [id],
-        events: [...live.events],
-        notes: ["sdk-mission-spawn"],
-      };
     }
 
     return this.startAndWait(input, live);
@@ -173,6 +157,51 @@ export class SdkRuntime implements BridgeRuntime {
   ): Promise<Array<"accepted" | "duplicate">> {
     const live = this.live(sessionId);
     return results.map((result) => live.mailbox.submitResult(result));
+  }
+
+  private synthesizedSpawn(
+    input: RuntimeRequest,
+    live: LiveSdk,
+    forced: { name: string; input: Record<string, import("../types.js").Json> },
+    note: string,
+  ): RuntimeTurn {
+    const id = toolUseId();
+    live.mailbox.registerCall({
+      callId: id,
+      originalName: forced.name,
+      mcpName: forced.name,
+      input: forced.input,
+    });
+    live.events.push({ at: now(), type: "synthesized_mission_spawn", data: { name: forced.name, id } });
+    return {
+      response: assistantMessage(
+        input.request.model,
+        [{ type: "tool_use", id, name: forced.name, input: forced.input }],
+        "tool_use",
+        estimatedUsage(input.request, 32),
+      ),
+      pendingToolIds: [id],
+      events: [...live.events],
+      notes: [note],
+    };
+  }
+
+  private async parkQuery(live: LiveSdk, reason: string): Promise<void> {
+    live.events.push({ at: now(), type: "sdk_query_park", data: { reason } });
+    try {
+      live.abort?.abort();
+      await live.query?.interrupt?.();
+    } catch {
+      // query may already be finished
+    }
+    live.query?.close?.();
+    live.started = false;
+    live.query = undefined;
+    live.loop = undefined;
+    live.abort = undefined;
+    for (const waiter of live.waiters.splice(0)) {
+      waiter.reject(new BridgeError(499, "cancelled", reason));
+    }
   }
 
   private async startAndWait(input: RuntimeRequest, live: LiveSdk): Promise<RuntimeTurn> {
@@ -239,7 +268,7 @@ export class SdkRuntime implements BridgeRuntime {
       includePartialMessages: false,
       cwd: this.config.sdkCwd,
       persistSession: this.config.persistSessions,
-      maxTurns: this.config.maxTurns,
+      maxTurns: Math.max(this.config.maxTurns, 80),
       mcpServers: { droid: server },
       allowedTools,
       env,

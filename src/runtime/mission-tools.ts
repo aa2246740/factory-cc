@@ -46,6 +46,51 @@ export function maybeForceMissionSpawn(
   return { name: spawn.name, input: spawnToolInput(spawn, userText) };
 }
 
+const ARTIFACT_MARKERS: Array<{ note: string; pattern: RegExp }> = [
+  { note: "artifact:features.json", pattern: /features\.json has been (created|updated) successfully/i },
+  { note: "artifact:validation-contract.md", pattern: /validation-contract\.md has been (created|updated) successfully/i },
+  { note: "artifact:validation-state.json", pattern: /validation-state\.json has been (created|updated) successfully/i },
+  { note: "artifact:AGENTS.md", pattern: /AGENTS\.md has been (created|updated) successfully/i },
+  { note: "artifact:services.yaml", pattern: /services\.yaml has been (created|updated) successfully/i },
+  { note: "artifact:SKILL.md", pattern: /SKILL\.md has been (created|updated) successfully/i },
+];
+
+const REQUIRED_START_ARTIFACTS = [
+  "artifact:features.json",
+  "artifact:validation-contract.md",
+  "artifact:validation-state.json",
+  "artifact:AGENTS.md",
+  "artifact:services.yaml",
+];
+
+export function noteMissionArtifacts(sessionNotes: string[], blob: string): void {
+  for (const marker of ARTIFACT_MARKERS) {
+    if (marker.pattern.test(blob) && !sessionNotes.includes(marker.note)) {
+      sessionNotes.push(marker.note);
+    }
+  }
+}
+
+export function maybeForceStartWhenReady(
+  sessionNotes: string[],
+  tools: ToolDefinition[] | undefined,
+  blob: string,
+): { name: string; input: Record<string, Json> } | undefined {
+  noteMissionArtifacts(sessionNotes, blob);
+  if (!tools?.some((tool) => tool.name === "StartMissionRun")) return undefined;
+  if (sessionNotes.includes("mission-run-started")) return undefined;
+  if (/must exist with at least one feature before starting/i.test(blob) && !sessionNotes.includes("artifact:features.json")) {
+    return undefined;
+  }
+  if (!REQUIRED_START_ARTIFACTS.every((note) => sessionNotes.includes(note))) return undefined;
+  sessionNotes.push("mission-run-started");
+  sessionNotes.push("mission-spawned");
+  return {
+    name: "StartMissionRun",
+    input: { message: "Mission files are ready. Start workers and the validator now." },
+  };
+}
+
 export function orchestratorAppendix(role: RoleTag, tools: ToolDefinition[] | undefined): string {
   if (!isMissionOrchestratorRequest(role, tools)) return "";
   const names = (tools ?? [])
@@ -53,10 +98,11 @@ export function orchestratorAppendix(role: RoleTag, tools: ToolDefinition[] | un
     .filter((name) => MISSION_SPAWN_TOOLS.includes(name as (typeof MISSION_SPAWN_TOOLS)[number]));
   return [
     "You are the Droid Mission orchestrator talking through Relay Bridge.",
-    "Do not finish with a plain-text plan.",
-    `You must call one of these Droid tools in this turn: ${names.join(", ") || "StartMissionRun"}.`,
-    "Prefer StartMissionRun so Factory can spawn Worker and Validator sessions.",
-    "Never claim workers already ran unless you invoked those tools.",
+    "Do not implement application code yourself. Do not finish with a plain-text plan.",
+    "First write the required mission files with Droid Create/Edit: features.json, validation-contract.md, validation-state.json, AGENTS.md, services.yaml, and skills/<name>/SKILL.md.",
+    "Only after those files exist, call StartMissionRun so Factory can spawn Worker and Validator sessions.",
+    `Available mission tools: ${names.join(", ") || "StartMissionRun"}.`,
+    "Never claim workers already ran unless StartMissionRun succeeded.",
   ].join(" ");
 }
 

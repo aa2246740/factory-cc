@@ -40,7 +40,7 @@ export async function startSdkBridge(port: number, dataDir: string, selection: U
     dataDir,
     persistSessions: true,
     requestTimeoutMs: 180_000,
-    maxTurns: 32,
+    maxTurns: 80,
     upstreamBaseUrl: selection.provider.baseUrl,
     upstreamModel: selection.provider.model,
     upstreamTokenEnv: selection.provider.tokenEnv,
