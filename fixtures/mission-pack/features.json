@@ -1,0 +1,17 @@
+{
+  "features": [
+    {
+      "id": "fix-completed-filter-defect",
+      "description": "Fix visibleTasks and counts so the completed filter includes only completed tasks.",
+      "skillName": "backend-worker",
+      "milestone": "fix-defect",
+      "preconditions": ["tests/acceptance.test.ts is runnable"],
+      "expectedBehavior": [
+        "visibleTasks(tasks, 'completed') returns only completed tasks",
+        "counts(tasks).completed equals the number of completed tasks"
+      ],
+      "fulfills": ["VAL-FILTER-001", "VAL-COUNTS-001"],
+      "status": "pending"
+    }
+  ]
+}

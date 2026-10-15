@@ -1,7 +1,7 @@
 import { cpSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { publicSelection } from "../src/upstream/providers.js";
-import { resolveSelection, rolesSeen, runDroid, startSdkBridge } from "./e2e-lib.js";
+import { resolveSelection, rolesSeen, runDroid, seedMissionPack, startDroidDaemon, startSdkBridge } from "./e2e-lib.js";
 import { redactText, runCapture, writeJson } from "./lib.js";
 
 export async function runE2eMission(): Promise<number> {
@@ -36,6 +36,11 @@ export async function runE2eMission(): Promise<number> {
     timeoutMs: 10_000,
   });
 
+  process.env.BRIDGE_DROID_HOME = isolated.home;
+  process.env.BRIDGE_WAIT_FOR_MISSION_DIR = "1";
+  const daemon = startDroidDaemon(isolated.home, isolated.token, 18796);
+  const seeder = seedMissionPack(isolated.home, repo);
+
   const captured = await runDroid(
     [
       "exec",
@@ -48,11 +53,15 @@ export async function runE2eMission(): Promise<number> {
       "relay-validator",
       "--auto",
       "high",
+      "--append-system-prompt",
+      "You are the orchestrator. After mission files exist, call StartMissionRun immediately. Do not implement application code yourself.",
       "-f",
       "MISSION.md",
     ],
     { home: isolated.home, token: isolated.token, cwd: repo, timeoutMs: 480_000 },
   );
+  const seeded = await seeder;
+  daemon.stop();
 
   const roles = rolesSeen(isolated.app);
   const uniqueRoles = [...new Set(roles)];
@@ -75,9 +84,10 @@ export async function runE2eMission(): Promise<number> {
     spawnedStartMissionToolListed: spawned,
     threeRoles: { orchestrator: hasOrchestrator, worker: hasWorker, validator: hasValidator },
     requests: isolated.app.records,
+    seededMissionDir: seeded ?? null,
     notes: [
       "PASS requires orchestrator + worker + validator HTTP requests through the bridge.",
-      "First orchestrator turn synthesizes StartMissionRun when the tool is advertised so public Droid actually starts Worker/Validator.",
+      "StartMissionRun is forced only after required mission files exist (Droid precondition).",
       "Claude login unused. Official Anthropic billing unused.",
     ],
   };

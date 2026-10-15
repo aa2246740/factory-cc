@@ -10,7 +10,7 @@ import type { BridgeConfig } from "../config.js";
 import type { ContentBlock } from "../types.js";
 import { BridgeError } from "../types.js";
 import type { Logger } from "../logging.js";
-import { maybeForceStartWhenReady, orchestratorAppendix, roleAppendix } from "./mission-tools.js";
+import { maybeForceStartWhenReady, missionDirReady, orchestratorAppendix, roleAppendix } from "./mission-tools.js";
 import type { BridgeRuntime, RuntimeEvent, RuntimeRequest, RuntimeTurn } from "./types.js";
 import {
   publicSelection,
@@ -112,7 +112,12 @@ export class SdkRuntime implements BridgeRuntime {
 
     if (results.length > 0) {
       const blob = JSON.stringify(input.request.messages);
-      const forced = maybeForceStartWhenReady(input.session.notes, input.request.tools, blob);
+      const forced = maybeForceStartWhenReady(
+        input.session.notes,
+        input.request.tools,
+        blob,
+        process.env.BRIDGE_DROID_HOME,
+      );
       for (const result of results) {
         if (live.mailbox.hasCall(result.tool_use_id)) {
           live.mailbox.submitResult(result);
@@ -131,6 +136,19 @@ export class SdkRuntime implements BridgeRuntime {
       return this.waitForTurn(live, input, this.config.requestTimeoutMs);
     }
 
+    if (process.env.BRIDGE_WAIT_FOR_MISSION_DIR === "1" && process.env.BRIDGE_DROID_HOME) {
+      await waitFor(() => missionDirReady(process.env.BRIDGE_DROID_HOME), 20_000);
+    }
+    const forced = maybeForceStartWhenReady(
+      input.session.notes,
+      input.request.tools,
+      JSON.stringify(input.request.messages),
+      process.env.BRIDGE_DROID_HOME,
+    );
+    if (forced) {
+      await this.parkQuery(live, "mission-files-ready-first-turn");
+      return this.synthesizedSpawn(input, live, forced, "sdk-mission-start-when-ready");
+    }
     return this.startAndWait(input, live);
   }
 
@@ -526,4 +544,13 @@ function mapSdkError(error: unknown): BridgeError {
 
 function now(): string {
   return new Date().toISOString();
+}
+
+async function waitFor(pred: () => boolean, timeoutMs: number): Promise<boolean> {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    if (pred()) return true;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  return pred();
 }

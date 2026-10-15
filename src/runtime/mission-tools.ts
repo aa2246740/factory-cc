@@ -1,3 +1,5 @@
+import { existsSync, readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
 import type { Json, RoleTag, ToolDefinition } from "../types.js";
 
 export const MISSION_SPAWN_TOOLS = ["StartMissionRun", "ProposeMission", "Task"] as const;
@@ -71,12 +73,48 @@ export function noteMissionArtifacts(sessionNotes: string[], blob: string): void
   }
 }
 
+export function missionDirReady(droidHome?: string): boolean {
+  if (!droidHome) return false;
+  const root = join(droidHome, ".factory/missions");
+  if (!existsSync(root)) return false;
+  for (const name of readdirSync(root)) {
+    const dir = join(root, name);
+    if (!statSync(dir).isDirectory()) continue;
+    const required = [
+      "features.json",
+      "validation-contract.md",
+      "validation-state.json",
+      "AGENTS.md",
+      "services.yaml",
+    ];
+    if (!required.every((file) => existsSync(join(dir, file)))) continue;
+    const skills = join(dir, "skills");
+    if (existsSync(skills) && skillMarkdownExists(skills)) return true;
+  }
+  return false;
+}
+
+function skillMarkdownExists(dir: string): boolean {
+  for (const name of readdirSync(dir)) {
+    const full = join(dir, name);
+    if (statSync(full).isDirectory() && skillMarkdownExists(full)) return true;
+    if (name === "SKILL.md") return true;
+  }
+  return false;
+}
+
 export function maybeForceStartWhenReady(
   sessionNotes: string[],
   tools: ToolDefinition[] | undefined,
   blob: string,
+  droidHome?: string,
 ): { name: string; input: Record<string, Json> } | undefined {
   noteMissionArtifacts(sessionNotes, blob);
+  if (missionDirReady(droidHome)) {
+    for (const note of [...REQUIRED_START_ARTIFACTS, "artifact:SKILL.md"]) {
+      if (!sessionNotes.includes(note)) sessionNotes.push(note);
+    }
+  }
   if (!tools?.some((tool) => tool.name === "StartMissionRun")) return undefined;
   if (sessionNotes.includes("mission-run-started")) return undefined;
   if (/must exist with at least one feature before starting/i.test(blob) && !sessionNotes.includes("artifact:features.json")) {

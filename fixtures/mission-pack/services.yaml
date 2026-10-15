@@ -1,0 +1,6 @@
+commands:
+  install: npm install
+  test: npm test
+  typecheck: npx tsc --noEmit
+
+services: {}

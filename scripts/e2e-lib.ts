@@ -1,6 +1,7 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { spawn, type ChildProcess } from "node:child_process";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { loadConfig, type BridgeConfig } from "../src/config.js";
 import { createBridgeApp, listen, type BridgeApp } from "../src/http/app.js";
 import { createLogger } from "../src/logging.js";
@@ -53,6 +54,7 @@ export async function startSdkBridge(port: number, dataDir: string, selection: U
   const home = mkdtempSync(join(tmpdir(), "relay-e2e-home-"));
   const workspace = mkdtempSync(join(tmpdir(), "relay-e2e-ws-"));
   mkdirSync(join(home, ".factory"), { recursive: true });
+  process.env.BRIDGE_DROID_HOME = home;
   writeFileSync(
     join(home, ".factory/settings.json"),
     `${JSON.stringify(
@@ -101,4 +103,55 @@ export async function runDroid(
 
 export function rolesSeen(app: BridgeApp): string[] {
   return app.records.map((record) => record.role);
+}
+
+export function startDroidDaemon(home: string, token: string, port: number): { child: ChildProcess; stop: () => void } {
+  const child = spawn("droid", ["daemon", "--host", "127.0.0.1", "--port", String(port)], {
+    env: droidEnv(home, token),
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  return {
+    child,
+    stop: () => {
+      child.kill("SIGTERM");
+    },
+  };
+}
+
+export async function seedMissionPack(home: string, workingDirectory: string, timeoutMs = 45_000): Promise<string | undefined> {
+  const pack = join(process.cwd(), "fixtures/mission-pack");
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const root = join(home, ".factory/missions");
+    if (existsSync(root)) {
+      for (const name of readdirSync(root)) {
+        const dir = join(root, name);
+        if (!statSync(dir).isDirectory()) continue;
+        writeMissionPack(pack, dir, workingDirectory);
+        return dir;
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  return undefined;
+}
+
+function writeMissionPack(pack: string, dest: string, workingDirectory: string): void {
+  const files = [
+    "features.json",
+    "validation-contract.md",
+    "validation-state.json",
+    "AGENTS.md",
+    "services.yaml",
+    "init.sh",
+    "skills/backend-worker/SKILL.md",
+  ];
+  for (const rel of files) {
+    const source = join(pack, rel);
+    const target = join(dest, rel);
+    mkdirSync(dirname(target), { recursive: true });
+    const text = readFileSync(source, "utf8").replaceAll("{{WORKING_DIRECTORY}}", workingDirectory);
+    writeFileSync(target, text);
+    if (rel.endsWith(".sh")) chmodSync(target, 0o755);
+  }
 }
