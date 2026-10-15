@@ -1,0 +1,29 @@
+{
+  "at": "2026-10-15T02:50:05.988Z",
+  "selected": {
+    "provider": "minimax",
+    "label": "MiniMax China Anthropic-compatible",
+    "baseUrl": "https://api.minimaxi.com/anthropic",
+    "model": "MiniMax-M2.5",
+    "tokenEnv": "MINIMAXCN_API_KEY",
+    "authHeader": "authorization"
+  },
+  "attempts": [
+    {
+      "provider": "minimax",
+      "label": "MiniMax China Anthropic-compatible",
+      "baseUrl": "https://api.minimaxi.com/anthropic",
+      "model": "MiniMax-M2.5",
+      "tokenEnv": "MINIMAXCN_API_KEY",
+      "ok": true,
+      "status": 200,
+      "stopReason": "tool_use",
+      "toolName": "relay_probe"
+    }
+  ],
+  "notes": [
+    "Probe never prints secret values.",
+    "Claude Code env uses ANTHROPIC_BASE_URL + ANTHROPIC_AUTH_TOKEN with ANTHROPIC_API_KEY empty.",
+    "ANTHROPIC_BASE_URL is never the Relay Bridge listen address."
+  ]
+}

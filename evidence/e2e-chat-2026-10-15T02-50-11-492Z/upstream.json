@@ -1,0 +1,8 @@
+{
+  "provider": "minimax",
+  "label": "MiniMax China Anthropic-compatible",
+  "baseUrl": "https://api.minimaxi.com/anthropic",
+  "model": "MiniMax-M2.5",
+  "tokenEnv": "MINIMAXCN_API_KEY",
+  "authHeader": "authorization"
+}

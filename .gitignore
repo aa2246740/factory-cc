@@ -17,4 +17,7 @@ uploads/
 agent-tools/
 .claude/
 .factory/
+evidence/**/claude-config/
+evidence/**/bridge-data/sandbox/
+evidence/**/logs/requests.jsonl
 *.sqlite

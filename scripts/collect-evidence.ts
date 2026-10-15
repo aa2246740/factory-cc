@@ -7,8 +7,9 @@ function walk(dir: string, acc: string[] = []): string[] {
   for (const name of readdirSync(dir)) {
     const full = join(dir, name);
     const st = statSync(full);
+    if (name === "claude-config" || name === "sandbox" || name === "node_modules") continue;
     if (st.isDirectory()) walk(full, acc);
-    else acc.push(full);
+    else if (name !== "requests.jsonl") acc.push(full);
   }
   return acc;
 }

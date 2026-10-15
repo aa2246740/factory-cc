@@ -17,7 +17,7 @@ Raw cases: `evidence/g0-2026-10-15T02-20-53-209Z/` and `evidence/g0-supplemental
 
 2. **Without Factory credentials, can ordinary exec reach local BYOK?** Yes for `droid exec -m <customModel>` against `http://127.0.0.1:18789` / `18791`. Observed `POST /v1/messages` from `user-agent: factory-cli/0.241.1` with `anthropic-version: 2023-06-01`. The same isolated HOME *without* a custom model and *without* airgap fails: “Authentication failed. Please log in using /login or set a valid FACTORY_API_KEY”.
 
-3. **Can Mission run all three roles under the same condition?** Only the **initial orchestrator request** was observed (`X-Bridge-Role: orchestrator`, Mission tool list including `ProposeMission` / `StartMissionRun` / `Task`). Worker and validator requests were **not** seen. Mock ended the first turn with text and does not invent Mission-control tool calls.
+3. **Can Mission run all three roles under the same condition?** G0 mock only saw the **initial orchestrator request**. The later sdk + MiniMax BYOK run **did** start Worker and Validator after `StartMissionRun` preconditions were met. See `REPORT.md` and `evidence/e2e-mission.json`.
 
 4. **Factory service connection attempts?** `droid doctor` in airgap skipped hosted connectivity and hosted authentication. This run did not install a process-wide egress tap. Conclusion: “not observed in doctor airgap checks; coverage is doctor + localhost request logs, not a zero-telemetry proof.” Official airgap docs say isolation still needs network policy.
 

@@ -1,0 +1,58 @@
+[
+  {
+    "at": "2026-10-15T02:50:14.429Z",
+    "method": "POST",
+    "path": "/v1/messages",
+    "role": "chat",
+    "authOk": true,
+    "sessionHint": "sess_a0e59034-02da-4580-ada1-b7023c2b95ae",
+    "model": "relay-chat",
+    "stream": true,
+    "toolNames": [
+      "Read",
+      "LS",
+      "Execute",
+      "Edit",
+      "Grep",
+      "Glob",
+      "Create",
+      "TaskOutput",
+      "TaskStop",
+      "ToolSearch",
+      "Skill",
+      "Task"
+    ],
+    "messageCount": 2,
+    "notes": [
+      "new-session"
+    ]
+  },
+  {
+    "at": "2026-10-15T02:50:14.466Z",
+    "method": "POST",
+    "path": "/v1/messages",
+    "role": "chat",
+    "authOk": true,
+    "sessionHint": "sess_a0e59034-02da-4580-ada1-b7023c2b95ae",
+    "model": "relay-chat",
+    "stream": true,
+    "toolNames": [
+      "Read",
+      "LS",
+      "Execute",
+      "Edit",
+      "Grep",
+      "Glob",
+      "Create",
+      "TaskOutput",
+      "TaskStop",
+      "ToolSearch",
+      "Skill",
+      "Task"
+    ],
+    "messageCount": 4,
+    "notes": [
+      "tool-use-id"
+    ]
+  }
+]

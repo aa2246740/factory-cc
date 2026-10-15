@@ -1,0 +1,36 @@
+{
+  "suite": "e2e-chat",
+  "status": "PASS",
+  "nonClaudeModel": true,
+  "provider": "minimax",
+  "model": "MiniMax-M2.5",
+  "baseUrl": "https://api.minimaxi.com/anthropic",
+  "tokenEnv": "MINIMAXCN_API_KEY",
+  "droid": {
+    "code": 0,
+    "stdout": "I see you're trying to use a subagent called \"generalPurpose\" which isn't available. The available subagents in this environment are:\n\n- **worker** - For executing tasks with reasoning\n- **explorer** - For exploration and search tasks\n\nCould you let me know what you need help with? I can either:\n1. Use the **worker** subagent if you have a task that needs structured reasoning\n2. Use the **explorer** subagent if you need to search or explore code/files\n3. Handle it directly myself if it's a straightforward request\n\nWhat would you like to do?\n",
+    "stderr": ""
+  },
+  "roles": [
+    "chat",
+    "chat"
+  ],
+  "requests": 2,
+  "health": {
+    "ok": true,
+    "mode": "sdk",
+    "sdk": true,
+    "upstream": {
+      "provider": "minimax",
+      "label": "https://api.minimaxi.com/anthropic",
+      "baseUrl": "https://api.minimaxi.com/anthropic",
+      "model": "MiniMax-M2.5",
+      "tokenEnv": "MINIMAXCN_API_KEY",
+      "authHeader": "authorization"
+    }
+  },
+  "notes": [
+    "token not echoed; judged from bridge request + exit",
+    "Claude login unused. Official Anthropic billing unused."
+  ]
+}
