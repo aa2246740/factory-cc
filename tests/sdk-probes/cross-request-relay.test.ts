@@ -33,6 +33,7 @@ describe("G1 cross-request tool relay (fake SDK)", () => {
       {
         model: "relay-probe",
         max_tokens: 32,
+        tools: [{ name: "relay_probe", description: "wait for external result", input_schema: { type: "object", properties: { nonce: { type: "string" } } } }],
         messages: [
           { role: "user", content: "call relay_probe nonce=abc" },
           { role: "assistant", content: [use] },
@@ -64,6 +65,7 @@ describe("G1 cross-request tool relay (fake SDK)", () => {
       {
         model: "relay-probe",
         max_tokens: 16,
+        tools: [{ name: "relay_probe", input_schema: { type: "object", properties: {} } }],
         messages: [{ role: "user", content: [{ type: "tool_result", tool_use_id: use.id, content: "late" }] }],
       },
       { "X-Bridge-Session": first.session ?? "" },

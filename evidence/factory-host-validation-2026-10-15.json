@@ -1,0 +1,169 @@
+{
+  "date": "2026-10-15",
+  "scope": "Official unmodified Claude Code and Agent SDK with isolated GLM-5.2 BYOK; no real Claude subscription credentials used",
+  "versions": {
+    "droid": "0.242.0",
+    "claudeCode": "2.1.300",
+    "agentSdk": "0.3.300",
+    "t3ReferenceCommit": "339179f50a84dc599cce373dbb48f172f182f44e"
+  },
+  "factorySkill": {
+    "status": "PASS",
+    "realDroidExec": true,
+    "descriptionExcludedVerificationWord": true,
+    "fullSkillBodyFollowed": true,
+    "httpRequests": 2,
+    "sdkSessionCount": 1,
+    "retestedAfterValidatedHandoffFix": true
+  },
+  "dynamicHostTools": {
+    "status": "PASS",
+    "host": "deterministic external ToolSearch/FactoryProbe fixture",
+    "officialSdkAndCli": true,
+    "sameSession": true,
+    "extraSearches": 0,
+    "continuationArgumentPreserved": true,
+    "sequence": [
+      {
+        "messageCount": 2,
+        "droidToolNames": [
+          "mcp__droid__ToolSearch"
+        ],
+        "toolsHash": "4d42b26e2d0f2474d9f6d0e9a83c4ba54844bb45ae7d5ac106cbc9517af77cb7"
+      },
+      {
+        "messageCount": 5,
+        "droidToolNames": [
+          "mcp__droid__FactoryProbe",
+          "mcp__droid__ToolSearch"
+        ],
+        "toolsHash": "a314e9e4bd37029439474dd333a4753c6178d59e02f259941e855393a22ce21e"
+      },
+      {
+        "messageCount": 8,
+        "droidToolNames": [
+          "mcp__droid__FactoryProbe",
+          "mcp__droid__ToolSearch"
+        ],
+        "toolsHash": "a314e9e4bd37029439474dd333a4753c6178d59e02f259941e855393a22ce21e"
+      }
+    ],
+    "correctiveChange": "Wait for public query.mcpServerStatus tool names before returning the pending ToolSearch result. Before the barrier the first continuation still carried the old tools; the corrected run exposed the new tool on the first continuation.",
+    "schemaVersionAcknowledgement": "unavailable from official status API; updated server still validates current schema",
+    "retestedAfterValidatedHandoffFix": true
+  },
+  "titleHelper": {
+    "status": "PASS",
+    "actualFactoryTitleRequestReplayed": true,
+    "inheritedRoleHeader": "worker",
+    "answer": "Fix sum.js to add instead of subtract",
+    "nativeToolCalls": [],
+    "fixtureUnchanged": true,
+    "correctiveChange": "Host system determines actual task/role. Do not inject Mission role instructions from a model header when host system exists.",
+    "observationScope": "Historical isolated replay after the host-role prompt correction. A later full Mission exposed that prompt instructions alone did not prevent native tool use; explicit tools:[] is now enforced mechanically, with actual SDK evidence in evidence/control-validation-2026-10-15.json#toolCapabilityBoundary."
+  },
+  "initialMission": {
+    "status": "INCOMPLETE_TIMEOUT",
+    "deadlineSeconds": 600,
+    "realDroidMission": true,
+    "artifactSeederUsed": false,
+    "forcedMissionCallsUsed": false,
+    "realFactoryWorkflowObserved": [
+      "Skill mission-planning",
+      "Skill define-mission-skills",
+      "Task dependency readiness",
+      "Task validation readiness",
+      "ProposeMission",
+      "StartMissionRun",
+      "Skill mission-worker-base",
+      "Skill backend-worker",
+      "EndFeatureRun",
+      "validator started"
+    ],
+    "modelRolesRequested": [
+      "orchestrator",
+      "worker",
+      "validator"
+    ],
+    "fixtureTestsPassed": true,
+    "fullMissionPassed": false,
+    "limitations": [
+      "Stopped at the test deadline with validation unfinished.",
+      "This run preceded the host-role fix: a title helper inherited worker instructions and edited the isolated fixture. Its green tests do not validate correct role separation. The separate corrected title-helper probe passed."
+    ]
+  },
+  "fullMissionRetest": {
+    "status": "FAILED_RUNTIME_TOOL_HANDOFF",
+    "workflow": "factory-native-unseeded",
+    "defect": "Bridge published assistant tool calls before SDK MCP validation/handler entry. Invalid EndFeatureRun arguments were forwarded and later retry callbacks failed association. Factory completion alone would mask this failure.",
+    "fixStatus": "At the time of this attempt, the independent real CLI schema-rejection/corrected-retry probe passed but full Mission had not passed. Subsequent Mission completion with recovery is recorded separately in evidence/mission-validation-2026-10-15.json.",
+    "stoppedAfterConfirmedDefect": true,
+    "modelRolesWithNativeActivity": [
+      "orchestrator",
+      "worker",
+      "validator"
+    ],
+    "failedGates": [
+      "droidSuccessful",
+      "factoryWorkflowObserved",
+      "missionCompleted",
+      "featuresDone",
+      "validationGreen"
+    ],
+    "nativeFixtureTestsPassed": true,
+    "originalTestsPreserved": true,
+    "missionStateAtStop": "running",
+    "fullMissionPassed": false
+  },
+  "offlineValidation": {
+    "testFiles": 22,
+    "testsPassed": 212,
+    "build": "PASS",
+    "fullTypecheck": "PASS",
+    "diffCheck": "PASS",
+    "observationScope": "Historical verification snapshot before the later lifecycle/control implementation; not the current aggregate test count."
+  },
+  "limits": [
+    "Provider is GLM BYOK, not an Anthropic subscription or official account-authorization test.",
+    "Dynamic tools change the cache prefix; no universal cache hit-rate promise.",
+    "Native approval, denial, cancellation and stale-approval rejection are now implemented and validated through the authenticated controller; see evidence/control-validation-2026-10-15.json.",
+    "Live MCP callbacks cannot be reconstructed after native process loss. Interrupted or terminal sessions fail closed; normal checkpoint-backed SessionEnd is resumable and has real Droid two-exec coverage.",
+    "Full Mission acceptance remains separate and pending; the earlier Mission failures are retained above."
+  ],
+  "validatedHandoffRetry": {
+    "status": "PASS",
+    "officialSdkAndCli": true,
+    "provider": "GLM-5.2 BYOK",
+    "host": "deterministic EndFeatureRun validation fixture",
+    "invalidNativeCallObserved": true,
+    "nativeSchemaRejectionObserved": true,
+    "firstExternalCallValid": true,
+    "externalCallsExecuted": 1,
+    "fieldOrderChangedOnRetry": true,
+    "sameNativeSession": true,
+    "finalWordCorrect": true
+  },
+  "lifecycleControlChannel": {
+    "implemented": true,
+    "status": "IMPLEMENTED_SCOPED_VALIDATION_PASS",
+    "evidence": "evidence/control-validation-2026-10-15.json",
+    "implementedSource": "Official Factory SessionStart/PostToolUse/SessionEnd hooks forwarded to the authenticated local control broker, plus launch ownership and native permission callbacks.",
+    "validated": [
+      "Real Droid Skill run registers a generation-bound session and closes native execution on normal SessionEnd.",
+      "Real native approval permits exactly one side effect; denial and cancellation produce none; stale approval returns 409.",
+      "Two real Droid exec invocations with hooks retain the same Droid, bridge and native SDK session, recall prior context, and reject a stale prior-generation SessionEnd with 409.",
+      "Explicit tools:[] blocks an actual native Bash attempt even under bypass; ordinary native tools remain usable."
+    ],
+    "terminalResultSemantics": "An authenticated SessionEnd drains owned native execution. A successful EndFeatureRun tool result is delivered only when its actual matching host response is available; session termination alone is not a synthesized successful tool result.",
+    "fullMissionPassed": false,
+    "fullMissionAcceptance": "Pending separate complete Mission acceptance; the scoped control probes do not replace it.",
+    "previousObservation": {
+      "observationScope": "Historical state before the lifecycle/control implementation.",
+      "implemented": false,
+      "observedGap": "A successful Factory EndFeatureRun can terminate the worker without returning another model request/tool_result. The native MCP callback then remains waiting until timeout/cancellation.",
+      "proposedSource": "Factory SessionEnd/PostToolUse hooks or official SDK lifecycle events"
+    },
+    "documentation": "https://docs.factory.com/harness/hooks"
+  },
+  "evidenceInterpretation": "The initialMission, fullMissionRetest, titleHelper and offlineValidation observations retain their earlier-run scope. Current lifecycle, approval, cancellation, no-tools capability and normal-resume evidence is maintained in evidence/control-validation-2026-10-15.json. These scoped results do not establish full Mission acceptance."
+}

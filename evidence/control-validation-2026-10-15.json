@@ -1,0 +1,233 @@
+{
+  "date": "2026-10-15",
+  "scope": "Official unmodified Droid 0.242.0 and Claude Code 2.1.300 / Claude Agent SDK 0.3.300; isolated non-Claude BYOK glm-5.2 at open.bigmodel.cn. No real subscription account was accessed.",
+  "sources": [
+    "https://docs.factory.com/harness/hooks"
+  ],
+  "factoryHooks": {
+    "status": "PASS",
+    "realDroidSkillResult": "FACTORY_SKILL_BODY_REACHED_CLAUDE_6271",
+    "sessionStartMarkerLocation": "messages[0].content[0].text",
+    "taskChildren": "Each observed Task child received its own SessionStart marker, with no parent marker inherited in model messages.",
+    "observedEvents": [
+      "SessionStart",
+      "PreToolUse",
+      "PostToolUse",
+      "Stop",
+      "SessionEnd",
+      "SubagentStop"
+    ],
+    "toolHookFields": [
+      "session_id",
+      "transcript_path",
+      "cwd",
+      "permission_mode",
+      "hook_event_name",
+      "tool_name",
+      "tool_input",
+      "tool_response (PostToolUse only)"
+    ],
+    "toolUseIdProvided": false,
+    "generationBinding": "SessionStart writes BRIDGE_FACTORY_BINDING to the official CLAUDE_ENV_FILE; later PostToolUse/Stop/SessionEnd hooks inherited the value in a real Droid run. Later events carry this bindingToken in the admin-authenticated envelope.",
+    "installedAdapter": "The shipped installer and forwarder successfully registered the real session with the control broker. Normal SessionEnd left pendingToolIds empty and a factory-session-ended note.",
+    "bindingMarkerReachedNativePrompt": false,
+    "deliveryErrors": 0,
+    "standaloneMissionCapture": "INCOMPLETE_REQUEST_TIMEOUT: the older 180-second per-request probe timed out during mission-pack native writes, after accepted ProposeMission and before the first worker. This is not evidence of complete Mission success.",
+    "terminalEndFeatureRun": "Pending the dedicated full Mission acceptance evidence; not established by this small hook probe."
+  },
+  "nativeApproval": {
+    "passed": true,
+    "results": [
+      {
+        "decision": "deny",
+        "approvals": [
+          {
+            "toolName": "Bash",
+            "exactCommand": true,
+            "decision": "deny",
+            "status": 200
+          }
+        ],
+        "status": 200,
+        "text": "DENIED_WITHOUT_EFFECT",
+        "effect": "",
+        "passed": true
+      },
+      {
+        "decision": "allow",
+        "approvals": [
+          {
+            "toolName": "Bash",
+            "exactCommand": true,
+            "decision": "allow",
+            "status": 200
+          }
+        ],
+        "status": 200,
+        "text": "APPROVED_ONCE",
+        "effect": "approved\n",
+        "passed": true
+      }
+    ]
+  },
+  "nativeCancellation": {
+    "passed": true,
+    "results": [
+      {
+        "decision": "cancel",
+        "approvals": [
+          {
+            "toolName": "Bash",
+            "exactCommand": true,
+            "decision": "cancel",
+            "status": 409,
+            "cancelStatus": 200
+          }
+        ],
+        "status": 499,
+        "text": "",
+        "effect": "",
+        "passed": true
+      }
+    ]
+  },
+  "offlineHookTests": {
+    "passed": 10,
+    "coverage": [
+      "preserves existing and settings-fallback hooks",
+      "private configuration and safe uninstall",
+      "loopback-only, redirect rejection",
+      "receipt reuse across bounded retry",
+      "generation environment file and symlink rejection",
+      "launch ownership only on SessionStart",
+      "malformed/oversized event rejection",
+      "fixed error messages"
+    ]
+  },
+  "toolCapabilityBoundary": {
+    "status": "PASS",
+    "provider": "isolated GLM-5.2 through official Claude Code and SDK",
+    "permissionMode": "bypass",
+    "cases": [
+      {
+        "name": "actual-title",
+        "httpStatus": 200,
+        "passed": true,
+        "fixtureUnchanged": true,
+        "forbiddenFileAbsent": true,
+        "nativeToolAttempts": 0,
+        "nativeResultErrors": [],
+        "approvedSideEffectLines": 0
+      },
+      {
+        "name": "adversarial-no-tools",
+        "httpStatus": 200,
+        "passed": true,
+        "fixtureUnchanged": true,
+        "forbiddenFileAbsent": true,
+        "nativeToolAttempts": 1,
+        "nativeResultErrors": [
+          true
+        ],
+        "approvedSideEffectLines": 0
+      },
+      {
+        "name": "ordinary-native-tools",
+        "httpStatus": 200,
+        "passed": true,
+        "fixtureUnchanged": true,
+        "forbiddenFileAbsent": true,
+        "nativeToolAttempts": 1,
+        "nativeResultErrors": [
+          false
+        ],
+        "approvedSideEffectLines": 1
+      }
+    ],
+    "guard": "Official native PreToolUse denies explicit tools:[] even under bypass; normal tools-omitted request executes once. tool_choice:none uses the same guard with offline SDK regression coverage."
+  },
+  "launchWrapper": {
+    "status": "PASS_OFFLINE_REAL_SUBPROCESSES",
+    "checks": [
+      "POSIX SIGINT propagated with exit130",
+      "timeout returns124 and kills owned child/grandchild",
+      "normal exit sends launch end",
+      "abnormal exit sends launch cancel once",
+      "HOME preserved; Factory override and literal settings preserved",
+      "administrator token removed from child environment"
+    ],
+    "limits": [
+      "Windows descendant cleanup not validated",
+      "raw-TTY in-app cancel depends on official Factory lifecycle; ordinary idle is not cancellation"
+    ]
+  },
+  "durableLifecycle": {
+    "implemented": true,
+    "checks": [
+      "late old-generation HTTP rejected",
+      "new admission blocked before drain begins",
+      "all owned sessions drained despite one completion error",
+      "terminal/interrupted disposition persists across bridge restart",
+      "only normal checkpoint-backed end resumable",
+      "cancelRequested persisted before native cancellation",
+      "identical prompts scoped by authenticated Factory session and workspace"
+    ]
+  },
+  "reference": {
+    "reaCommit": "c61c108b522de1a2b46e65b59360c9be66fb038e",
+    "use": "Reviewed once-only Deferred and owned process lifecycle patterns. No implementation dependency or copied source added."
+  },
+  "normalResumeWithHooks": {
+    "status": "PASS",
+    "method": "Two real Droid exec invocations, second using --session-id, with installed official hooks. Both invocations emitted normal SessionEnd; the second resumed the same native Claude Code SDK checkpoint.",
+    "authentication": "Isolated GLM BYOK; no real Claude subscription account accessed.",
+    "sameDroidSession": true,
+    "sameBridgeSession": true,
+    "sameNativeSdkSession": true,
+    "droidSessionId": "12e6250d-99ae-447f-9488-943c9c46a23d",
+    "bridgeSessionId": "sess_6b0543eb-2a29-4530-8cee-213e8cf6000b",
+    "nativeSdkSessionId": "cea48be5-aca7-42bb-b84f-653d139e92c9",
+    "exactRecallPassed": true,
+    "hostEndedAfterEachExit": [
+      "resumable",
+      "resumable"
+    ],
+    "generationRotated": true,
+    "stalePriorGenerationSessionEndStatus": 409,
+    "staleEventDidNotCancelLiveResume": true,
+    "claudeSideWarmProviderUsage": {
+      "input_tokens": 278,
+      "cache_read_input_tokens": 21760,
+      "coverage": "partial",
+      "scope": "provider_messages",
+      "cacheCreationTokens": "not reported by provider; unknown, not measured zero"
+    },
+    "claudeSideWarmProviderUsageWithStaleEvent": {
+      "input_tokens": 269,
+      "cache_read_input_tokens": 21760,
+      "coverage": "partial",
+      "scope": "provider_messages"
+    },
+    "usageInterpretation": "These are provider-message counters observed inside the Claude Code runtime, not Droid usage counters. Missing cache-creation accounting prevents an exact cache-hit ratio; these GLM results do not establish Anthropic subscription billing.",
+    "afterEachExit": [
+      {
+        "activeNativeSessions": 0,
+        "activeNativeTurns": 0,
+        "pendingHostCalls": 0,
+        "pendingApprovals": 0,
+        "fatalErrors": [],
+        "controlFailures": []
+      },
+      {
+        "activeNativeSessions": 0,
+        "activeNativeTurns": 0,
+        "pendingHostCalls": 0,
+        "pendingApprovals": 0,
+        "fatalErrors": [],
+        "controlFailures": []
+      }
+    ],
+    "sessionCount": 1,
+    "stderrEmpty": true
+  }
+}

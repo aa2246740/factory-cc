@@ -1,0 +1,34 @@
+{
+  "recordedAt": "2026-10-15T10:24:44.025812+00:00",
+  "baseCommit": "b55b57ddfad6b793533eddf8fc67dfa29ca2d865",
+  "sourceFingerprint": {
+    "algorithm": "sha256 of sorted path + NUL + sha256(file) entries joined by newline",
+    "files": 91,
+    "paths": "src/**/*.ts, scripts/**/*.ts, tests/**/*.ts, package*.json, tsconfig.json, tsconfig.build.json",
+    "sha256": "407f13d820d1d6faa062327a5eb1e9870f2e1bd2a20a0157f547560d1d13a657"
+  },
+  "offline": {
+    "npm test": {
+      "status": "PASS",
+      "tests": 288,
+      "testFiles": 31,
+      "startedAt": "2026-10-15T10:22:49Z"
+    },
+    "npx tsc --noEmit": "PASS",
+    "npm run build": "PASS",
+    "git diff --check": "PASS"
+  },
+  "liveEvidence": {
+    "nativeSessionsAndManualCompaction": "native-session-validation-2026-10-15.json",
+    "factoryToolsAndHistoricalFailures": "factory-host-validation-2026-10-15.json",
+    "approvalsLifecycleAndResume": "control-validation-2026-10-15.json",
+    "missionCompletion": "mission-validation-2026-10-15.json",
+    "automaticCompaction": "auto-compaction-validation-2026-10-15.json"
+  },
+  "scope": [
+    "Live tests used only isolated GLM BYOK through unmodified official Claude Code; no real subscription credentials were read or used.",
+    "Mission result is PASS_WITH_RECOVERY after the original harness timeout, not an uninterrupted pass.",
+    "Each live evidence file states its own runtime and configuration scope. Subsequent workspace-path and provider-routing fixes were verified offline.",
+    "No account-policy or real Claude subscription billing guarantee is inferred."
+  ]
+}

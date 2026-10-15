@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { loadConfig } from "../../src/config.js";
 import { modelSlots, sdkEnv } from "../../src/upstream/providers.js";
 import { mkdtempSync } from "node:fs";
@@ -6,6 +6,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 describe("BRIDGE_AUTH", () => {
+  it("BYOK authentication never implicitly grants bypass permissions", () => {
+    vi.stubEnv("BRIDGE_PERMISSION", "");
+    try {
+      const dataDir = mkdtempSync(join(tmpdir(), "relay-auth-permissions-"));
+      expect(loadConfig({ dataDir, authMode: "byok" }).permissionMode).toBe("ask");
+      expect(loadConfig({ dataDir, authMode: "byok", permissionMode: "bypass" }).permissionMode).toBe("bypass");
+    } finally { vi.unstubAllEnvs(); }
+  });
   it("subscription does not override ANTHROPIC_BASE_URL / AUTH_TOKEN / API_KEY", () => {
     const previous = {
       base: process.env.ANTHROPIC_BASE_URL,

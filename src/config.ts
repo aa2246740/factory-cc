@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import type { BridgeMode } from "./types.js";
+import { canonicalWorkspacePath } from "./workspace.js";
 
 export interface BridgeConfig {
   host: string;
@@ -57,9 +58,7 @@ export function loadConfig(overrides: Partial<BridgeConfig> = {}): BridgeConfig 
   const permissionRaw = overrides.permissionMode ?? env("BRIDGE_PERMISSION");
   const permissionMode = (permissionRaw === "ask" || permissionRaw === "bypass"
     ? permissionRaw
-    : authMode === "subscription"
-      ? "ask"
-      : "bypass") as "bypass" | "ask";
+    : "ask") as "bypass" | "ask";
 
   return {
     host: overrides.host ?? env("BRIDGE_HOST", "127.0.0.1")!,
@@ -73,10 +72,10 @@ export function loadConfig(overrides: Partial<BridgeConfig> = {}): BridgeConfig 
     maxBodyBytes: overrides.maxBodyBytes ?? intEnv("BRIDGE_MAX_BODY_BYTES", 8 * 1024 * 1024),
     maxSessions: overrides.maxSessions ?? intEnv("BRIDGE_MAX_SESSIONS", 16),
     maxTurns: overrides.maxTurns ?? intEnv("BRIDGE_MAX_TURNS", 64),
-    toolWaitMs: overrides.toolWaitMs ?? intEnv("BRIDGE_TOOL_WAIT_MS", 30 * 60 * 1000),
-    requestTimeoutMs: overrides.requestTimeoutMs ?? intEnv("BRIDGE_REQUEST_TIMEOUT_MS", 180_000),
+    toolWaitMs: overrides.toolWaitMs ?? intEnv("BRIDGE_TOOL_WAIT_MS", 8 * 60 * 60 * 1000),
+    requestTimeoutMs: overrides.requestTimeoutMs ?? intEnv("BRIDGE_REQUEST_TIMEOUT_MS", 10 * 60 * 1000),
     claudeExecutable: overrides.claudeExecutable ?? env("BRIDGE_CLAUDE_EXECUTABLE"),
-    sdkCwd: overrides.sdkCwd ?? env("BRIDGE_SDK_CWD", resolve(dataDir, "sandbox"))!,
+    sdkCwd: canonicalWorkspacePath(overrides.sdkCwd ?? env("BRIDGE_SDK_CWD", resolve(dataDir, "sandbox"))!),
     persistSessions: overrides.persistSessions ?? env("BRIDGE_PERSIST", "1") !== "0",
     authMode,
     permissionMode,

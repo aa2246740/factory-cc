@@ -25,6 +25,10 @@ describe("resilience", () => {
     const payload = {
       model: "relay-probe",
       max_tokens: 16,
+      tools: [
+        { name: "alpha", input_schema: { type: "object", properties: {} } },
+        { name: "beta", input_schema: { type: "object", properties: {} } },
+      ],
       messages: [
         { role: "user", content: "TWO_TOOLS" },
         { role: "assistant", content: uses },
@@ -60,6 +64,7 @@ describe("resilience", () => {
       {
         model: "relay-probe",
         max_tokens: 16,
+        tools: [{ name: "screenshot", input_schema: { type: "object", properties: {} } }],
         messages: [
           {
             role: "user",

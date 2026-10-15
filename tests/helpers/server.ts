@@ -5,8 +5,6 @@ import { loadConfig, type BridgeConfig } from "../../src/config.js";
 import { createBridgeApp, listen, type BridgeApp } from "../../src/http/app.js";
 import { createLogger } from "../../src/logging.js";
 
-let port = 19000;
-
 export async function startTestBridge(overrides: Partial<BridgeConfig> = {}): Promise<{
   app: BridgeApp;
   token: string;
@@ -16,7 +14,7 @@ export async function startTestBridge(overrides: Partial<BridgeConfig> = {}): Pr
   const config = loadConfig({
     mode: "mock",
     host: "127.0.0.1",
-    port: port++,
+    port: 0,
     clientToken: token,
     adminToken: "admin-token",
     dataDir: mkdtempSync(join(tmpdir(), "relay-test-")),

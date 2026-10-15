@@ -1,0 +1,815 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { mkdtempSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { loadConfig } from "../../src/config.js";
+import { SdkRuntime, type SdkHandle, type SdkUserInput } from "../../src/runtime/sdk-runtime.js";
+import type { RuntimeApprovalRequest, RuntimePermissionDecision, RuntimeRequest } from "../../src/runtime/types.js";
+import type { SessionRecord } from "../../src/sessions/state.js";
+import type { ContentBlock } from "../../src/types.js";
+
+const runtimes: SdkRuntime[] = [];
+const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+const tool = { name: "TaskOutput", input_schema: { type: "object" as const, properties: {} } };
+const user = (content: string | ContentBlock[]) => ({ role: "user" as const, content });
+const success = (result: string, extra = {}) => ({ type: "result", subtype: "success", is_error: false, result, session_id: "native-sdk-session", ...extra });
+
+class FakeSdk implements SdkHandle {
+  readonly calls: Array<{ prompt: AsyncIterable<SdkUserInput>; options: Record<string, unknown> }> = [];
+  readonly inputs: SdkUserInput[] = [];
+  readonly handlers = new Map<string, (args: Record<string, unknown>, extra?: unknown) => Promise<unknown>>();
+  readonly schemas = new Map<string, unknown>();
+  readonly catalogNotifications: string[][] = [];
+  readonly mcpStatus = vi.fn(async () => [{ name: "droid", status: "connected", tools: [...this.handlers.keys()].map((name) => ({ name })) }]);
+  readonly interrupt = vi.fn(async () => undefined);
+  readonly close = vi.fn(() => this.release());
+  private release = () => {};
+  readonly untilClosed = new Promise<void>((resolve) => { this.release = resolve; });
+  constructor(readonly respond: (input: SdkUserInput, index: number, sdk: FakeSdk) => AsyncGenerator<Record<string, unknown>>) {}
+  tool(name: string, _description: string, _schema: unknown, handler: (args: Record<string, unknown>, extra?: unknown) => Promise<unknown>): unknown {
+    this.handlers.set(name, handler);
+    return { name, handler };
+  }
+  createSdkMcpServer(options: Record<string, unknown>): unknown {
+    const changed = () => { this.catalogNotifications.push([...this.handlers.keys()]); };
+    return { ...options, instance: {
+      isConnected: () => this.calls.length > 0,
+      sendToolListChanged: changed,
+      server: { sendToolListChanged: async () => changed() },
+      registerTool: (name: string, config: { inputSchema: unknown; description: string }, handler: (args: Record<string, unknown>, extra?: unknown) => Promise<unknown>) => {
+        const wrapped = (args: Record<string, unknown>, extra?: unknown) => handler((config.inputSchema as { parse(input: unknown): Record<string, unknown> }).parse(args), extra);
+        this.handlers.set(name, wrapped);
+        this.schemas.set(name, config.inputSchema);
+        return {
+          update: (updates: { description?: string }) => { if (updates.description) config.description = updates.description; },
+          remove: () => { if (this.handlers.get(name) === wrapped) { this.handlers.delete(name); this.schemas.delete(name); } },
+        };
+      },
+    } };
+  }
+  query(args: { prompt: AsyncIterable<SdkUserInput>; options: Record<string, unknown> }) {
+    this.calls.push(args);
+    const self = this;
+    return {
+      interrupt: this.interrupt,
+      close: this.close,
+      mcpServerStatus: this.mcpStatus,
+      async *[Symbol.asyncIterator]() {
+        for await (const input of args.prompt) {
+          self.inputs.push(input);
+          yield { type: "system", subtype: "init", session_id: "native-sdk-session" };
+          yield* self.respond(input, self.inputs.length - 1, self);
+        }
+      },
+    };
+  }
+}
+
+function create(sdk: FakeSdk, overrides = {}) {
+  const config = loadConfig({
+    mode: "sdk", dataDir: mkdtempSync(join(tmpdir(), "relay-sdk-lifecycle-")), authMode: "byok", permissionMode: "bypass",
+    upstreamBaseUrl: "https://offline.invalid/anthropic", upstreamModel: "offline-test-model", upstreamTokenEnv: "BRIDGE_TEST_FAKE_KEY",
+    requestTimeoutMs: 300, toolWaitMs: 300, persistSessions: true, ...overrides,
+  });
+  const runtime = new SdkRuntime(config, logger, sdk);
+  runtimes.push(runtime);
+  return { runtime, config };
+}
+function session(extra: Partial<SessionRecord> = {}): SessionRecord {
+  return { bridgeSessionId: "session-a", role: "chat", state: "NEW", model: "relay", toolNames: [], createdAt: "", updatedAt: "", pendingToolIds: [], cancelRequested: false, notes: [], usage: { input_tokens: 0, output_tokens: 0, estimated: true }, ...extra };
+}
+function request(s: SessionRecord, content: string | ContentBlock[], extra: Partial<RuntimeRequest["request"]> = {}): RuntimeRequest {
+  return { request: { model: "relay", max_tokens: 100, messages: [user(content)], ...extra }, session: s, role: "chat", headers: {} };
+}
+beforeEach(() => { vi.stubEnv("BRIDGE_TEST_FAKE_KEY", "offline-placeholder-never-sent"); });
+afterEach(async () => { await Promise.all(runtimes.splice(0).map((runtime) => runtime.close())); vi.unstubAllEnvs(); });
+
+describe("official SDK streaming-input lifecycle (injected offline SDK)", () => {
+  it("keeps one query for successive turns and does not repeat stable host context", async () => {
+    const sdk = new FakeSdk(async function* (_input, index) { yield success(`reply-${index}`); });
+    const { runtime } = create(sdk);
+    const s = session();
+    const first = await runtime.handle(request(s, "first"));
+    const second = await runtime.handle(request(s, "second"));
+    expect(first.sdkSessionId).toBe("native-sdk-session");
+    expect(second.response.content).toEqual([{ type: "text", text: "reply-1" }]);
+    expect(sdk.calls).toHaveLength(1);
+    expect(sdk.inputs).toHaveLength(2);
+    expect(JSON.stringify(sdk.inputs[0])).toContain("Droid role");
+    expect(JSON.stringify(sdk.inputs[1])).not.toContain("Droid role");
+    expect(sdk.calls[0]!.options.tools).toEqual({ type: "preset", preset: "claude_code" });
+    expect(sdk.calls[0]!.options.systemPrompt).toMatchObject({ type: "preset", preset: "claude_code" });
+    expect(sdk.close).not.toHaveBeenCalled();
+  });
+
+  it("rejects concurrent first requests before starting a second query", async () => {
+    const sdk = new FakeSdk(async function* (_input, _index, fake) { await fake.untilClosed; yield success("late"); });
+    const { runtime } = create(sdk);
+    const s = session();
+    const first = runtime.handle(request(s, "one"));
+    const rejected = expect(first).rejects.toMatchObject({ code: "cancelled" });
+    await expect(runtime.handle(request(s, "two"))).rejects.toMatchObject({ status: 409, code: "session_busy" });
+    await vi.waitFor(() => expect(sdk.calls).toHaveLength(1));
+    await runtime.cancel(s.bridgeSessionId, "test cleanup");
+    await rejected;
+  });
+
+  it("relays MCP results into the original handler once, retaining image data", async () => {
+    let handlerResult: unknown;
+    const sdk = new FakeSdk(async function* (_input, _index, fake) {
+      yield { type: "assistant", message: { content: [{ type: "tool_use", id: "native-tool", name: "mcp__droid__TaskOutput", input: {} }] } };
+      handlerResult = await fake.handlers.get("TaskOutput")!({}, { toolUseID: "native-tool" });
+      yield success("tool completed");
+    });
+    const { runtime } = create(sdk);
+    const s = session();
+    const first = await runtime.handle(request(s, "get output", { tools: [tool] }));
+    expect(first.pendingToolIds).toEqual(["native-tool"]);
+    const followup = request(s, [{ type: "tool_result", tool_use_id: "native-tool", content: [{ type: "image", source: { type: "base64", media_type: "image/png", data: "image-payload" } }] }]);
+    const second = await runtime.handle(followup);
+    const replay = await runtime.handle(followup);
+    expect(second.response.stop_reason).toBe("end_turn");
+    expect(replay.response.id).toBe(second.response.id);
+    expect(handlerResult).toEqual({ content: [{ type: "image", data: "image-payload", mimeType: "image/png" }], isError: false });
+    expect(sdk.inputs).toHaveLength(1);
+    expect(sdk.calls).toHaveLength(1);
+  });
+
+  it("buffers separately streamed parallel tool blocks until the next HTTP reply", async () => {
+    const received: unknown[] = [];
+    const sdk = new FakeSdk(async function* (_input, _index, fake) {
+      for (const id of ["first-tool", "second-tool"]) {
+        yield { type: "assistant", message: { content: [{ type: "tool_use", id, name: "mcp__droid__TaskOutput", input: { id } }] } };
+      }
+      received.push(...await Promise.all(["first-tool", "second-tool"].map((id) => fake.handlers.get("TaskOutput")!({ id }, { toolUseID: id }))));
+      yield success("both tools completed");
+    });
+    const { runtime } = create(sdk);
+    const s = session();
+    const first = await runtime.handle(request(s, "parallel", { tools: [tool] }));
+    expect(first.response.content).toContainEqual(expect.objectContaining({ id: "first-tool" }));
+    const second = await runtime.handle(request(s, [{ type: "tool_result", tool_use_id: "first-tool", content: "first result" }]));
+    expect(second.pendingToolIds).toEqual(["second-tool"]);
+    expect(second.response.content).toContainEqual(expect.objectContaining({ id: "second-tool" }));
+    const final = await runtime.handle(request(s, [{ type: "tool_result", tool_use_id: "second-tool", content: "second result" }]));
+    expect(final.response.stop_reason).toBe("end_turn");
+    expect(received).toHaveLength(2);
+    expect(sdk.inputs).toHaveLength(1);
+  });
+
+  it("allows sequential native handlers from one assistant batch without waiting for later handlers", async () => {
+    const sdk = new FakeSdk(async function* (_input, _index, fake) {
+      yield { type: "assistant", message: { content: ["a", "b"].map((id) => ({ type: "tool_use", id, name: "mcp__droid__TaskOutput", input: { id } })) } };
+      await fake.handlers.get("TaskOutput")!({ id: "a" });
+      await fake.handlers.get("TaskOutput")!({ id: "b" });
+      yield success("complete");
+    });
+    const { runtime } = create(sdk);
+    const s = session();
+    const first = await runtime.handle(request(s, "two tools", { tools: [tool] }));
+    expect(first.pendingToolIds).toEqual(["a"]);
+    await expect(runtime.deliverResults(s.bridgeSessionId, [{ tool_use_id: "b", content: "not executed" }])).rejects.toMatchObject({ code: "unknown_tool_use_id" });
+    const second = await runtime.handle(request(s, [{ type: "tool_result", tool_use_id: "a", content: "A" }]));
+    expect(second.response.content).toEqual([{ type: "tool_use", id: "b", name: "TaskOutput", input: { id: "b" } }]);
+    const final = await runtime.handle(request(s, [{ type: "tool_result", tool_use_id: "b", content: "B" }]));
+    expect(final.response.content).toEqual([{ type: "text", text: "complete" }]);
+  });
+
+  it.each([false, true])("matches validated handlers in either arrival order using canonical nested arguments (handler first=%s)", async (handlerFirst) => {
+    let result: unknown;
+    const sdk = new FakeSdk(async function* (_input, _index, fake) {
+      const run = () => fake.handlers.get("TaskOutput")!({ nested: { a: 1, b: 2 }, value: "same" });
+      let pending = handlerFirst ? run() : undefined;
+      yield { type: "assistant", message: { content: [{ type: "tool_use", id: "ordered", name: "mcp__droid__TaskOutput", input: { value: "same", nested: { b: 2, a: 1 } } }] } };
+      pending ??= run();
+      result = await pending;
+      yield success("matched");
+    });
+    const { runtime } = create(sdk);
+    const s = session();
+    const first = await runtime.handle(request(s, "run", { tools: [tool] }));
+    expect(first.response.content).toEqual([{ type: "tool_use", id: "ordered", name: "TaskOutput", input: { value: "same", nested: { b: 2, a: 1 } } }]);
+    await runtime.handle(request(s, [{ type: "tool_result", tool_use_id: "ordered", content: "once" }]));
+    expect(result).toEqual({ content: [{ type: "text", text: "once" }], isError: false });
+  });
+
+  it("never publishes a schema-rejected EndFeatureRun, then relays its corrected retry exactly once", async () => {
+    const end = { name: "EndFeatureRun", input_schema: {
+      type: "object" as const, properties: {
+        commitId: { type: "string" as const },
+        handoff: { type: "object" as const, properties: {
+          whatWasImplemented: { type: "string" as const }, whatWasLeftUndone: { type: "string" as const },
+          tests: { type: "object" as const, properties: { added: { type: "array" as const, items: { type: "string" as const } } }, required: ["added"] },
+          discoveredIssues: { type: "array" as const, items: { type: "string" as const } },
+        }, required: ["whatWasImplemented", "whatWasLeftUndone", "tests", "discoveredIssues"] },
+      }, required: ["commitId", "handoff"],
+    } };
+    const invalid = { commitId: "real-commit", handoff: { whatWasImplemented: "fixed sum" } };
+    const valid = { handoff: { tests: { added: [] }, discoveredIssues: [], whatWasLeftUndone: "", whatWasImplemented: "fixed sum" }, commitId: "real-commit" };
+    let completed = 0;
+    const sdk = new FakeSdk(async function* (_input, _index, fake) {
+      const rejected = { type: "assistant", message: { content: [{ type: "tool_use", id: "invalid", name: "mcp__droid__EndFeatureRun", input: invalid }] } };
+      yield rejected;
+      expect(() => fake.handlers.get("EndFeatureRun")!(invalid)).toThrow();
+      yield { type: "user", message: { content: [{ type: "tool_result", tool_use_id: "invalid", is_error: true, content: "MCP schema requires nested handoff fields" }] } };
+      yield rejected; // A duplicate assistant event must not resurrect rejected work.
+      const pending = fake.handlers.get("EndFeatureRun")!(valid); // Native control callback wins the output race.
+      yield { type: "assistant", message: { content: [{ type: "tool_use", id: "corrected", name: "mcp__droid__EndFeatureRun", input: valid }] } };
+      await pending;
+      completed++;
+      yield { type: "user", message: { content: [{ type: "tool_result", tool_use_id: "corrected", content: "handoff accepted" }] } };
+      yield success("complete");
+    });
+    const { runtime } = create(sdk);
+    const s = session();
+    const first = await runtime.handle(request(s, "end feature", { tools: [end] }));
+    expect(first.pendingToolIds).toEqual(["corrected"]);
+    expect(first.response.content).toEqual([{ type: "tool_use", id: "corrected", name: "EndFeatureRun", input: valid }]);
+    await expect(runtime.deliverResults(s.bridgeSessionId, [{ tool_use_id: "invalid", content: "must never run" }])).rejects.toMatchObject({ code: "unknown_tool_use_id" });
+    const followup = request(s, [{ type: "tool_result", tool_use_id: "corrected", content: "handoff accepted" }]);
+    expect((await runtime.handle(followup)).response.stop_reason).toBe("end_turn");
+    await runtime.handle(followup);
+    expect(completed).toBe(1);
+    expect(sdk.calls).toHaveLength(1);
+  });
+
+  it("does not forward native permission refusals or duplicate assistant proposals", async () => {
+    const sdk = new FakeSdk(async function* () {
+      const proposal = { type: "assistant", message: { content: [{ type: "tool_use", id: "denied", name: "mcp__droid__TaskOutput", input: {} }] } };
+      yield proposal;
+      yield { type: "user", message: { content: [{ type: "tool_result", tool_use_id: "denied", is_error: true, content: "native permission denied" }] } };
+      yield proposal;
+      yield success("permission denied");
+    });
+    const { runtime } = create(sdk);
+    const turn = await runtime.handle(request(session(), "run", { tools: [tool] }));
+    expect(turn.response.stop_reason).toBe("end_turn");
+    expect(turn.pendingToolIds).toEqual([]);
+    expect(turn.response.content.some((block) => block.type === "tool_use")).toBe(false);
+  });
+
+  it("does not publish a duplicate assistant event for an already active handler", async () => {
+    const sdk = new FakeSdk(async function* (_input, _index, fake) {
+      const proposal = { type: "assistant", message: { content: [{ type: "tool_use", id: "unique", name: "mcp__droid__TaskOutput", input: {} }] } };
+      yield proposal;
+      const pending = fake.handlers.get("TaskOutput")!({});
+      yield proposal;
+      await pending;
+      yield success("once");
+    });
+    const { runtime } = create(sdk);
+    const s = session();
+    await runtime.handle(request(s, "run", { tools: [tool] }));
+    const final = await runtime.handle(request(s, [{ type: "tool_result", tool_use_id: "unique", content: "once" }]));
+    expect(final.response.stop_reason).toBe("end_turn");
+  });
+
+  it("fails closed when identical parallel calls have no authoritative callback id", async () => {
+    const sdk = new FakeSdk(async function* (_input, _index, fake) {
+      yield { type: "assistant", message: { content: ["a", "b"].map((id) => ({ type: "tool_use", id, name: "mcp__droid__TaskOutput", input: {} })) } };
+      await fake.handlers.get("TaskOutput")!({});
+      yield success("must not complete");
+    });
+    const { runtime } = create(sdk);
+    await expect(runtime.handle(request(session(), "run", { tools: [tool] }))).rejects.toMatchObject({ code: "ambiguous_tool_call" });
+  });
+
+  it("cancels a handler waiting for assistant output without publishing or reviving it", async () => {
+    let handlerOutcome: Promise<unknown> | undefined;
+    const sdk = new FakeSdk(async function* (_input, _index, fake) {
+      handlerOutcome = fake.handlers.get("TaskOutput")!({}, { toolUseID: "late" }).catch((error) => error);
+      await fake.untilClosed;
+      yield { type: "assistant", message: { content: [{ type: "tool_use", id: "late", name: "mcp__droid__TaskOutput", input: {} }] } };
+      yield success("must not revive");
+    });
+    const { runtime } = create(sdk);
+    const s = session();
+    const running = runtime.handle(request(s, "run", { tools: [tool] }));
+    const rejected = expect(running).rejects.toMatchObject({ code: "cancelled" });
+    await vi.waitFor(() => expect(handlerOutcome).toBeDefined());
+    await runtime.cancel(s.bridgeSessionId, "cancel pending rendezvous");
+    await rejected;
+    expect(await handlerOutcome).toMatchObject({ code: "cancelled" });
+  });
+
+  it("never revives a native-rejected id when its handler arrives late", async () => {
+    const sdk = new FakeSdk(async function* (_input, _index, fake) {
+      yield { type: "assistant", message: { content: [{ type: "tool_use", id: "rejected", name: "mcp__droid__TaskOutput", input: {} }] } };
+      yield { type: "user", message: { content: [{ type: "tool_result", tool_use_id: "rejected", is_error: true, content: "native refused" }] } };
+      await fake.handlers.get("TaskOutput")!({}, { toolUseID: "rejected" });
+      yield success("must not complete");
+    });
+    const { runtime } = create(sdk);
+    await expect(runtime.handle(request(session(), "run", { tools: [tool] }))).rejects.toMatchObject({ code: "duplicate_tool_handler" });
+  });
+
+  it("lets the native runner reject a removed tool proposal and recover to an available tool", async () => {
+    const old = { name: "RemovedTool", input_schema: { type: "object" as const, properties: {} } };
+    const sdk = new FakeSdk(async function* (_input, index, fake) {
+      if (!index) { yield success("initial"); return; }
+      yield { type: "assistant", message: { content: [{ type: "tool_use", id: "removed", name: "mcp__droid__RemovedTool", input: {} }] } };
+      yield { type: "user", message: { content: [{ type: "tool_result", tool_use_id: "removed", is_error: true, content: "unknown tool" }] } };
+      yield { type: "assistant", message: { content: [{ type: "tool_use", id: "available", name: "mcp__droid__TaskOutput", input: {} }] } };
+      await fake.handlers.get("TaskOutput")!({});
+      yield success("recovered");
+    });
+    const { runtime } = create(sdk);
+    const s = session();
+    await runtime.handle(request(s, "initial", { tools: [old, tool] }));
+    const turn = await runtime.handle(request(s, "run", { tools: [tool] }));
+    expect(turn.pendingToolIds).toEqual(["available"]);
+    expect(turn.response.content.some((block) => block.type === "tool_use" && block.id === "removed")).toBe(false);
+    await runtime.handle(request(s, [{ type: "tool_result", tool_use_id: "available", content: "ok" }]));
+  });
+
+  it("rejects conflicting duplicate IDs in a batch before committing any result", async () => {
+    let delivered: unknown;
+    const sdk = new FakeSdk(async function* (_input, _index, fake) {
+      yield { type: "assistant", message: { content: [{ type: "tool_use", id: "one-id", name: "mcp__droid__TaskOutput", input: {} }] } };
+      delivered = await fake.handlers.get("TaskOutput")!({}, { toolUseID: "one-id" });
+      yield success("done");
+    });
+    const { runtime } = create(sdk);
+    const s = session();
+    await runtime.handle(request(s, "get output", { tools: [tool] }));
+    await expect(runtime.handle(request(s, [
+      { type: "tool_result", tool_use_id: "one-id", content: "first" },
+      { type: "tool_result", tool_use_id: "one-id", content: "conflicting" },
+    ]))).rejects.toMatchObject({ code: "conflicting_tool_result" });
+    expect(delivered).toBeUndefined();
+    await runtime.handle(request(s, [{ type: "tool_result", tool_use_id: "one-id", content: "accepted" }]));
+    expect(delivered).toEqual({ content: [{ type: "text", text: "accepted" }], isError: false });
+  });
+
+  it("adds ToolSearch discoveries before releasing its handler in the same SDK turn", async () => {
+    const search = { name: "ToolSearch", input_schema: { type: "object" as const, properties: {} } };
+    const fresh = { name: "FactoryFreshTool", input_schema: { type: "object" as const, properties: { value: { type: "string" as const } }, required: ["value"], additionalProperties: false } };
+    let newHandlerCalled = false;
+    const sdk = new FakeSdk(async function* (_input, _index, fake) {
+      yield { type: "assistant", message: { content: [{ type: "tool_use", id: "search", name: "mcp__droid__ToolSearch", input: {} }] } };
+      await fake.handlers.get("ToolSearch")!({}, { toolUseID: "search" });
+      expect(fake.handlers.has("FactoryFreshTool")).toBe(true);
+      expect(fake.catalogNotifications.at(-1)).toContain("FactoryFreshTool");
+      expect(fake.mcpStatus.mock.calls.length).toBeGreaterThanOrEqual(3);
+      yield { type: "assistant", message: { content: [{ type: "tool_use", id: "fresh", name: "mcp__droid__FactoryFreshTool", input: { value: "original argument" } }] } };
+      await fake.handlers.get("FactoryFreshTool")!({ value: "original argument" }, { toolUseID: "fresh" });
+      newHandlerCalled = true;
+      yield success("discovered and executed");
+    });
+    sdk.mcpStatus.mockResolvedValueOnce([{ name: "droid", status: "connected", tools: [{ name: "ToolSearch" }] }]);
+    sdk.mcpStatus.mockResolvedValueOnce([{ name: "droid", status: "connected", tools: [{ name: "ToolSearch" }] }]);
+    const { runtime } = create(sdk);
+    const s = session();
+    await runtime.handle(request(s, "find a tool", { tools: [search] }));
+    const discovered = await runtime.handle(request(s, [{ type: "tool_result", tool_use_id: "search", content: "FactoryFreshTool is available" }], { tools: [search, fresh] }));
+    expect(discovered.response.content).toContainEqual({ type: "tool_use", id: "fresh", name: "FactoryFreshTool", input: { value: "original argument" } });
+    const finished = await runtime.handle(request(s, [{ type: "tool_result", tool_use_id: "fresh", content: "executed" }]));
+    expect(finished.response.stop_reason).toBe("end_turn");
+    expect(newHandlerCalled).toBe(true);
+    expect(sdk.calls).toHaveLength(1);
+    expect(sdk.inputs).toHaveLength(1);
+  });
+
+  it("rejects unsupported continuation content before waking its pending MCP handler", async () => {
+    let delivered: unknown;
+    const sdk = new FakeSdk(async function* (_input, _index, fake) {
+      yield { type: "assistant", message: { content: [{ type: "tool_use", id: "content-check", name: "mcp__droid__TaskOutput", input: {} }] } };
+      delivered = await fake.handlers.get("TaskOutput")!({}, { toolUseID: "content-check" });
+      yield success("done");
+    });
+    const { runtime } = create(sdk);
+    const s = session();
+    await runtime.handle(request(s, "output", { tools: [tool] }));
+    await expect(runtime.handle(request(s, [
+      { type: "tool_result", tool_use_id: "content-check", content: "result" },
+      { type: "document", source: { type: "base64", media_type: "application/pdf", data: "unrepresentable-pdf" } },
+    ]))).rejects.toMatchObject({ status: 422, code: "unsupported_tool_result_content" });
+    expect(delivered).toBeUndefined();
+    expect(sdk.close).not.toHaveBeenCalled();
+    await runtime.handle(request(s, [{ type: "tool_result", tool_use_id: "content-check", content: "valid result" }]));
+    expect(delivered).toEqual({ content: [{ type: "text", text: "valid result" }], isError: false });
+  });
+
+  it.each([false, true])("preserves Skill body, images and changed host context (appended user=%s)", async (appendUser) => {
+    const skill = { name: "Skill", input_schema: { type: "object" as const, properties: {} } };
+    let result: { content: Array<Record<string, unknown>> } | undefined;
+    const sdk = new FakeSdk(async function* (_input, _index, fake) {
+      yield { type: "assistant", message: { content: [{ type: "tool_use", id: "skill", name: "mcp__droid__Skill", input: {} }] } };
+      result = await fake.handlers.get("Skill")!({}, { toolUseID: "skill" }) as typeof result;
+      yield success("skill loaded");
+    });
+    const { runtime } = create(sdk);
+    const s = session();
+    await runtime.handle(request(s, "activate", { tools: [skill], system: "OLD_HOST_CONTEXT" }));
+    const body: ContentBlock[] = [{ type: "text", text: "FACTORY_SKILL_BODY" }, { type: "image", source: { type: "base64", media_type: "image/png", data: "skill-image" } }];
+    const resultBlock: ContentBlock = { type: "tool_result", tool_use_id: "skill", content: "Skill activated" };
+    const followup = request(s, "unused", { system: "NEW_HOST_CONTEXT", tools: [skill], messages: appendUser ? [user([resultBlock]), user(body)] : [user([resultBlock, ...body])] });
+    const response = await runtime.handle(followup);
+    const replay = await runtime.handle(followup);
+    expect(replay.response.id).toBe(response.response.id);
+    expect(result!.content[0]).toEqual({ type: "text", text: "Skill activated" });
+    expect(result!.content).toContainEqual({ type: "image", data: "skill-image", mimeType: "image/png" });
+    const text = JSON.stringify(result!.content);
+    expect(text.match(/FACTORY_SKILL_BODY/g)).toHaveLength(1);
+    expect(text.match(/NEW_HOST_CONTEXT/g)).toHaveLength(1);
+    expect(text.match(/Host continuation context/g)).toHaveLength(1);
+    expect(sdk.inputs).toHaveLength(1);
+    expect(sdk.calls).toHaveLength(1);
+  });
+
+  it("removes a tool without losing its pending parallel callback or permitting new calls", async () => {
+    const removed = { name: "OldFactoryTool", input_schema: { type: "object" as const, properties: {} } };
+    let stale: ((args: Record<string, unknown>, extra?: unknown) => Promise<unknown>) | undefined;
+    const sdk = new FakeSdk(async function* (_input, _index, fake) {
+      yield { type: "assistant", message: { content: [
+        { type: "tool_use", id: "old", name: "mcp__droid__OldFactoryTool", input: {} },
+        { type: "tool_use", id: "keep", name: "mcp__droid__TaskOutput", input: {} },
+      ] } };
+      stale = fake.handlers.get("OldFactoryTool")!;
+      await Promise.all([stale({}, { toolUseID: "old" }), fake.handlers.get("TaskOutput")!({}, { toolUseID: "keep" })]);
+      yield success("old pending callbacks completed");
+    });
+    const { runtime } = create(sdk);
+    const s = session();
+    await runtime.handle(request(s, "parallel", { tools: [removed, tool] }));
+    const final = await runtime.handle(request(s, [
+      { type: "tool_result", tool_use_id: "old", content: "old result" },
+      { type: "tool_result", tool_use_id: "keep", content: "keep result" },
+    ], { tools: [tool] }));
+    expect(final.response.stop_reason).toBe("end_turn");
+    expect(sdk.handlers.has("OldFactoryTool")).toBe(false);
+    await expect(stale!({}, { toolUseID: "new-unauthorized-call" })).rejects.toMatchObject({ code: "tool_not_advertised" });
+    expect(sdk.calls).toHaveLength(1);
+  });
+
+  it("replaces an advertised schema without replacing the query", async () => {
+    const sdk = new FakeSdk(async function* () { yield success("ready"); });
+    const { runtime } = create(sdk);
+    const s = session();
+    const schema = (type: "string" | "integer") => ({ type: "object" as const, properties: { value: { type } }, required: ["value"], additionalProperties: false });
+    await runtime.handle(request(s, "first", { tools: [{ name: "FactoryArgs", input_schema: schema("string") }] }));
+    const first = sdk.schemas.get("FactoryArgs") as { safeParse(args: unknown): { success: boolean } };
+    expect(first.safeParse({ value: "before" }).success).toBe(true);
+    await runtime.handle(request(s, "second", { tools: [{ name: "FactoryArgs", input_schema: schema("integer") }] }));
+    const second = sdk.schemas.get("FactoryArgs") as typeof first;
+    expect(second.safeParse({ value: 7 }).success).toBe(true);
+    expect(second.safeParse({ value: "before" }).success).toBe(false);
+    expect(second.safeParse({ value: 7, extra: true }).success).toBe(false);
+    expect(sdk.calls).toHaveLength(1);
+  });
+
+  it("retains user image blocks and imports cold history as reference only", async () => {
+    const sdk = new FakeSdk(async function* () { yield success("ok"); });
+    const { runtime } = create(sdk);
+    const image: ContentBlock = { type: "image", source: { type: "base64", media_type: "image/png", data: "user-image" } };
+    await runtime.handle(request(session(), "unused", { messages: [user("remember ALPHA"), { role: "assistant", content: "remembered" }, user([{ type: "text", text: "what was it" }, image])] }));
+    const content = sdk.inputs[0]!.message.content;
+    expect(content).toContainEqual(image);
+    expect(JSON.stringify(content)).toContain("ALPHA");
+    expect(JSON.stringify(content)).toContain("reference");
+    expect(sdk.calls[0]!.options.resume).toBeUndefined();
+  });
+
+  it("still imports cold history when SDK init arrives before the first input", async () => {
+    const sdk = new FakeSdk(async function* () { yield success("ok"); });
+    const originalQuery = sdk.query.bind(sdk);
+    sdk.query = (args) => {
+      const query = originalQuery(args);
+      return {
+        ...query,
+        async *[Symbol.asyncIterator]() {
+          yield { type: "system", subtype: "init", session_id: "early-init-id" };
+          yield* query;
+        },
+      };
+    };
+    const { runtime } = create(sdk);
+    await runtime.handle(request(session(), "unused", { messages: [user("EARLY_INIT_HISTORY"), { role: "assistant", content: "old answer" }, user("new question")] }));
+    expect(JSON.stringify(sdk.inputs[0]!.message.content)).toContain("EARLY_INIT_HISTORY");
+    expect(sdk.calls[0]!.options.resume).toBeUndefined();
+  });
+
+  it("resumes a persisted official session and sends only the new user message", async () => {
+    const sdk = new FakeSdk(async function* () { yield success("resumed"); });
+    const { runtime } = create(sdk);
+    await runtime.handle(request(session({ sdkSessionId: "persisted-sdk-id" }), "unused", { messages: [user("old unique history"), { role: "assistant", content: "old answer" }, user("new question")] }));
+    expect(sdk.calls[0]!.options.resume).toBe("persisted-sdk-id");
+    expect(sdk.calls[0]!.options.continue).toBeUndefined();
+    expect(JSON.stringify(sdk.inputs[0])).not.toContain("old unique history");
+    expect(JSON.stringify(sdk.inputs[0])).toContain("new question");
+  });
+
+  it("fails closed for a pending MCP round trip after process restart", async () => {
+    const sdk = new FakeSdk(async function* () { yield success("must not run"); });
+    const { runtime } = create(sdk);
+    await expect(runtime.handle(request(session({ sdkSessionId: "old-sdk", pendingToolIds: ["lost-tool"] }), [{ type: "tool_result", tool_use_id: "lost-tool", content: "done" }]))).rejects.toMatchObject({ status: 409, code: "interrupted_tool_roundtrip" });
+    expect(sdk.calls).toHaveLength(0);
+  });
+
+  it("times out by aborting, interrupting and closing the underlying query", async () => {
+    const sdk = new FakeSdk(async function* (_input, _index, fake) { await fake.untilClosed; yield success("late"); });
+    const { runtime } = create(sdk, { requestTimeoutMs: 20 });
+    await expect(runtime.handle(request(session(), "wait forever"))).rejects.toMatchObject({ status: 504, code: "sdk_turn_timeout" });
+    expect((sdk.calls[0]!.options.abortController as AbortController).signal.aborted).toBe(true);
+    expect(sdk.interrupt).toHaveBeenCalledTimes(1);
+    expect(sdk.close).toHaveBeenCalledTimes(1);
+    await expect(runtime.handle(request(session(), "retry"))).rejects.toMatchObject({ code: "sdk_turn_timeout" });
+  });
+
+  it("does not turn SDK execution errors or max-turn errors into successful text", async () => {
+    for (const result of [
+      { type: "result", subtype: "error_max_turns", errors: ["maximum turns exceeded"] },
+      { type: "result", subtype: "success", is_error: true, result: "provider rejected request" },
+    ]) {
+      const sdk = new FakeSdk(async function* () { yield result; });
+      const { runtime } = create(sdk);
+      await expect(runtime.handle(request(session(), "do work"))).rejects.toMatchObject({ status: 502, code: "sdk_execution_error" });
+      expect(sdk.close).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it("preserves compaction metadata and does not finish on child-agent results", async () => {
+    const metadata = { trigger: "auto", pre_tokens: 180000, post_tokens: 18000, duration_ms: 1200, preserved_messages: { anchor_uuid: "a", uuids: ["b", "c"] } };
+    const sdk = new FakeSdk(async function* () {
+      yield { type: "system", subtype: "compact_boundary", compact_metadata: metadata };
+      yield success("child answer", { parent_tool_use_id: "parent-task" });
+      yield success("parent answer");
+    });
+    const { runtime } = create(sdk);
+    const turn = await runtime.handle(request(session(), "summarize"));
+    expect(turn.response.content).toEqual([{ type: "text", text: "parent answer" }]);
+    expect(turn.compactMetadata).toEqual(metadata);
+    expect(turn.events).toContainEqual(expect.objectContaining({ type: "compact_boundary", data: expect.objectContaining({ compact_metadata: metadata }) }));
+  });
+
+  it("ask mode neither preapproves builtins nor executes a Droid command as approval", async () => {
+    const sdk = new FakeSdk(async function* () { yield success("ready"); });
+    const { runtime } = create(sdk, { permissionMode: "ask" });
+    await runtime.handle(request(session(), "start", { tools: [tool, { name: "Execute", input_schema: { type: "object" } }] }));
+    const options = sdk.calls[0]!.options;
+    expect(options.allowedTools).toEqual(["mcp__droid__*"]);
+    const check = options.canUseTool as (name: string, input: unknown) => Promise<unknown>;
+    expect(await check("Bash", { command: "perform-side-effect" })).toMatchObject({ behavior: "deny" });
+    expect(await check("Read", { file_path: "/outside-project/private-file" })).toMatchObject({ behavior: "deny" });
+    expect(sdk.handlers.has("Execute")).toBe(false);
+    expect(sdk.inputs).toHaveLength(1);
+  });
+
+  it("also denies native permission exceptions that reach the callback in bypass mode", async () => {
+    const sdk = new FakeSdk(async function* () { yield success("ready"); });
+    const { runtime } = create(sdk, { permissionMode: "bypass" });
+    await runtime.handle(request(session(), "start", { tools: [tool] }));
+    const check = sdk.calls[0]!.options.canUseTool as (name: string, input: unknown) => Promise<unknown>;
+    expect(await check("Bash", { command: "explicit ask rule" })).toMatchObject({ behavior: "deny" });
+    expect(await check("mcp__droid__TaskOutput", {})).toMatchObject({ behavior: "deny" });
+  });
+
+  it("routes native approval to a live controller without executing a host command", async () => {
+    const sdk = new FakeSdk(async function* () { yield success("ready"); });
+    const { runtime } = create(sdk, { permissionMode: "ask" });
+    let offered!: RuntimeApprovalRequest;
+    let decide!: (decision: RuntimePermissionDecision) => void;
+    runtime.setControl({ requestApproval: (approval) => { offered = approval; return new Promise((resolve) => { decide = resolve; }); } });
+    await runtime.handle(request(session(), "start", { tools: [tool] }));
+    const check = sdk.calls[0]!.options.canUseTool as (name: string, input: unknown, context: unknown) => Promise<unknown>;
+    const pending = check("Bash", { command: "original" }, { toolUseID: "native-op", requestId: "native-request", defaultToNo: true });
+    expect(offered).toMatchObject({ bridgeSessionId: "session-a", sdkSessionId: "native-sdk-session", toolName: "Bash", toolUseId: "native-op", requestId: "native-request", defaultToNo: true });
+    expect(runtime.describe()).toMatchObject({ pendingApprovals: 1 });
+    expect(runtime.pendingHostCalls("session-a")).toEqual([]);
+    decide({ behavior: "allow", updatedInput: { command: "approved edit" } });
+    expect(await pending).toEqual({ behavior: "allow", updatedInput: { command: "approved edit" } });
+    expect(runtime.describe()).toMatchObject({ pendingApprovals: 0 });
+    expect(offered.signal.aborted).toBe(true);
+    expect(sdk.inputs).toHaveLength(1);
+  });
+
+  it.each(["native", "session", "controller"])("denies late approvals after %s cancellation even if a controller ignores its signal", async (cause) => {
+    const sdk = new FakeSdk(async function* () { yield success("ready"); });
+    const { runtime } = create(sdk);
+    let offered!: RuntimeApprovalRequest;
+    let decide!: (decision: RuntimePermissionDecision) => void;
+    runtime.setControl({ requestApproval: (approval) => { offered = approval; return new Promise((resolve) => { decide = resolve; }); } });
+    await runtime.handle(request(session(), "start"));
+    const check = sdk.calls[0]!.options.canUseTool as (name: string, input: unknown, context: unknown) => Promise<unknown>;
+    const nativeAbort = new AbortController();
+    const pending = check("Bash", { command: "side effect" }, { signal: nativeAbort.signal });
+    if (cause === "native") nativeAbort.abort();
+    if (cause === "session") await runtime.cancel("session-a", "user cancelled");
+    if (cause === "controller") runtime.setControl(undefined);
+    expect(await pending).toMatchObject({ behavior: "deny" });
+    expect(offered.signal.aborted).toBe(true);
+    decide({ behavior: "allow" });
+    expect(runtime.describe()).toMatchObject({ pendingApprovals: 0 });
+  });
+
+  it("bounds disconnected approval waits and fails closed on controller errors", async () => {
+    const sdk = new FakeSdk(async function* () { yield success("ready"); });
+    const { runtime } = create(sdk, { requestTimeoutMs: 30 });
+    runtime.setControl({ requestApproval: () => new Promise(() => {}) });
+    await runtime.handle(request(session(), "start"));
+    const check = sdk.calls[0]!.options.canUseTool as (name: string, input: unknown) => Promise<unknown>;
+    expect(await check("Bash", {})).toMatchObject({ behavior: "deny" });
+    runtime.setControl({ requestApproval: async () => { throw new Error("transport closed"); } });
+    expect(await check("Bash", {})).toMatchObject({ behavior: "deny" });
+    expect(runtime.describe()).toMatchObject({ pendingApprovals: 0, fatalErrors: [] });
+  });
+
+  it("authentically completes a terminal host tool and releases its native process without another HTTP turn", async () => {
+    let received: unknown;
+    const end = { name: "EndFeatureRun", input_schema: { type: "object" as const, properties: {} } };
+    const sdk = new FakeSdk(async function* (_input, _index, fake) {
+      yield { type: "assistant", message: { content: [{ type: "tool_use", id: "terminal-call", name: "mcp__droid__EndFeatureRun", input: { report: "done" } }] } };
+      received = await fake.handlers.get("EndFeatureRun")!({ report: "done" });
+      await fake.untilClosed;
+    });
+    const { runtime } = create(sdk);
+    await runtime.handle(request(session(), "finish worker", { tools: [end] }));
+    expect(runtime.pendingHostCalls("session-a")).toEqual([{ toolUseId: "terminal-call", toolName: "EndFeatureRun", input: { report: "done" } }]);
+    const completion = { toolUseId: "terminal-call", toolName: "EndFeatureRun", input: { report: "done" }, content: "Host validated and stored the handoff", terminal: true };
+    expect(await runtime.completeHostTool("session-a", completion)).toBe("accepted");
+    expect(received).toEqual({ content: [{ type: "text", text: completion.content }], isError: false });
+    expect(sdk.close).toHaveBeenCalledTimes(1);
+    expect(sdk.inputs).toHaveLength(1);
+    expect(runtime.describe()).toMatchObject({ activeNativeSessions: 0, pendingHostCalls: 0, fatalErrors: [] });
+    expect(await runtime.completeHostTool("session-a", completion)).toBe("duplicate");
+    await expect(runtime.completeHostTool("session-a", { ...completion, content: "different outcome" })).rejects.toMatchObject({ code: "conflicting_host_completion" });
+    await expect(runtime.handle(request(session(), "resurrect worker"))).rejects.toMatchObject({ code: "host_session_ended" });
+  });
+
+  it("rejects mismatched or failed terminal host receipts before unblocking the real MCP handler", async () => {
+    const end = { name: "EndFeatureRun", input_schema: { type: "object" as const, properties: {} } };
+    const sdk = new FakeSdk(async function* (_input, _index, fake) {
+      yield { type: "assistant", message: { content: [{ type: "tool_use", id: "terminal-call", name: "mcp__droid__EndFeatureRun", input: { report: "done" } }] } };
+      await fake.handlers.get("EndFeatureRun")!({ report: "done" });
+      yield success("host rejection received");
+    });
+    const { runtime } = create(sdk);
+    await runtime.handle(request(session(), "finish worker", { tools: [end] }));
+    const completion = { toolUseId: "terminal-call", toolName: "EndFeatureRun", input: { report: "done" }, content: "handoff rejected" };
+    await expect(runtime.completeHostTool("session-b", completion)).rejects.toMatchObject({ code: "interrupted_tool_roundtrip" });
+    await expect(runtime.completeHostTool("session-a", { ...completion, input: {} })).rejects.toMatchObject({ code: "conflicting_host_completion" });
+    await expect(runtime.completeHostTool("session-a", { ...completion, toolName: "TaskOutput" })).rejects.toMatchObject({ code: "conflicting_host_completion" });
+    await expect(runtime.completeHostTool("session-a", { ...completion, isError: true, terminal: true })).rejects.toMatchObject({ code: "failed_terminal_tool" });
+    expect(runtime.pendingHostCalls("session-a")).toHaveLength(1);
+    expect(sdk.close).not.toHaveBeenCalled();
+    expect(await runtime.completeHostTool("session-a", { ...completion, isError: true })).toBe("accepted");
+    expect(sdk.close).not.toHaveBeenCalled();
+  });
+
+  it("host session end cancels native approvals and pending work without inventing a response", async () => {
+    let offered!: RuntimeApprovalRequest;
+    let decision: unknown;
+    const sdk = new FakeSdk(async function* (_input, _index, fake) {
+      const check = fake.calls[0]!.options.canUseTool as (name: string, input: unknown) => Promise<unknown>;
+      decision = await check("Bash", { command: "work" });
+      await fake.untilClosed;
+    });
+    const { runtime } = create(sdk);
+    runtime.setControl({ requestApproval: (approval) => { offered = approval; return new Promise(() => {}); } });
+    const running = runtime.handle(request(session(), "work"));
+    const rejected = expect(running).rejects.toMatchObject({ code: "host_session_ended" });
+    await vi.waitFor(() => expect(offered).toBeDefined());
+    await runtime.endHostSession("session-a", "Factory session closed");
+    await rejected;
+    await vi.waitFor(() => expect(decision).toMatchObject({ behavior: "deny" }));
+    expect(offered.signal.aborted).toBe(true);
+    expect(runtime.describe()).toMatchObject({ activeNativeSessions: 0, pendingApprovals: 0, fatalErrors: [] });
+  });
+
+  it("resumes an ordinary ended Factory session in a fresh native generation", async () => {
+    const sdk = new FakeSdk(async function* (_input, index) { yield success(`answer-${index}`); });
+    const { runtime } = create(sdk);
+    const s = session();
+    await runtime.handle(request(s, "first", { tools: [tool] }));
+    const firstOptions = sdk.calls[0]!.options;
+    expect(await runtime.endHostSession(s.bridgeSessionId, "Droid exec exited")).toEqual({ resumable: true, sdkSessionId: "native-sdk-session" });
+    expect(await runtime.endHostSession(s.bridgeSessionId, "duplicate SessionEnd")).toEqual({ resumable: true, sdkSessionId: "native-sdk-session" });
+    expect(runtime.describe()).toMatchObject({ activeNativeSessions: 0, activeNativeTurns: 0, fatalErrors: [] });
+    expect((await runtime.handle(request(s, "next user message"))).response.content).toEqual([{ type: "text", text: "answer-1" }]);
+    expect(sdk.calls).toHaveLength(2);
+    expect(sdk.calls[1]!.options.resume).toBe("native-sdk-session");
+    expect(sdk.inputs).toHaveLength(2);
+    expect(JSON.stringify(sdk.inputs[1])).toContain("next user message");
+    expect(JSON.stringify(sdk.inputs[1])).not.toContain("first");
+    expect(sdk.handlers.has("TaskOutput")).toBe(true);
+    const staleCheck = firstOptions.canUseTool as (name: string, input: unknown) => Promise<unknown>;
+    expect(await staleCheck("Bash", {})).toMatchObject({ behavior: "deny" });
+  });
+
+  it("does not resume sessions ended with unresolved host tools or without persisted native checkpoints", async () => {
+    for (const hasPendingTool of [false, true]) {
+      const sdk = new FakeSdk(async function* (_input, _index, fake) {
+        if (hasPendingTool) {
+          yield { type: "assistant", message: { content: [{ type: "tool_use", id: "unfinished", name: "mcp__droid__TaskOutput", input: {} }] } };
+          await fake.handlers.get("TaskOutput")!({});
+        }
+        yield success("done");
+      });
+      const { runtime } = create(sdk, { persistSessions: hasPendingTool });
+      await runtime.handle(request(session(), "start", { tools: [tool] }));
+      expect(await runtime.endHostSession("session-a", "Droid closed")).toMatchObject({ resumable: false });
+      await expect(runtime.handle(request(session(), "continue"))).rejects.toMatchObject({ code: "host_session_ended" });
+      expect(sdk.calls).toHaveLength(1);
+    }
+  });
+
+  it("updates the tool catalog in place but rejects model changes", async () => {
+    const sdk = new FakeSdk(async function* () { yield success("ok"); });
+    const { runtime } = create(sdk);
+    const s = session();
+    await runtime.handle(request(s, "first", { tools: [tool] }));
+    await runtime.handle(request(s, "second", { tools: [] }));
+    expect(sdk.handlers.has("TaskOutput")).toBe(false);
+    expect(sdk.catalogNotifications).toContainEqual([]);
+    await expect(runtime.handle(request(s, "third", { model: "different" }))).rejects.toMatchObject({ status: 409, code: "session_configuration_changed" });
+    expect(sdk.inputs).toHaveLength(2);
+    expect(sdk.calls).toHaveLength(1);
+  });
+
+  it("enforces explicit tools:[] through public PreToolUse even in bypass mode and strips controller authority", async () => {
+    vi.stubEnv("BRIDGE_ADMIN_TOKEN", "must-not-reach-worker");
+    vi.stubEnv("BRIDGE_FACTORY_BINDING", "parent-hook-generation");
+    vi.stubEnv("BRIDGE_FACTORY_LAUNCH_ID", "parent-launch");
+    const sdk = new FakeSdk(async function* () { yield success("title"); });
+    const { runtime } = create(sdk, { permissionMode: "bypass" });
+    const controller = vi.fn(async () => ({ behavior: "allow" as const }));
+    runtime.setControl({ requestApproval: controller });
+    await runtime.handle(request(session(), "generate title", { tools: [] }));
+    const options = sdk.calls[0]!.options;
+    expect(options.tools).toEqual({ type: "preset", preset: "claude_code" });
+    const hooks = options.hooks as { PreToolUse: Array<{ hooks: Array<(input: unknown) => Promise<unknown>> }> };
+    for (const name of ["Bash", "Write", "Skill", "Agent", "mcp__droid__TaskOutput"]) {
+      expect(await hooks.PreToolUse[0]!.hooks[0]!({ tool_name: name })).toMatchObject({ hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny" } });
+    }
+    const check = options.canUseTool as (name: string, input: unknown) => Promise<unknown>;
+    expect(await check("Bash", { command: "modify project" })).toMatchObject({ behavior: "deny" });
+    expect(controller).not.toHaveBeenCalled();
+    for (const key of ["BRIDGE_ADMIN_TOKEN", "BRIDGE_FACTORY_BINDING", "BRIDGE_FACTORY_LAUNCH_ID"]) expect(options.env).not.toHaveProperty(key);
+    await runtime.handle(request(session(), "enable tools", { tools: [tool] }));
+    expect(await hooks.PreToolUse[0]!.hooks[0]!({ tool_name: "Write" })).toEqual({});
+    expect(await check("Bash", { command: "explicitly allowed by controller" })).toMatchObject({ behavior: "allow" });
+    expect(controller).toHaveBeenCalledOnce();
+    await runtime.handle(request(session(), "text only again", { tools: [] }));
+    expect(await hooks.PreToolUse[0]!.hooks[0]!({ tool_name: "Write" })).toMatchObject({ hookSpecificOutput: { permissionDecision: "deny" } });
+    expect(await check("Bash", {})).toMatchObject({ behavior: "deny" });
+    expect(controller).toHaveBeenCalledOnce();
+    expect(sdk.calls).toHaveLength(1);
+  });
+
+  it("honors explicit tool_choice:none for native tools without changing the official preset", async () => {
+    const sdk = new FakeSdk(async function* () { yield success("text only"); });
+    const { runtime } = create(sdk, { permissionMode: "bypass" });
+    const controller = vi.fn(async () => ({ behavior: "allow" as const }));
+    runtime.setControl({ requestApproval: controller });
+    await runtime.handle(request(session(), "answer without invoking tools", { tools: [tool], tool_choice: { type: "none" } }));
+    const options = sdk.calls[0]!.options;
+    const hooks = options.hooks as { PreToolUse: Array<{ hooks: Array<(input: unknown) => Promise<unknown>> }> };
+    const check = options.canUseTool as (name: string, input: unknown) => Promise<unknown>;
+    for (const name of ["Write", "Bash", "mcp__droid__TaskOutput"]) {
+      expect(await hooks.PreToolUse[0]!.hooks[0]!({ tool_name: name })).toMatchObject({ hookSpecificOutput: { permissionDecision: "deny" } });
+      expect(await check(name, {})).toMatchObject({ behavior: "deny" });
+    }
+    expect(controller).not.toHaveBeenCalled();
+    expect(options.tools).toEqual({ type: "preset", preset: "claude_code" });
+  });
+
+  it("bounds idle CLI processes and resumes an evicted official session", async () => {
+    const sdk = new FakeSdk(async function* () { yield success("ok"); });
+    const { runtime } = create(sdk, { maxSessions: 1 });
+    const a = session({ bridgeSessionId: "a" });
+    const b = session({ bridgeSessionId: "b" });
+    await runtime.handle(request(a, "first a"));
+    await runtime.handle(request(b, "first b"));
+    expect(sdk.close).toHaveBeenCalledTimes(1);
+    await runtime.handle(request(a, "second a"));
+    expect(sdk.calls).toHaveLength(3);
+    expect(sdk.calls[2]!.options.resume).toBe("native-sdk-session");
+    expect(sdk.close).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not replay old tool results from full conversation history", async () => {
+    const sdk = new FakeSdk(async function* () { yield success("new answer"); });
+    const { runtime } = create(sdk);
+    await runtime.handle(request(session(), "unused", { messages: [user("old"), { role: "assistant", content: [{ type: "tool_use", id: "historical", name: "TaskOutput", input: {} }] }, user([{ type: "tool_result", tool_use_id: "historical", content: "old result" }]), user("new turn")] }));
+    expect(sdk.inputs).toHaveLength(1);
+    expect(sdk.inputs[0]!.message.content.some((block) => block.type === "tool_result")).toBe(false);
+  });
+
+  it("keeps provider usage distinct from session cumulative SDK accounting", async () => {
+    const sdk = new FakeSdk(async function* (_input, index) {
+      yield { type: "assistant", message: { id: `message-${index}`, usage: { input_tokens: 10, output_tokens: 2, cache_creation_input_tokens: 0, cache_read_input_tokens: 90 }, content: [{ type: "text", text: "answer" }] } };
+      yield success("answer", { modelUsage: { fake: { inputTokens: (index + 1) * 1000, outputTokens: (index + 1) * 20 } } });
+    });
+    const { runtime, config } = create(sdk);
+    const s = session();
+    const first = await runtime.handle(request(s, "one"));
+    const second = await runtime.handle(request(s, "two"));
+    expect(first.response.usage.input_tokens).toBe(10);
+    expect(second.response.usage.input_tokens).toBe(10);
+    expect(second.response.usage.cache_read_input_tokens).toBe(90);
+    expect(second.sdkBillingUsage?.input_tokens).toBe(2000);
+    const log = readFileSync(join(config.logDir, "usage.jsonl"), "utf8");
+    expect(log).toContain('"source":"provider_message"');
+    expect(log).toContain('"source":"sdk_result"');
+  });
+});

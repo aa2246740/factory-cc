@@ -1,75 +1,121 @@
 # Relay Bridge
 
-把 Factory Droid CLI 的 BYOK 自定义模型接到**官方 Claude Agent SDK** 和**未修改的 Claude Code**。Droid 继续负责任务、审批和工具执行；模型推理在 Claude Code 里发生。
+把 Factory Droid 的 BYOK 自定义模型接到**官方 Claude Agent SDK 和未修改的 Claude Code**。Claude Code 保留原生 system prompt、内置工具和会话；Droid 通过命名空间 MCP 执行自己的 skills、任务、插件工具与 Mission 生命周期操作。
 
-没有 Factory 凭证。默认 `BRIDGE_AUTH=byok`：`sdk` 把 Claude Code 指到 MiniMax / GLM 的 Anthropic 兼容端点（会改写 `ANTHROPIC_BASE_URL` + `ANTHROPIC_AUTH_TOKEN`，`ANTHROPIC_API_KEY` 为空）。`BRIDGE_AUTH=subscription` 不改写这三个变量，供本机 Claude 登录使用。`mock` / `fake` 协议测试可跑。
+`sdk` 模式为每个会话保持一个持续的 streaming-input `query()`，后续只追加新输入；工具结果交回原 MCP callback。默认 `BRIDGE_AUTH=byok` 使用你自己的 Anthropic 兼容上游密钥。`subscription` 保留本机 `ANTHROPIC_*` 和 Claude 配置；本轮没有验证真实 Claude 订阅。
 
-接入方式对齐 T3 Code：`systemPrompt` 用 `claude_code` 预设再追加 Droid 说明；Claude Code 自己执行内置工具；只有 Mission 等 Droid 专有工具走 MCP。见 `docs/T3-ALIGNMENT.md`。
-
-## 能做什么
-
-- `POST /v1/messages`：Anthropic Messages JSON 与 SSE
-- 原生 `tool_use` / `tool_result` 跨 HTTP 请求接力（先结束本次响应，SDK 回调继续等）
-- Claude Code 内置 Read/Edit/Bash 自己执行；只有 Mission 等 Droid 专有工具按当前请求注册为 MCP
-- 干净 HOME 下探测 `FACTORY_AIRGAP_ENABLED=1`
-- Tiny Tasks 验收夹具（参考实现，不是 Mission 产物）
+这是借鉴 T3 的 SDK 集成方式，不是官方支持、授权或账号状态保证。GLM 等第三方兼容端点的结果不能代表 Claude 模型。见 [接入说明](docs/T3-ALIGNMENT.md) 和 [限制](docs/LIMITATIONS.md)。
 
 ## 运行
 
+需要 Node.js 22+；真实模式还需要已安装的官方 `claude` 和 `droid`。
+
+先配置一个独立 Droid settings 文件，再启动零模型费用的协议模式：
+
 ```bash
-npm install
-export BRIDGE_MODE=mock
+npm ci
+umask 077
+mkdir -p tmp/relay-local
 export BRIDGE_CLIENT_TOKEN="$(openssl rand -hex 24)"
-npm start
+export BRIDGE_ADMIN_TOKEN="$(openssl rand -hex 24)"
+printf 'export BRIDGE_CLIENT_TOKEN=%s\nexport BRIDGE_ADMIN_TOKEN=%s\n' "$BRIDGE_CLIENT_TOKEN" "$BRIDGE_ADMIN_TOKEN" > tmp/relay-local/tokens.env
+npm run configure-droid -- --settings "$PWD/tmp/relay-local/settings.json" --base-url http://127.0.0.1:18787
+BRIDGE_MODE=mock npm start
 ```
 
-默认监听 `http://127.0.0.1:18787`。`GET /healthz` 探活，不要用 `/v1/models`。
+脚本将 token 的**真实字面值**写入 JSON，不使用 `${BRIDGE_CLIENT_TOKEN}` 占位符。配置和备份权限为 `0600`，缺少 token 时拒绝修改。默认监听 `http://127.0.0.1:18787`；`GET /healthz` 探活，`POST /v1/messages` 接收 JSON 或 SSE 请求。
 
-给隔离的 Droid HOME 写入自定义模型（不改你原来的 `~/.factory`）：
+另一个终端也先进入本仓库，加载同一份私有令牌文件，再使用该配置；`tmp/` 已被 Git 忽略。不要重新生成令牌或提交该文件：
 
 ```bash
-tsx scripts/configure-droid.ts --home /tmp/droid-home --base-url http://127.0.0.1:18787
-FACTORY_AIRGAP_ENABLED=1 HOME=/tmp/droid-home BRIDGE_CLIENT_TOKEN=$BRIDGE_CLIENT_TOKEN \
-  droid exec -m relay-probe "RELAY_TEXT_PROBE"
+source tmp/relay-local/tokens.env
+FACTORY_AIRGAP_ENABLED=1 droid exec --settings "$PWD/tmp/relay-local/settings.json" -m relay-probe "RELAY_TEXT_PROBE"
 ```
 
 撤销配置：
 
 ```bash
-tsx scripts/configure-droid.ts --settings /tmp/droid-home/.factory/settings.json --revert
+npm run configure-droid -- --settings "$PWD/tmp/relay-local/settings.json" --revert
 ```
+
+切换真实 BYOK 前，先在第一个终端用 Ctrl-C 停止 mock 服务。下面以已在环境中配置的中国区 `GLM_CN_API_KEY` 为例，明确固定上游；URL 必须是 Claude Code 可用的 **Anthropic 兼容端点**，不能指回 Bridge。Droid 直接连接模型时使用的 OpenAI-compatible URL 不能照搬到这里。
+
+```bash
+source tmp/relay-local/tokens.env
+export PROJECT=/absolute/path/to/project
+export BRIDGE_MODE=sdk
+export BRIDGE_AUTH=byok
+export BRIDGE_PERMISSION=ask
+export BRIDGE_SDK_CWD="$PROJECT"
+export BRIDGE_UPSTREAM_BASE_URL=https://open.bigmodel.cn/api/anthropic
+export BRIDGE_UPSTREAM_MODEL=glm-5.2
+export BRIDGE_UPSTREAM_TOKEN_ENV=GLM_CN_API_KEY
+npm start
+```
+
+国际 Z.AI 对应 `https://api.z.ai/api/anthropic` 和 `ZAI_CODING_PLAN_KEY`；请同时更改端点和变量名，密钥必须属于对应服务。这里传给 `BRIDGE_UPSTREAM_TOKEN_ENV` 的是环境变量名，真实密钥留在该变量中。
+
+`ask` 是默认权限策略。需要审批的原生工具会暂停在 SDK `canUseTool` 回调；打开 `http://127.0.0.1:18787/control`，输入 `BRIDGE_ADMIN_TOKEN` 后查看准确参数并选择允许一次或拒绝。批准后由 Claude Code 执行。CLI 也可用 `npm run control -- approvals`、`approve <id>`、`deny <id>` 和 `cancel <sessionId>`。过期、取消、旧会话或重复审批均不能重新执行工具。`BRIDGE_PERMISSION=bypass` 仍须显式设置。
+
+安装 Factory 官方生命周期 hooks，并从拥有取消权限的 wrapper 启动：
+
+```bash
+# 在第二个终端，从本仓库运行；PROJECT 与启动 Bridge 时相同。
+source tmp/relay-local/tokens.env
+export PROJECT=/absolute/path/to/project
+npm run configure-hooks -- --hooks "$PROJECT/.factory/hooks.json" --config "$PWD/tmp/relay-local/hooks-control.json"
+npm run run-droid -- --cwd "$PROJECT" --airgap 1 -- exec --settings "$PWD/tmp/relay-local/settings.json" -m relay-chat "检查这个项目"
+# 撤销只删除本 Bridge 的 hook，不覆盖后来添加的用户 hook。
+npm run configure-hooks -- --hooks "$PROJECT/.factory/hooks.json" --config "$PWD/tmp/relay-local/hooks-control.json" --remove
+```
+
+Bridge 与 wrapper 需共享同一组 `BRIDGE_ADMIN_TOKEN` / `BRIDGE_CLIENT_TOKEN`，并把 `BRIDGE_SDK_CWD` 指向目标项目。wrapper 保留 `HOME`，通过 `FACTORY_HOME_OVERRIDE` 隔离 Factory 数据；退出或取消时只清理本次启动拥有的会话。直接运行 `droid` 也支持已安装的 hooks，但进程被强制杀死、来不及发送结束事件时，应使用控制页取消遗留会话。
+
+默认单次原生响应期限为 10 分钟（`BRIDGE_REQUEST_TIMEOUT_MS`）；外部工具往返等待为 8 小时（`BRIDGE_TOOL_WAIT_MS`），适用于长 Mission。它们都是明确的时间上限，超时会取消工作；官方结束事件会提前释放会话，无需等计时器。
+
+## 会话与工具
+
+- 优先使用响应中的 `X-Bridge-Session`；也接受 `X-Session-Id` 或 metadata 的 `session_id` / `sessionId`。`user_id` 不作为会话 ID。
+- 未提供 ID 时，只自动续接唯一匹配的完整历史前缀或所属 pending tool；重复短提示不会被当作同一会话。
+- 同会话修改模型、角色配置标签、工作目录或执行策略返回 409，需新建会话。工具目录不属于会话身份：保留同一个 SDK MCP server 实例，按请求动态增删工具和更新 schema，并发送 `tools/list_changed`；等待 SDK `mcpServerStatus` 确认工具名称列表后再继续。真实 BYOK 热加工具后首次续推已成功调用新工具；状态不提供 schema 版本，不能据此保证同名 schema 更新已即时进入模型，新 schema 由 MCP server 校验。目录变化可能改变缓存前缀。
+- Droid host context 的变化进入 user input，不改写原生 system prefix。若请求同时带 `tool_result` 和补充文本/base64 图片，补充内容以 host continuation 标记并附入本批首个新工具结果，交还真实 MCP callback，不伪造额外用户轮次。混入 document 或其它不支持的 MCP 内容在提交前返回 422，不消耗 pending 工具结果。
+- 空闲 CLI 进程按 LRU 有界回收，保留官方 SDK session ID；有持久化 transcript 时使用 SDK `resume`。忙碌会话不会为腾位置而被驱逐。
+- 进程重启后，尚未完成的 MCP 工具往返返回 409。没有 native session 的历史导入仅作为参考重建，不等于完整恢复 Claude Code 的内部状态。
+- 请求明确指定 `tools: []` 或 `tool_choice: none` 时，原生 PreToolUse 强制禁止所有工具，即使启用 bypass。该限制按请求生效，后续恢复工具目录无需重建原生会话；生成标题的辅助请求不能越权修改项目。
+- 对 Droid 传入的工具，仅明确的文件/命令等价工具由 Claude Code 执行：Read/Edit/Write/Create/LS/Grep/Glob/Execute/Bash/MultiEdit/NotebookEdit。Factory `Skill`、`Task`、`ToolSearch`、`ExitSpecMode`、Mission 控制及其它已声明的插件工具均经 `mcp__droid__*` 交回 Droid，保留 Factory 的 skill 注册表和任务 ID；它们与 Claude 原生 Skill/Agent 分开。
+- Factory 提供非空 `system` 时完整保留其角色、skills 和流程指令，不从 header 猜测角色或追加角色模板；`X-Bridge-Role` 仅作为模型配置/session 标签，真实 Task 子 agent 会继承 orchestrator header。只有缺少 host 指令时才用角色辅助，orchestrator 辅助还要求实际存在 Mission 控制工具，`Task` 本身不够。生产 SDK 路径不合成 `StartMissionRun`，也不从残留目录复制 Mission 账本。
+
+## 当前验证范围
+
+2026-10-15 的 GLM-5.2 BYOK 验证包括：Droid → Bridge → Claude Code 普通回答成功；原生 SDK 与 Bridge 各三轮对话保持上下文；原生 Read 与流式痕迹，以及无显式 ID 的完整历史续接保持同一会话和记忆；真实 SDK MCP `TaskOutput` 往返成功，但该项外部工具结果是本地 fixture。Bridge 的原生手动 `/compact` 产生 `compact_boundary`，压缩后的下一轮仍能回忆先前约定的信息。[原生会话验证摘要](evidence/native-session-validation-2026-10-15.json) 保留该轮测量和离线检查结果。
+
+后续[Factory host 验证](evidence/factory-host-validation-2026-10-15.json) 确认了新工具在首次续推可用、真实 `Skill` 完整正文传递、`Task` 子 agent 和 Mission 启动。过程中发现并修复了工具校验前过早转交、标题辅助请求越权执行工具、worker 结束后原生回调悬挂等问题；失败记录仍保留。
+
+最新[完整 Mission 验收](evidence/mission-validation-2026-10-15.json) 为 **PASS_WITH_RECOVERY**：从没有预置 Mission 产物的缺陷项目开始，真实 orchestrator / worker / validator 完成 3 个 feature、5 个验证断言，原始测试和 package.json 保持不变且测试通过。首次达到旧的 20 分钟测试上限后，使用官方 `droid exec --session-id` 续接同一个 Mission，约 130 秒完成收尾；这不是一次连续运行通过。完成时原生运行、待处理工具、审批和 Bridge 错误均为零，所属进程清理完成。新验收脚本默认总期限为 1 小时；不会合成启动或复制账本来制造完成状态。
+
+Factory 生命周期已通过官方 [hooks](https://docs.factory.com/harness/hooks) 接入独立控制通道。`SessionStart` 注册随机 generation 标识，经官方环境文件传给后续 hooks；该标识在进入 Claude 原生提示前移除。`PostToolUse` 保存实际收到的结果，`SessionEnd` 确认结束后释放原生等待；若 Factory 提前结束而跳过 PostToolUse，则中断等待，不伪造成功结果；普通工具仍等下次 HTTP 续接，保证 ToolSearch 新目录和附加内容同时交付。正常会话结束可从原生 checkpoint 恢复，已结束的 worker 不再接受迟到结果。
+
+[控制通道实测](evidence/control-validation-2026-10-15.json) 还确认：原生工具拒绝后无写入，批准后仅执行一次，取消待审批后旧批准返回 409。带 hooks 的正常退出及恢复保留同一原生会话，恢复轮 Claude Code 侧记录 `input_tokens=278`、`cache_read_input_tokens=21760`；旧 generation 的结束事件被拒绝且不影响新会话。真实 Claude 订阅仍未使用。
+
+[自动压缩实测](evidence/auto-compaction-validation-2026-10-15.json) 也已通过：只在独立测试进程中用官方配置降低触发阈值，未发送 `/compact`，原生返回 `trigger: auto`、90,038 → 2,245 tokens，同一会话随后两次正确回忆之前的信息。该测试验证自动压缩链路，不代表默认阈值或真实 Claude 订阅的消耗表现。
+
+上述缓存原始响应中，原生路径后两轮 `input_tokens` 为 211 / 108，`cache_read_input_tokens` 为 21,056 / 21,248；Bridge 为 74 / 98 与 21,248 / 21,312。两条路径各自三轮的 system/tools hash 稳定，工具 schema 相同；当时 Bridge 的稳定 append 多 546 字符。当前 append 和工具目录已经扩展，这些数值保留为该轮测量。上游没有返回 `cache_creation_input_tokens`，因此不报告精确总命中率；SDK `costUSD` 是估算，不是真实账单。详见 [缓存与压缩证据](docs/T3-ALIGNMENT.md#缓存与压缩验证)。
+
+历史 `REPORT.md` 和 `evidence/` 中的 MiniMax Mission PASS 属于旧实现，不能为当前版本的 Mission 背书。旧版混合 usage 账本的命中率也不作为当前准确统计。
 
 ## 测试
 
-| 命令 | 含义 | 无凭证时 |
+| 命令 | 范围 | 是否调用真实模型 |
 |---|---|---|
-| `npm test` | unit + protocol + fake SDK + resilience + T3 prompt/tools/auth/usage | 应通过 |
-| `npm run test:protocol` | Messages / SSE / 401 | 应通过 |
-| `npm run test:sdk-probes` | 跨请求工具接力 | 应通过（fake runtime） |
-| `npm run test:g0` | 公共 CLI airgap 矩阵 | 记录真实退出码 |
-| `npm run probe:upstream` | MiniMax → GLM → OpenRouter 工具调用探针 | 需 BYOK 密钥 |
-| `npm run test:e2e:chat` | 经 Bridge 的 Droid 普通对话 | MiniMax-M2.5 已 PASS |
-| `npm run test:e2e:mission` | Mission 三角色 + Tiny Tasks 验收全绿 | MiniMax-M2.5 已 PASS（484s / 118 请求，无短超时） |
-| `npm run test:resilience` | 重试 / 取消 / 图片 | 应通过 |
-| `npm run doctor` | 脱敏诊断 | 应通过 |
-| `npm run evidence:pack` | SHA-256 清单 | 应通过 |
-| `npm run tiny-tasks:test` | 夹具验收点 | 应通过 |
+| `npm test` | unit、protocol、fake relay、SDK adapter 注入事件、resilience | 否 |
+| `npm run test:protocol` | Messages、SSE、错误和鉴权 | 否 |
+| `npm run test:sdk-probes` | fake runtime 跨请求工具接力 | 否 |
+| `npx vitest run tests/sdk-runtime` | 真实 adapter 代码配合注入 SDK 事件；不是在线模型验收 | 否 |
+| `npm run test:resilience` | 重试、取消、图片 | 否 |
+| `npm run tiny-tasks:test` | Tiny Tasks 参考夹具 | 否 |
+| `npm run doctor` | 脱敏诊断 | 否 |
+| `npm run test:g0` | 安装版本的 Droid airgap 行为 | 以具体探针为准 |
+| `npm run probe:upstream` | BYOK 上游工具调用探针 | 是 |
+| `npm run test:e2e:chat` / `npm run test:e2e:mission` | 在线对话 / Mission 验收 | 是，另行执行并记录结果 |
 
-真实 SDK 探针在登录完成后才会跑。禁止把未跑的测试标绿。
-
-## 模式
-
-- `BRIDGE_MODE=mock`：固定文本/只读工具探针，零模型费用
-- `BRIDGE_MODE=fake`：进程内 query 替身，证明邮箱接力
-- `BRIDGE_MODE=sdk`：官方 SDK + 已安装 `claude`。`BRIDGE_AUTH=byok` 用 MiniMax/GLM 兼容端点；`BRIDGE_AUTH=subscription` 用本机登录。禁止把 `ANTHROPIC_BASE_URL` 指回 Bridge。
-
-## 文档
-
-- `docs/ARCHITECTURE.md`
-- `docs/COMPATIBILITY.md`
-- `docs/AUTH-AND-AIRGAP.md`
-- `docs/G0-AIRGAP.md`（G0 跑完后生成）
-- `docs/LIMITATIONS.md`
-- `docs/SOURCES.md`
-- `docs/T3-ALIGNMENT.md`
-- `REPORT.md`
+更多协议边界见 [Compatibility](docs/COMPATIBILITY.md)。公共 CLI 的 `FACTORY_AIRGAP_ENABLED=1` 是已观察到的技术行为，不等于官方授权声明。

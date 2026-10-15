@@ -21,10 +21,7 @@ export const CLAUDE_CODE_BUILTINS = new Set([
   "EnterPlanMode",
 ]);
 
-/**
- * Factory Droid tools that Claude Code cannot run. Exposed only via the
- * in-process MCP server; handlers wait on the mailbox for Droid to execute.
- */
+/** Known Factory controls. Other advertised host/plugin tools use the same MCP boundary. */
 export const DROID_EXCLUSIVE_TOOLS = new Set([
   "StartMissionRun",
   "ProposeMission",
@@ -32,9 +29,14 @@ export const DROID_EXCLUSIVE_TOOLS = new Set([
   "DismissHandoffItems",
   "TaskOutput",
   "TaskStop",
+  "Skill",
+  "Task",
+  "ToolSearch",
+  "ExitSpecMode",
 ]);
 
-/** Droid names that Claude Code already covers. Do not MCP these. */
+/** Only concrete file/shell equivalents execute natively. A matching name is
+ * not evidence that provider-owned skill, task or plugin registries match. */
 export const COVERED_BY_CLAUDE = new Set([
   "Read",
   "Edit",
@@ -45,15 +47,14 @@ export const COVERED_BY_CLAUDE = new Set([
   "Glob",
   "Execute",
   "Bash",
-  "ToolSearch",
-  "Skill",
-  "Task",
+  "MultiEdit",
+  "NotebookEdit",
 ]);
 
 const READ_ONLY_BUILTINS = new Set(["Read", "Grep", "Glob", "LS", "WebFetch", "WebSearch", "TodoWrite"]);
 
 export function isDroidExclusive(name: string): boolean {
-  return DROID_EXCLUSIVE_TOOLS.has(name);
+  return !COVERED_BY_CLAUDE.has(name);
 }
 
 export function isClaudeBuiltin(name: string): boolean {
