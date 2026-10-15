@@ -1,0 +1,1 @@
+Never launch subagents (Task / explore / browser / computerUse / video) with other models. Only use grok 4.6. Never select Claude/GPT/Gemini; stay on the parent Grok model only. Do not spawn Task/computerUse/browser unless explicitly asked; subagents inherit the parent model.
