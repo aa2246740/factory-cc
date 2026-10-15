@@ -1,0 +1,2 @@
+claude_dir_exists=yes
+factory_dir_exists=yes

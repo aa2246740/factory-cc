@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tiny Tasks</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <main class="app">
+      <header>
+        <h1>Tiny Tasks</h1>
+        <p>本地清单。刷新后仍在。空白名称不会被保存。</p>
+      </header>
+      <form id="create-form" class="row">
+        <label class="sr-only" for="title-input">任务名</label>
+        <input id="title-input" name="title" type="text" placeholder="例如：买牛奶" autocomplete="off" />
+        <button type="submit">添加</button>
+      </form>
+      <p id="form-error" class="error" hidden>名称不能为空或只含空格。</p>
+      <nav class="filters" aria-label="筛选">
+        <button data-filter="all" class="active">全部 <span data-count="all">0</span></button>
+        <button data-filter="active">未完成 <span data-count="active">0</span></button>
+        <button data-filter="completed">已完成 <span data-count="completed">0</span></button>
+      </nav>
+      <ul id="task-list"></ul>
+      <p id="empty" class="empty">还没有任务。</p>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

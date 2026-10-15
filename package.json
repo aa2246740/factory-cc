@@ -1,0 +1,42 @@
+{
+  "name": "relay-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Anthropic Messages-compatible localhost bridge from Factory Droid BYOK into the official Claude Agent SDK and unmodified Claude Code.",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "relay-bridge": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "start": "tsx src/index.ts",
+    "dev": "tsx watch src/index.ts",
+    "doctor": "tsx scripts/doctor.ts",
+    "configure-droid": "tsx scripts/configure-droid.ts",
+    "run-droid": "tsx scripts/run-droid.ts",
+    "test": "vitest run",
+    "test:unit": "vitest run tests/unit",
+    "test:protocol": "vitest run tests/protocol",
+    "test:sdk-probes": "vitest run tests/sdk-probes",
+    "test:e2e:chat": "tsx scripts/run-gated.ts e2e-chat",
+    "test:e2e:mission": "tsx scripts/run-gated.ts e2e-mission",
+    "test:resilience": "vitest run tests/resilience",
+    "test:g0": "tsx scripts/g0-airgap.ts",
+    "evidence:pack": "tsx scripts/collect-evidence.ts",
+    "tiny-tasks:dev": "npm --prefix fixtures/tiny-tasks run dev",
+    "tiny-tasks:test": "npm --prefix fixtures/tiny-tasks test"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "0.3.300",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2",
+    "vitest": "^3.0.9"
+  }
+}

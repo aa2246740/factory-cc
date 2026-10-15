@@ -1,0 +1,2 @@
+43f68651f45f6033a0f003b0ebc3baa20aa865a38f23a5b2ee1b39d49a03ccb7  /workspace/scripts/official/install-droid.sh
+3a68d3406cf674e17bed1733a4dcf37805e2e47d87417700007d7e1aa766a944  /workspace/scripts/official/install-claude.sh

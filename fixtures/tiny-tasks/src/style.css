@@ -1,0 +1,17 @@
+:root { color-scheme: light dark; font-family: "IBM Plex Sans", "Noto Sans SC", sans-serif; }
+body { margin: 0; background: #f4efe6; color: #1d1a16; }
+.app { max-width: 640px; margin: 0 auto; padding: 28px 16px 64px; }
+h1 { margin: 0 0 8px; }
+.row { display: flex; gap: 8px; }
+input, button { font: inherit; padding: 10px 12px; border-radius: 10px; border: 1px solid #c9bfb0; }
+button { background: #1d1a16; color: #f4efe6; cursor: pointer; }
+.filters { display: flex; gap: 8px; margin: 16px 0; flex-wrap: wrap; }
+.filters button { background: transparent; color: inherit; }
+.filters .active { background: #1d1a16; color: #f4efe6; }
+ul { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+li { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center; background: white; padding: 10px 12px; border-radius: 12px; }
+.done .title { text-decoration: line-through; opacity: .6; }
+.error { color: #9d1c1c; }
+.empty { color: #6b6256; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+@media (max-width: 640px) { li { grid-template-columns: 1fr; } }

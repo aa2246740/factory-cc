@@ -1,0 +1,2 @@
+https://app.factory.ai/cli
+https://claude.ai/install.sh

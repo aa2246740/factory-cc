@@ -1,0 +1,1 @@
+Linux cursor 6.12.94+ #1 SMP PREEMPT_DYNAMIC Wed Oct 14 15:52:43 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
