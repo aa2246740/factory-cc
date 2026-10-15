@@ -33,6 +33,7 @@ Cola chose T3 Code’s approach: keep Claude Code looking like Claude Code (most
 2. **Droid-exclusive MCP** is the only path for Mission lifecycle. Those handlers wait on the mailbox; Droid runs the tool and the next Messages request resumes Claude Code.
 3. **Do not** echo Claude Code built-in calls as Droid `tool_use`. That would make Droid execute the same work again and deadlock the mailbox. Traces in the streamed text are how Droid’s transcript shows them.
 4. **`canUseTool`** surfaces write/shell approval to Droid only when a matching Droid tool is advertised (`Bash`→`Execute`, `Write`→`Create`/`Edit`). Read-only built-ins auto-allow. If nothing maps, Bridge allows and logs `permission_passthrough`.
+5. **Factory artifacts.** Claude Code writes into `BRIDGE_SDK_CWD`. A `PostToolUse` hook (`Write|Edit|Bash`) copies assertion-shaped `validation-state.json` and `features.json` into the current Factory mission directory. Mission dir is looked up when the hook runs, not when the query starts. Dynamic cwd / mission-dir text sits at the **end** of the user prompt.
 
 ## Still different from T3
 

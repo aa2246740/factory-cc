@@ -1,6 +1,6 @@
 import { lastUserText, systemText, textFromBlocks, collectToolResults } from "../protocol/content.js";
 import type { RuntimeRequest } from "./types.js";
-import { orchestratorAppendix, roleAppendix } from "./mission-tools.js";
+import { findMissionDir, orchestratorAppendix, roleAppendix } from "./mission-tools.js";
 
 /**
  * Stable suffix appended to Claude Code's own system prompt.
@@ -33,8 +33,21 @@ export function buildPresetSystemPrompt(): PresetSystemPrompt {
   };
 }
 
+export function buildWorkspaceAppendix(cwd: string, droidHome?: string): string {
+  const missionDir = findMissionDir(droidHome);
+  return [
+    `Working directory (Claude Code cwd): ${cwd}`,
+    missionDir ? `Factory mission directory: ${missionDir}` : "",
+    missionDir
+      ? "Write Factory validation-state.json (must contain an assertions object with VAL-* keys) and features.json only inside that mission directory. Do not write Factory bookkeeping into leftover /tmp directories from other sessions."
+      : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
 /** Dynamic host/role/user content. Always placed after the stable Claude Code prefix. */
-export function buildDynamicUserPrompt(input: RuntimeRequest): string {
+export function buildDynamicUserPrompt(input: RuntimeRequest, cwd?: string): string {
   const user = lastUserText(input.request.messages);
   const results = collectToolResults(input.request.messages);
   const resultText = results
@@ -51,6 +64,7 @@ export function buildDynamicUserPrompt(input: RuntimeRequest): string {
     roleAppendix(input.role),
     orchestratorAppendix(input.role, input.request.tools),
     host ? `Host context (dynamic):\n${host}` : "",
+    cwd ? buildWorkspaceAppendix(cwd, process.env.BRIDGE_DROID_HOME) : "",
   ]
     .filter(Boolean)
     .join("\n\n");

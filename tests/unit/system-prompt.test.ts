@@ -1,3 +1,6 @@
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { buildDynamicUserPrompt, buildPresetSystemPrompt, STABLE_DROID_APPEND } from "../../src/runtime/system-prompt.js";
 import type { RuntimeRequest } from "../../src/runtime/types.js";
@@ -49,5 +52,23 @@ describe("T3-style system prompt", () => {
     expect(dynamic).toContain("Droid role: orchestrator");
     expect(dynamic.indexOf("Host context (dynamic)")).toBeGreaterThan(dynamic.indexOf("fix the filter now"));
     expect(buildPresetSystemPrompt().append.includes(dynamic)).toBe(false);
+  });
+
+  it("puts cwd and Factory mission directory after the stable prefix", () => {
+    const home = mkdtempSync(join(tmpdir(), "relay-home-"));
+    const mission = join(home, ".factory/missions/m1");
+    mkdirSync(mission, { recursive: true });
+    for (const name of ["features.json", "validation-contract.md", "validation-state.json", "AGENTS.md", "services.yaml"]) {
+      writeFileSync(join(mission, name), "{}");
+    }
+    const previous = process.env.BRIDGE_DROID_HOME;
+    process.env.BRIDGE_DROID_HOME = home;
+    const dynamic = buildDynamicUserPrompt(request(), "/tmp/current-tiny-tasks");
+    if (previous === undefined) delete process.env.BRIDGE_DROID_HOME;
+    else process.env.BRIDGE_DROID_HOME = previous;
+    expect(dynamic).toContain("Working directory (Claude Code cwd): /tmp/current-tiny-tasks");
+    expect(dynamic).toContain(mission);
+    expect(dynamic.indexOf(mission)).toBeGreaterThan(dynamic.indexOf("fix the filter now"));
+    expect(STABLE_DROID_APPEND).not.toContain(mission);
   });
 });

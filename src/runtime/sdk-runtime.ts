@@ -10,8 +10,9 @@ import type { BridgeConfig } from "../config.js";
 import type { ContentBlock, Usage } from "../types.js";
 import { BridgeError } from "../types.js";
 import type { Logger } from "../logging.js";
-import { maybeForceStartWhenReady, missionDirReady } from "./mission-tools.js";
+import { findMissionDir, harvestFactoryArtifacts, maybeForceStartWhenReady, missionDirReady, syncFactoryArtifactsFromTool } from "./mission-tools.js";
 import {
+  CLAUDE_CODE_BUILTINS,
   claudeToolTraceDetail,
   isDroidMcpName,
   isReadOnlyBuiltin,
@@ -312,7 +313,10 @@ export class SdkRuntime implements BridgeRuntime {
       alwaysLoad: true,
     });
 
-    const allowedTools = droidTools.map((t) => mcpQualifiedName("droid", names.toMcp(t.name)));
+    const allowedTools = [
+      ...CLAUDE_CODE_BUILTINS,
+      ...droidTools.map((t) => mcpQualifiedName("droid", names.toMcp(t.name))),
+    ];
     const cwd = resolveCwd(input, this.config);
     const env = sdkEnv(selection, `${this.config.host}:${this.config.port}`, this.config.authMode);
     if (this.config.authMode !== "subscription") {
@@ -338,12 +342,33 @@ export class SdkRuntime implements BridgeRuntime {
       systemPrompt: buildPresetSystemPrompt(),
       canUseTool: async (toolName: string, toolInput: Record<string, unknown>) =>
         this.canUseTool(live, input, toolName, toolInput),
+      hooks: {
+        PostToolUse: [
+          {
+            matcher: "Write|Edit|Bash",
+            hooks: [
+              async (hookInput: { tool_name?: string; tool_input?: unknown }) => {
+                try {
+                  const dir = findMissionDir(process.env.BRIDGE_DROID_HOME);
+                  const copied = syncFactoryArtifactsFromTool(hookInput.tool_input, cwd, dir);
+                  if (copied.length) {
+                    live.events.push({ at: now(), type: "factory_artifact_sync", data: { copied, missionDir: dir } });
+                  }
+                } catch {
+                  // never block Claude Code on Factory bookkeeping
+                }
+                return {};
+              },
+            ],
+          },
+        ],
+      },
     };
     if (selection) options.model = selection.provider.model;
     else if (process.env.ANTHROPIC_MODEL) options.model = process.env.ANTHROPIC_MODEL;
     if (this.config.claudeExecutable) options.pathToClaudeCodeExecutable = this.config.claudeExecutable;
 
-    const prompt = buildDynamicUserPrompt(input);
+    const prompt = buildDynamicUserPrompt(input, cwd);
     live.started = true;
     live.events.push({
       at: now(),
@@ -506,6 +531,7 @@ export class SdkRuntime implements BridgeRuntime {
           if (!live.streamed) live.sink?.textDelta(text);
         }
         if (message.type === "result") {
+          this.harvestArtifacts(live);
           const streamed = live.streamed.trim();
           const finalBlocks = streamed
             ? [{ type: "text" as const, text: streamed }]
@@ -569,6 +595,14 @@ export class SdkRuntime implements BridgeRuntime {
       role: input.role,
     });
     live.events.push({ at: now(), type: "usage", data: { ...delta, cache_hit_ratio: cacheHitRatio(delta) } });
+  }
+
+  private harvestArtifacts(live: LiveSdk): void {
+    const dir = findMissionDir(process.env.BRIDGE_DROID_HOME);
+    const copied = harvestFactoryArtifacts(process.env.BRIDGE_SDK_CWD, dir);
+    if (copied.length) {
+      live.events.push({ at: now(), type: "factory_artifact_sync", data: { copied, missionDir: dir, at: "result" } });
+    }
   }
 
   private turnUsage(live: LiveSdk, input: RuntimeRequest): Usage {
