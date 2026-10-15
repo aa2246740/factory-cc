@@ -275,21 +275,39 @@ export function publicSelection(selection: UpstreamSelection): Record<string, st
   };
 }
 
-export function sdkEnv(selection: UpstreamSelection, bridgeListen: string): Record<string, string> {
+export function sdkEnv(
+  selection: UpstreamSelection | undefined,
+  bridgeListen: string,
+  authMode: "byok" | "subscription" = "byok",
+): Record<string, string> {
   const env: Record<string, string> = {};
   for (const [key, value] of Object.entries(process.env)) {
     if (value === undefined) continue;
     if (/^HTTP_PROXY|HTTPS_PROXY|ALL_PROXY$/i.test(key)) continue;
     env[key] = value;
   }
+  env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC ?? "1";
+  env.API_TIMEOUT_MS = env.API_TIMEOUT_MS ?? "600000";
+  env.CLAUDE_AGENT_SDK_CLIENT_APP = env.CLAUDE_AGENT_SDK_CLIENT_APP ?? "relay-bridge/0.1.0";
+
+  if (authMode === "subscription") {
+    // Leave ANTHROPIC_BASE_URL / AUTH_TOKEN / API_KEY exactly as the host
+    // process provided them so Claude Code can use its local login.
+    const existing = env.ANTHROPIC_BASE_URL ?? "";
+    if (existing.includes(bridgeListen) || /127\.0\.0\.1:1878/.test(existing)) {
+      throw new Error("refusing to point Claude Code ANTHROPIC_BASE_URL at Relay Bridge");
+    }
+    return env;
+  }
+
+  if (!selection) {
+    throw new Error("BYOK sdkEnv requires an upstream selection");
+  }
   const token = process.env[selection.provider.tokenEnv] ?? "";
   env.ANTHROPIC_BASE_URL = selection.provider.baseUrl;
   env.ANTHROPIC_AUTH_TOKEN = token;
   env.ANTHROPIC_API_KEY = "";
   Object.assign(env, selection.modelSlots);
-  env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1";
-  env.API_TIMEOUT_MS = env.API_TIMEOUT_MS ?? "600000";
-  env.CLAUDE_AGENT_SDK_CLIENT_APP = env.CLAUDE_AGENT_SDK_CLIENT_APP ?? "relay-bridge/0.1.0";
   if (env.ANTHROPIC_BASE_URL.includes(bridgeListen) || /127\.0\.0\.1:1878/.test(env.ANTHROPIC_BASE_URL)) {
     throw new Error("refusing to point Claude Code ANTHROPIC_BASE_URL at Relay Bridge");
   }

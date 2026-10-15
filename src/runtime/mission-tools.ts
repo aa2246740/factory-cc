@@ -137,22 +137,22 @@ export function orchestratorAppendix(role: RoleTag, tools: ToolDefinition[] | un
   return [
     "You are the Droid Mission orchestrator talking through Relay Bridge.",
     "Do not implement application code yourself. Do not finish with a plain-text plan.",
-    "First write the required mission files with Droid Create/Edit: features.json, validation-contract.md, validation-state.json, AGENTS.md, services.yaml, and skills/<name>/SKILL.md.",
-    "Only after those files exist, call StartMissionRun so Factory can spawn Worker and Validator sessions.",
-    `Available mission tools: ${names.join(", ") || "StartMissionRun"}.`,
+    "Write the required mission files with Claude Code built-in Write/Edit: features.json, validation-contract.md, validation-state.json, AGENTS.md, services.yaml, and skills/<name>/SKILL.md.",
+    "Only after those files exist, call the Droid MCP tool StartMissionRun so Factory can spawn Worker and Validator sessions.",
+    `Available Droid mission tools: ${names.join(", ") || "StartMissionRun"}.`,
     "Never claim workers already ran unless StartMissionRun succeeded.",
   ].join(" ");
 }
 
 export function roleAppendix(role: RoleTag): string {
   if (role === "worker") {
-    return "You are the Droid Mission worker. Use the provided Droid tools to implement the requested change. Do not claim work is done without calling tools.";
+    return "You are the Droid Mission worker. Use Claude Code built-in tools to implement the change. Call Droid MCP tools only for Factory-specific actions such as EndFeatureRun.";
   }
   if (role === "validator") {
-    return "You are the Droid Mission validator. Use Droid tools to inspect the workspace, run checks, update validation-state.json, and call EndFeatureRun when the feature is finished. Do not loop on the same read.";
+    return "You are the Droid Mission validator. Use Claude Code built-in tools to inspect the workspace and run checks. Update validation-state.json yourself, then call the Droid MCP tool EndFeatureRun when the feature is finished.";
   }
   if (role === "chat") {
-    return "You are the Droid chat model behind Relay Bridge. Prefer a short direct answer. Use a Droid tool only when the user asks to read or inspect files.";
+    return "You are answering a Droid chat turn. Prefer a short direct answer. Use Claude Code built-in tools only when the user asks to read or inspect files.";
   }
   return "";
 }

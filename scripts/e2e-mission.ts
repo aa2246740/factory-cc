@@ -1,6 +1,7 @@
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { publicSelection } from "../src/upstream/providers.js";
+import { summarizeUsage, type UsageSnapshot } from "../src/runtime/usage.js";
 import { resolveSelection, rolesSeen, runDroid, seedMissionPack, startDroidDaemon, startSdkBridge } from "./e2e-lib.js";
 import { redactText, runCapture, writeJson } from "./lib.js";
 
@@ -38,6 +39,7 @@ export async function runE2eMission(): Promise<number> {
     timeoutMs: 10_000,
   });
 
+  process.env.BRIDGE_SDK_CWD = repo;
   process.env.BRIDGE_DROID_HOME = isolated.home;
   process.env.BRIDGE_WAIT_FOR_MISSION_DIR = "1";
   const daemon = startDroidDaemon(isolated.home, isolated.token, 18798);
@@ -123,10 +125,12 @@ export async function runE2eMission(): Promise<number> {
     features: snapshot.features,
     missionState: snapshot.missionState,
     seededMissionDir: seeded ?? snapshot.missionDir,
+    cache: readCacheStats(join(isolated.config.logDir, "usage.jsonl")),
     notes: [
       "PASS requires three roles, validation-state all passed, and npm test green.",
       "No short exec timeout; droid runs until it exits.",
       "Claude login unused. Official Anthropic billing unused.",
+      "Cache hit ratio is from MiniMax-compatible usage fields; it is not representative of Claude prompt cache.",
     ],
   };
   writeJson(join(evidence, "result.json"), report);
@@ -184,6 +188,25 @@ function findMissionDir(home: string): string | undefined {
     if (statSync(dir).isDirectory()) return dir;
   }
   return undefined;
+}
+
+function readCacheStats(file: string): UsageSnapshot & { cache_hit_ratio: number; requests: number; representativeOfClaude: false } {
+  if (!existsSync(file)) {
+    return {
+      input_tokens: 0,
+      output_tokens: 0,
+      cache_creation_input_tokens: 0,
+      cache_read_input_tokens: 0,
+      cache_hit_ratio: 0,
+      requests: 0,
+      representativeOfClaude: false,
+    };
+  }
+  const rows = readFileSync(file, "utf8")
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => JSON.parse(line) as UsageSnapshot);
+  return { ...summarizeUsage(rows), representativeOfClaude: false };
 }
 
 function stamp(): string {

@@ -8,12 +8,15 @@ import { apiError } from "../protocol/messages.js";
 import { explicitSessionId, historyPrefixHash, resolveSession, roleFromHeaders } from "../sessions/correlate.js";
 import { SessionStore } from "../sessions/store.js";
 import { createRuntime } from "../runtime/factory.js";
+import type { RuntimeTurn } from "../runtime/types.js";
 import { requireAdminToken, requireClientToken } from "../security/auth.js";
 import { assertBodySize } from "../security/limits.js";
 import { redactHeaders, redactJson } from "../security/redact.js";
 import { BridgeError, type RedactedRequestRecord } from "../types.js";
 import { writeMessageSse } from "./sse.js";
+import { SseWriter } from "./sse-stream.js";
 import { statusPageHtml } from "./status-page.js";
+import { messageId } from "../protocol/messages.js";
 
 export interface BridgeApp {
   server: Server;
@@ -138,7 +141,42 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
       `${JSON.stringify({ at: new Date().toISOString(), path: "/v1/messages", headers: redactHeaders(headers as Record<string, string | string[] | undefined>), body: redactJson(raw), session: session.bridgeSessionId })}\n`,
     );
 
-    const turn = await runtime.handle({ request, role, session, headers });
+    res.setHeader("X-Bridge-Session", session.bridgeSessionId);
+    res.setHeader("X-Bridge-Role", role);
+    res.setHeader("X-Bridge-Mode", config.mode);
+
+    const writer = request.stream
+      ? new SseWriter(res, { id: messageId(), model: request.model })
+      : undefined;
+    if (writer) writer.start();
+
+    let turn: RuntimeTurn;
+    try {
+      turn = await runtime.handle({ request, role, session, headers }, writer
+        ? {
+            textDelta: (text) => writer.textDelta(text),
+            toolTrace: (name, detail) => writer.toolTrace(name, detail),
+          }
+        : undefined);
+    } catch (error) {
+      if (writer) {
+        const message = error instanceof Error ? error.message : String(error);
+        writer.textDelta(`\n[bridge error] ${message}\n`);
+        writer.finish({
+          id: messageId(),
+          type: "message",
+          role: "assistant",
+          model: request.model,
+          content: [{ type: "text", text: message }],
+          stop_reason: "end_turn",
+          stop_sequence: null,
+          usage: { input_tokens: 0, output_tokens: 0, estimated: true },
+        });
+        store.setState(session.bridgeSessionId, "FAILED");
+        return;
+      }
+      throw error;
+    }
     if (turn.notes?.length) session.notes.push(...turn.notes.filter((note) => !session.notes.includes(note)));
     store.update(session.bridgeSessionId, {
       pendingToolIds: turn.pendingToolIds,
@@ -147,9 +185,10 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
     });
     store.setState(session.bridgeSessionId, turn.pendingToolIds.length ? "WAITING_DROID_TOOL" : "IDLE");
 
-    res.setHeader("X-Bridge-Session", session.bridgeSessionId);
-    res.setHeader("X-Bridge-Role", role);
-    res.setHeader("X-Bridge-Mode", config.mode);
+    if (writer) {
+      writer.finish(turn.response);
+      return;
+    }
     if (request.stream) {
       writeMessageSse(res, turn.response);
       return;

@@ -19,9 +19,10 @@ Questions this repo must answer empirically (see `docs/G0-AIRGAP.md`):
 ## Anthropic
 
 - Official installer: `https://claude.ai/install.sh` → Claude Code `2.1.292` (this run).
+- `BRIDGE_AUTH=subscription`: Bridge does not set or overwrite `ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN`, or `ANTHROPIC_API_KEY`, and does not isolate `CLAUDE_CONFIG_DIR`. Claude Code uses the machine’s existing login (intended for Cola’s Mac).
+- `BRIDGE_AUTH=byok` (cloud default): injects MiniMax/GLM-compatible `ANTHROPIC_BASE_URL` + `ANTHROPIC_AUTH_TOKEN`, empties `ANTHROPIC_API_KEY`, isolates `CLAUDE_CONFIG_DIR`.
 - Login must be completed by the user in the official CLI. Agents do not read or proxy `~/.claude` tokens.
-- API-key success is not a substitute for the subscription-login path.
-- This environment has no authorized Anthropic credential. SDK-mode live turns are `BLOCKED_AUTH`.
+- This cloud environment has no authorized Anthropic credential. Official Claude billing stays `BLOCKED_AUTH`.
 
 ## What is forbidden
 

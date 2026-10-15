@@ -9,7 +9,13 @@ async function main(): Promise<void> {
   const config = loadConfig();
   mkdirSync(config.dataDir, { recursive: true });
   const logger = createLogger(config.logDir);
-  if (config.mode === "sdk") {
+  if (config.mode === "sdk" && config.authMode === "subscription") {
+    writeFileSync(
+      join(config.dataDir, "upstream.json"),
+      `${JSON.stringify({ authMode: "subscription", overridesAnthropicEnv: false }, null, 2)}\n`,
+    );
+    logger.info("upstream", { authMode: "subscription", overridesAnthropicEnv: false });
+  } else if (config.mode === "sdk") {
     const preset = selectionFromConfig({
       baseUrl: config.upstreamBaseUrl,
       model: config.upstreamModel,
@@ -32,6 +38,8 @@ async function main(): Promise<void> {
       `BRIDGE_HOST=${config.host}`,
       `BRIDGE_PORT=${config.port}`,
       `BRIDGE_CLIENT_TOKEN set`,
+      `BRIDGE_AUTH=${config.authMode}`,
+      `BRIDGE_PERMISSION=${config.permissionMode}`,
       config.upstreamModel ? `BRIDGE_UPSTREAM_MODEL=${config.upstreamModel}` : "",
       config.upstreamBaseUrl ? `BRIDGE_UPSTREAM_BASE_URL=${config.upstreamBaseUrl}` : "",
     ]

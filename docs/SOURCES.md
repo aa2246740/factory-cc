@@ -20,5 +20,6 @@ Fetched 2026-10-15. Titles as published.
 - [S16] Agent SDK agent loop — https://code.claude.com/docs/en/agent-sdk/agent-loop
 - [S17] Agent SDK system prompts — https://code.claude.com/docs/en/agent-sdk/modifying-system-prompts
 - [S18] Anthropic define tools — https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools
+- [S19] Agent SDK modifying system prompts (`claude_code` preset + append) — https://code.claude.com/docs/en/agent-sdk/modifying-system-prompts
 
 Installed CLI help supersedes stale docs when they disagree. This run: Droid `0.241.1` uses `--only-tools` / `--add-tools` / `--remove-tools` rather than the older `--restrict-tools` names.

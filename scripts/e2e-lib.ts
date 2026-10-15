@@ -44,6 +44,9 @@ export async function startSdkBridge(port: number, dataDir: string, selection: U
     toolWaitMs: 6 * 60 * 60 * 1000,
     maxTurns: 160,
     maxSessions: 32,
+    authMode: "byok",
+    permissionMode: "bypass",
+    sdkCwd: dataDir,
     upstreamBaseUrl: selection.provider.baseUrl,
     upstreamModel: selection.provider.model,
     upstreamTokenEnv: selection.provider.tokenEnv,
@@ -57,6 +60,9 @@ export async function startSdkBridge(port: number, dataDir: string, selection: U
   const workspace = mkdtempSync(join(tmpdir(), "relay-e2e-ws-"));
   mkdirSync(join(home, ".factory"), { recursive: true });
   process.env.BRIDGE_DROID_HOME = home;
+  process.env.BRIDGE_SDK_CWD = workspace;
+  process.env.BRIDGE_AUTH = process.env.BRIDGE_AUTH ?? "byok";
+  process.env.BRIDGE_PERMISSION = process.env.BRIDGE_PERMISSION ?? "bypass";
   writeFileSync(
     join(home, ".factory/settings.json"),
     `${JSON.stringify(

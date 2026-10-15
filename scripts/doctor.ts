@@ -33,6 +33,8 @@ async function main(): Promise<void> {
     claude,
     sdkVersion,
     bridgeMode: process.env.BRIDGE_MODE ?? "unset",
+    bridgeAuth: process.env.BRIDGE_AUTH ?? "byok",
+    bridgePermission: process.env.BRIDGE_PERMISSION ?? "default",
     endpoints: {
       healthz: "GET /healthz",
       messages: "POST /v1/messages",
@@ -51,7 +53,8 @@ async function main(): Promise<void> {
     },
     notes: [
       "Doctor never reads Claude or Factory credential files and never prints secret values.",
-      "sdk mode uses MiniMax/GLM Anthropic-compatible BYOK; official Claude login is optional.",
+      "BRIDGE_AUTH=byok (default) points Claude Code at MiniMax/GLM. BRIDGE_AUTH=subscription does not override ANTHROPIC_BASE_URL/AUTH_TOKEN/API_KEY.",
+      "Official Claude login is unused in cloud BYOK tests.",
     ],
   };
 

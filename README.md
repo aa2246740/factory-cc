@@ -2,7 +2,9 @@
 
 把 Factory Droid CLI 的 BYOK 自定义模型接到**官方 Claude Agent SDK** 和**未修改的 Claude Code**。Droid 继续负责任务、审批和工具执行；模型推理在 Claude Code 里发生。
 
-没有 Factory 凭证，也不使用官方 Claude 登录。`mock` / `fake` 协议测试可跑。`sdk` 模式把 Claude Code 指到 MiniMax / GLM 的 Anthropic 兼容端点（`ANTHROPIC_BASE_URL` + `ANTHROPIC_AUTH_TOKEN`，`ANTHROPIC_API_KEY` 为空）。
+没有 Factory 凭证。默认 `BRIDGE_AUTH=byok`：`sdk` 把 Claude Code 指到 MiniMax / GLM 的 Anthropic 兼容端点（会改写 `ANTHROPIC_BASE_URL` + `ANTHROPIC_AUTH_TOKEN`，`ANTHROPIC_API_KEY` 为空）。`BRIDGE_AUTH=subscription` 不改写这三个变量，供本机 Claude 登录使用。`mock` / `fake` 协议测试可跑。
+
+接入方式对齐 T3 Code：`systemPrompt` 用 `claude_code` 预设再追加 Droid 说明；Claude Code 自己执行内置工具；只有 Mission 等 Droid 专有工具走 MCP。见 `docs/T3-ALIGNMENT.md`。
 
 ## 能做什么
 
@@ -41,7 +43,7 @@ tsx scripts/configure-droid.ts --settings /tmp/droid-home/.factory/settings.json
 
 | 命令 | 含义 | 无凭证时 |
 |---|---|---|
-| `npm test` | unit + protocol + fake SDK + resilience | 应通过 |
+| `npm test` | unit + protocol + fake SDK + resilience + T3 prompt/tools/auth/usage | 应通过 |
 | `npm run test:protocol` | Messages / SSE / 401 | 应通过 |
 | `npm run test:sdk-probes` | 跨请求工具接力 | 应通过（fake runtime） |
 | `npm run test:g0` | 公共 CLI airgap 矩阵 | 记录真实退出码 |
@@ -59,7 +61,7 @@ tsx scripts/configure-droid.ts --settings /tmp/droid-home/.factory/settings.json
 
 - `BRIDGE_MODE=mock`：固定文本/只读工具探针，零模型费用
 - `BRIDGE_MODE=fake`：进程内 query 替身，证明邮箱接力
-- `BRIDGE_MODE=sdk`：官方 SDK + 已安装 `claude`，上游为 MiniMax/GLM 兼容端点。禁止把 `ANTHROPIC_BASE_URL` 指回 Bridge。
+- `BRIDGE_MODE=sdk`：官方 SDK + 已安装 `claude`。`BRIDGE_AUTH=byok` 用 MiniMax/GLM 兼容端点；`BRIDGE_AUTH=subscription` 用本机登录。禁止把 `ANTHROPIC_BASE_URL` 指回 Bridge。
 
 ## 文档
 
@@ -69,4 +71,5 @@ tsx scripts/configure-droid.ts --settings /tmp/droid-home/.factory/settings.json
 - `docs/G0-AIRGAP.md`（G0 跑完后生成）
 - `docs/LIMITATIONS.md`
 - `docs/SOURCES.md`
+- `docs/T3-ALIGNMENT.md`
 - `REPORT.md`

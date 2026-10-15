@@ -1,17 +1,34 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { collectToolResults, lastUserText, systemText, textFromBlocks } from "../protocol/content.js";
+import { collectToolResults, textFromBlocks } from "../protocol/content.js";
 import { assistantMessage, estimatedUsage } from "../protocol/messages.js";
 import { createToolNameMap, mcpQualifiedName, type ToolNameMap } from "../protocol/tool-names.js";
 import { jsonSchemaToZod, zodObjectShape } from "../protocol/schema-to-zod.js";
 import { ToolMailbox } from "../relay/mailbox.js";
 import { toolUseId } from "../relay/ids.js";
 import type { BridgeConfig } from "../config.js";
-import type { ContentBlock } from "../types.js";
+import type { ContentBlock, Usage } from "../types.js";
 import { BridgeError } from "../types.js";
 import type { Logger } from "../logging.js";
-import { maybeForceStartWhenReady, missionDirReady, orchestratorAppendix, roleAppendix } from "./mission-tools.js";
-import type { BridgeRuntime, RuntimeEvent, RuntimeRequest, RuntimeTurn } from "./types.js";
+import { maybeForceStartWhenReady, missionDirReady } from "./mission-tools.js";
+import {
+  claudeToolTraceDetail,
+  isDroidMcpName,
+  isReadOnlyBuiltin,
+  mapPermissionToDroidTool,
+  selectDroidMcpTools,
+} from "./droid-tools.js";
+import { buildDynamicUserPrompt, buildPresetSystemPrompt, describePromptLayout } from "./system-prompt.js";
+import {
+  cacheHitRatio,
+  emptyUsage,
+  extractUsage,
+  subtractUsage,
+  toResponseUsage,
+  writeUsageLine,
+  type UsageSnapshot,
+} from "./usage.js";
+import type { BridgeRuntime, RuntimeEvent, RuntimeRequest, RuntimeTurn, StreamSink } from "./types.js";
 import {
   publicSelection,
   sdkEnv,
@@ -47,18 +64,21 @@ interface LiveSdk {
   started: boolean;
   sdkSessionId?: string;
   names?: ToolNameMap;
+  advertised: string[];
   abort?: AbortController;
   query?: ReturnType<SdkHandle["query"]>;
   waiters: PendingTurn[];
   loop?: Promise<void>;
+  sink?: StreamSink;
+  lastUsage: UsageSnapshot;
+  streamed: string;
 }
 
 /**
- * Official Claude Agent SDK adapter.
- * Built-in tools are removed (`tools: []`). Only MCP tools from the current
- * Droid request are registered; those handlers wait on the mailbox.
- * The query iterator is consumed in the background so returning tool_use
- * does not abandon the SDK session.
+ * T3-style Claude Agent SDK adapter.
+ * systemPrompt: preset `claude_code` + stable Droid append.
+ * Built-in Read/Edit/Bash stay enabled and execute inside Claude Code.
+ * Only Factory-exclusive tools go through MCP → mailbox → Droid.
  */
 export class SdkRuntime implements BridgeRuntime {
   readonly kind = "sdk" as const;
@@ -66,17 +86,32 @@ export class SdkRuntime implements BridgeRuntime {
   private selection: UpstreamSelection | undefined;
   private readonly failedProviders: string[] = [];
   private readonly lives = new Map<string, LiveSdk>();
+  private readonly usageFile: string;
 
   constructor(
     private readonly config: BridgeConfig,
     private readonly logger: Logger,
-  ) {}
-
-  describe(): Record<string, unknown> {
-    return this.selection ? publicSelection(this.selection) : { kind: "sdk", selected: false };
+  ) {
+    this.usageFile = join(config.logDir, "usage.jsonl");
   }
 
-  async ensureSelection(): Promise<UpstreamSelection> {
+  describe(): Record<string, unknown> {
+    return {
+      kind: "sdk",
+      authMode: this.config.authMode,
+      permissionMode: this.config.permissionMode,
+      prompt: describePromptLayout(),
+      tools: "preset:claude_code + droid-exclusive MCP",
+      includePartialMessages: true,
+      overridesAnthropicEnv: this.config.authMode !== "subscription",
+      upstream: this.selection ? publicSelection(this.selection) : this.config.authMode === "subscription"
+        ? { provider: "subscription", model: process.env.ANTHROPIC_MODEL ?? "local-login" }
+        : { selected: false },
+    };
+  }
+
+  async ensureSelection(): Promise<UpstreamSelection | undefined> {
+    if (this.config.authMode === "subscription") return undefined;
     if (this.selection) return this.selection;
     const fromConfig = selectionFromConfig({
       baseUrl: this.config.upstreamBaseUrl,
@@ -109,8 +144,10 @@ export class SdkRuntime implements BridgeRuntime {
     return selection;
   }
 
-  async handle(input: RuntimeRequest): Promise<RuntimeTurn> {
+  async handle(input: RuntimeRequest, sink?: StreamSink): Promise<RuntimeTurn> {
     const live = this.live(input.session.bridgeSessionId);
+    live.sink = sink;
+    live.advertised = (input.request.tools ?? []).map((tool) => tool.name);
     const results = collectToolResults(input.request.messages);
 
     if (results.length > 0) {
@@ -235,11 +272,11 @@ export class SdkRuntime implements BridgeRuntime {
   private async startQuery(input: RuntimeRequest, live: LiveSdk): Promise<void> {
     const sdk = await this.loadSdk();
     const selection = await this.ensureSelection();
-    const tools = input.request.tools ?? [];
-    const names = createToolNameMap(tools.map((t) => t.name));
+    const droidTools = selectDroidMcpTools(input.request.tools);
+    const names = createToolNameMap(droidTools.map((t) => t.name));
     live.names = names;
 
-    const mcpTools = tools.map((definition) => {
+    const mcpTools = droidTools.map((definition) => {
       const converted = jsonSchemaToZod(definition.input_schema);
       const mcpName = names.toMcp(definition.name);
       return sdk.tool(
@@ -275,46 +312,50 @@ export class SdkRuntime implements BridgeRuntime {
       alwaysLoad: true,
     });
 
-    const allowedTools = tools.map((t) => mcpQualifiedName("droid", names.toMcp(t.name)));
-    const configDir = join(this.config.dataDir, "claude-config");
-    mkdirSync(configDir, { recursive: true });
-    const env = sdkEnv(selection, `${this.config.host}:${this.config.port}`);
-    env.CLAUDE_CONFIG_DIR = configDir;
+    const allowedTools = droidTools.map((t) => mcpQualifiedName("droid", names.toMcp(t.name)));
+    const cwd = resolveCwd(input, this.config);
+    const env = sdkEnv(selection, `${this.config.host}:${this.config.port}`, this.config.authMode);
+    if (this.config.authMode !== "subscription") {
+      const configDir = join(this.config.dataDir, "claude-config");
+      mkdirSync(configDir, { recursive: true });
+      env.CLAUDE_CONFIG_DIR = configDir;
+    }
 
     const abort = new AbortController();
     live.abort = abort;
     const options: Record<string, unknown> = {
-      tools: [],
-      settingSources: [],
-      includePartialMessages: false,
-      cwd: this.config.sdkCwd,
+      tools: { type: "preset", preset: "claude_code" },
+      includePartialMessages: true,
+      cwd,
       persistSession: this.config.persistSessions,
       maxTurns: Math.max(this.config.maxTurns, 80),
       mcpServers: { droid: server },
       allowedTools,
       env,
-      model: selection.provider.model,
-      permissionMode: "bypassPermissions",
-      allowDangerouslySkipPermissions: true,
+      permissionMode: this.config.permissionMode === "ask" ? "default" : "bypassPermissions",
+      allowDangerouslySkipPermissions: this.config.permissionMode !== "ask",
       abortController: abort,
-      systemPrompt: {
-        type: "custom",
-        prompt: buildSystemPrompt(input),
-      },
-      canUseTool: async () => ({ behavior: "allow", updatedInput: undefined }),
+      systemPrompt: buildPresetSystemPrompt(),
+      canUseTool: async (toolName: string, toolInput: Record<string, unknown>) =>
+        this.canUseTool(live, input, toolName, toolInput),
     };
+    if (selection) options.model = selection.provider.model;
+    else if (process.env.ANTHROPIC_MODEL) options.model = process.env.ANTHROPIC_MODEL;
     if (this.config.claudeExecutable) options.pathToClaudeCodeExecutable = this.config.claudeExecutable;
 
-    const prompt = buildPrompt(input);
+    const prompt = buildDynamicUserPrompt(input);
     live.started = true;
     live.events.push({
       at: now(),
       type: "sdk_query_start",
       data: {
-        provider: selection.provider.id,
-        model: selection.provider.model,
-        baseUrl: selection.provider.baseUrl,
-        toolCount: tools.length,
+        authMode: this.config.authMode,
+        provider: selection?.provider.id ?? "subscription",
+        model: selection?.provider.model ?? process.env.ANTHROPIC_MODEL ?? "local-login",
+        baseUrl: selection?.provider.baseUrl ?? "(not overridden)",
+        droidMcp: droidTools.map((t) => t.name),
+        cwd,
+        prompt: describePromptLayout(),
       },
     });
 
@@ -332,7 +373,48 @@ export class SdkRuntime implements BridgeRuntime {
     }
   }
 
+  private async canUseTool(
+    live: LiveSdk,
+    input: RuntimeRequest,
+    toolName: string,
+    toolInput: Record<string, unknown>,
+  ): Promise<{ behavior: "allow" | "deny"; updatedInput?: Record<string, unknown>; message?: string }> {
+    if (isDroidMcpName(toolName) || this.config.permissionMode !== "ask" || isReadOnlyBuiltin(toolName)) {
+      return { behavior: "allow", updatedInput: toolInput };
+    }
+    const mapped = mapPermissionToDroidTool(toolName, live.advertised);
+    if (!mapped) {
+      live.events.push({ at: now(), type: "permission_passthrough", data: { toolName } });
+      return { behavior: "allow", updatedInput: toolInput };
+    }
+    const id = toolUseId();
+    live.mailbox.registerCall({
+      callId: id,
+      originalName: mapped,
+      mcpName: toolName,
+      input: toolInput,
+    });
+    live.sink?.toolTrace("permission", `${mapped} for ${toolName}`);
+    this.publish(live, {
+      response: assistantMessage(
+        input.request.model,
+        [{ type: "tool_use", id, name: mapped, input: (toolInput ?? {}) as never }],
+        "tool_use",
+        estimatedUsage(input.request, 16),
+      ),
+      pendingToolIds: [id],
+      events: [...live.events],
+      notes: [`canUseTool surfaced ${toolName} as Droid ${mapped}`],
+    });
+    const result = await live.mailbox.wait(id, this.config.toolWaitMs);
+    if (result.isError) {
+      return { behavior: "deny", message: "Droid denied this tool" };
+    }
+    return { behavior: "allow", updatedInput: toolInput };
+  }
+
   private async failover(error: unknown): Promise<boolean> {
+    if (this.config.authMode === "subscription") return false;
     const mapped = mapSdkError(error);
     if (mapped.code !== "blocked_auth" || !this.selection) return false;
     const from = this.selection.provider.id;
@@ -362,9 +444,32 @@ export class SdkRuntime implements BridgeRuntime {
         if (live.cancelled) break;
         live.events.push({ at: now(), type: String(message.type ?? "sdk"), data: summarizeSdk(message) });
         if (typeof message.session_id === "string") live.sdkSessionId = message.session_id;
+        this.noteUsage(live, input, message);
+
+        if (message.type === "stream_event") {
+          const text = streamTextDelta(message);
+          if (text) {
+            live.streamed += text;
+            live.sink?.textDelta(text);
+          }
+          continue;
+        }
 
         const extracted = extractToolUses(message);
-        for (const use of extracted) {
+        const droidUses = extracted.filter((use) => {
+          const stripped = use.name.replace(/^mcp__droid__/, "");
+          return isDroidMcpName(use.name) || Boolean(live.names?.toOriginal(stripped));
+        });
+        const builtinUses = extracted.filter((use) => !droidUses.includes(use));
+
+        for (const use of builtinUses) {
+          const detail = claudeToolTraceDetail(use.name, use.input);
+          live.sink?.toolTrace(use.name, detail);
+          live.streamed += `\n[${use.name}] ${detail}\n`;
+          live.events.push({ at: now(), type: "claude_code_tool", data: { name: use.name, id: use.id } });
+        }
+
+        for (const use of droidUses) {
           const stripped = use.name.replace(/^mcp__droid__/, "");
           const original = live.names?.toOriginal(stripped) ?? stripped;
           if (!live.mailbox.hasCall(use.id)) {
@@ -378,32 +483,42 @@ export class SdkRuntime implements BridgeRuntime {
           pending.push(use.id);
           blocks.push({ type: "tool_use", id: use.id, name: original, input: use.input as never });
         }
-        if (extracted.length > 0) {
+        if (droidUses.length > 0) {
+          const text = live.streamed.trim();
+          const content: ContentBlock[] = text
+            ? [{ type: "text", text }, ...blocks]
+            : [...blocks];
           this.publish(live, {
-            response: assistantMessage(input.request.model, [...blocks], "tool_use", estimatedUsage(input.request, 48)),
+            response: assistantMessage(input.request.model, content, "tool_use", this.turnUsage(live, input)),
             pendingToolIds: [...pending],
             events: [...live.events],
-            notes: ["sdk: returned tool_use while query remains alive"],
+            notes: ["sdk: droid MCP tool_use; Claude Code built-ins already executed"],
           });
           blocks.length = 0;
           pending.length = 0;
+          live.streamed = "";
           continue;
         }
 
         const text = extractText(message);
-        if (text && message.type === "assistant") {
+        if (text && message.type === "assistant" && !live.streamed.includes(text)) {
           blocks.push({ type: "text", text });
+          if (!live.streamed) live.sink?.textDelta(text);
         }
         if (message.type === "result") {
-          const finalBlocks = blocks.length
-            ? [...blocks]
-            : [{ type: "text" as const, text: text || extractText(message) || "sdk result" }];
+          const streamed = live.streamed.trim();
+          const finalBlocks = streamed
+            ? [{ type: "text" as const, text: streamed }]
+            : blocks.length
+              ? [...blocks]
+              : [{ type: "text" as const, text: text || extractText(message) || "sdk result" }];
           this.publish(live, {
-            response: assistantMessage(input.request.model, finalBlocks, "end_turn", estimatedUsage(input.request, 48)),
+            response: assistantMessage(input.request.model, finalBlocks, "end_turn", this.turnUsage(live, input)),
             pendingToolIds: [],
             events: [...live.events],
           });
           blocks.length = 0;
+          live.streamed = "";
         }
       }
     } catch (error) {
@@ -413,13 +528,54 @@ export class SdkRuntime implements BridgeRuntime {
       return;
     }
 
-    if (live.waiters.length > 0 && blocks.length > 0) {
+    if (live.waiters.length > 0 && (blocks.length > 0 || live.streamed)) {
+      const content: ContentBlock[] = live.streamed.trim()
+        ? [{ type: "text", text: live.streamed.trim() }]
+        : blocks;
       this.publish(live, {
-        response: assistantMessage(input.request.model, blocks, "end_turn", estimatedUsage(input.request, 48)),
+        response: assistantMessage(input.request.model, content, "end_turn", this.turnUsage(live, input)),
         pendingToolIds: pending,
         events: [...live.events],
       });
     }
+  }
+
+  private noteUsage(live: LiveSdk, input: RuntimeRequest, message: Record<string, unknown>): void {
+    const extracted = extractUsage(message);
+    if (!extracted) return;
+    const delta = subtractUsage(extracted, live.lastUsage);
+    live.lastUsage = extracted;
+    if (
+      delta.input_tokens === 0
+      && delta.output_tokens === 0
+      && delta.cache_creation_input_tokens === 0
+      && delta.cache_read_input_tokens === 0
+    ) {
+      return;
+    }
+    const usage = toResponseUsage(delta, false);
+    live.sink?.usage?.(usage);
+    writeUsageLine(this.usageFile, {
+      ...delta,
+      sessionId: input.session.bridgeSessionId,
+      role: input.role,
+      model: this.selection?.provider.model ?? process.env.ANTHROPIC_MODEL,
+      provider: this.selection?.provider.id ?? this.config.authMode,
+    });
+    this.logger.info("usage", {
+      ...delta,
+      cache_hit_ratio: Number(cacheHitRatio(delta).toFixed(4)),
+      sessionId: input.session.bridgeSessionId,
+      role: input.role,
+    });
+    live.events.push({ at: now(), type: "usage", data: { ...delta, cache_hit_ratio: cacheHitRatio(delta) } });
+  }
+
+  private turnUsage(live: LiveSdk, input: RuntimeRequest): Usage {
+    if (live.lastUsage.input_tokens || live.lastUsage.output_tokens) {
+      return toResponseUsage(live.lastUsage, false);
+    }
+    return estimatedUsage(input.request, Math.max(live.streamed.length, 48));
   }
 
   private publish(live: LiveSdk, turn: RuntimeTurn): void {
@@ -471,40 +627,26 @@ export class SdkRuntime implements BridgeRuntime {
   private live(sessionId: string): LiveSdk {
     let live = this.lives.get(sessionId);
     if (!live) {
-      live = { mailbox: new ToolMailbox(), events: [], cancelled: false, started: false, waiters: [] };
+      live = {
+        mailbox: new ToolMailbox(),
+        events: [],
+        cancelled: false,
+        started: false,
+        waiters: [],
+        advertised: [],
+        lastUsage: emptyUsage(),
+        streamed: "",
+      };
       this.lives.set(sessionId, live);
     }
     return live;
   }
 }
 
-function buildPrompt(input: RuntimeRequest): string {
-  const user = lastUserText(input.request.messages);
-  const results = collectToolResults(input.request.messages);
-  const resultText = results
-    .map((result) => {
-      const body = typeof result.content === "string" ? result.content : textFromBlocks(result.content);
-      return `${result.tool_use_id}: ${body}`;
-    })
-    .join("\n");
-  const role = input.role === "unknown" ? "" : `Role tag: ${input.role}.`;
-  return [role, user, resultText ? `Prior tool results:\n${resultText}` : ""]
-    .filter(Boolean)
-    .join("\n\n");
-}
-
-function buildSystemPrompt(input: RuntimeRequest): string {
-  return [
-    "You are running inside Relay Bridge.",
-    "Claude Code built-in file tools are disabled. Use only the provided Droid MCP tools.",
-    "Never invent a tool name that is not in the current tool list.",
-    input.role !== "unknown" ? `Your Droid role is ${input.role}.` : "",
-    roleAppendix(input.role),
-    orchestratorAppendix(input.role, input.request.tools),
-    systemText(input.request.system),
-  ]
-    .filter(Boolean)
-    .join("\n");
+function resolveCwd(input: RuntimeRequest, config: BridgeConfig): string {
+  const header = input.headers["x-bridge-cwd"];
+  const fromHeader = Array.isArray(header) ? header[0] : header;
+  return process.env.BRIDGE_SDK_CWD || fromHeader || config.sdkCwd;
 }
 
 function extractToolUses(message: Record<string, unknown>): Array<{ id: string; name: string; input: unknown }> {
@@ -530,6 +672,14 @@ function extractText(message: Record<string, unknown>): string {
       return block.type === "text" ? block.text ?? "" : "";
     })
     .join("");
+}
+
+function streamTextDelta(message: Record<string, unknown>): string {
+  const event = message.event as { type?: string; delta?: { type?: string; text?: string } } | undefined;
+  if (event?.type === "content_block_delta" && event.delta?.type === "text_delta") {
+    return event.delta.text ?? "";
+  }
+  return "";
 }
 
 function extractCallId(extra: unknown): string | undefined {

@@ -20,6 +20,8 @@ export interface BridgeConfig {
   claudeExecutable?: string;
   sdkCwd: string;
   persistSessions: boolean;
+  authMode: "byok" | "subscription";
+  permissionMode: "bypass" | "ask";
   upstreamBaseUrl?: string;
   upstreamModel?: string;
   upstreamTokenEnv?: string;
@@ -49,6 +51,15 @@ export function loadConfig(overrides: Partial<BridgeConfig> = {}): BridgeConfig 
   if (!["mock", "fake", "sdk"].includes(mode)) {
     throw new Error(`Invalid BRIDGE_MODE=${mode}. Use mock | fake | sdk.`);
   }
+  const authMode = (overrides.authMode ?? (env("BRIDGE_AUTH", "byok") === "subscription" ? "subscription" : "byok")) as
+    | "byok"
+    | "subscription";
+  const permissionRaw = overrides.permissionMode ?? env("BRIDGE_PERMISSION");
+  const permissionMode = (permissionRaw === "ask" || permissionRaw === "bypass"
+    ? permissionRaw
+    : authMode === "subscription"
+      ? "ask"
+      : "bypass") as "bypass" | "ask";
 
   return {
     host: overrides.host ?? env("BRIDGE_HOST", "127.0.0.1")!,
@@ -67,6 +78,8 @@ export function loadConfig(overrides: Partial<BridgeConfig> = {}): BridgeConfig 
     claudeExecutable: overrides.claudeExecutable ?? env("BRIDGE_CLAUDE_EXECUTABLE"),
     sdkCwd: overrides.sdkCwd ?? env("BRIDGE_SDK_CWD", resolve(dataDir, "sandbox"))!,
     persistSessions: overrides.persistSessions ?? env("BRIDGE_PERSIST", "1") !== "0",
+    authMode,
+    permissionMode,
     upstreamBaseUrl: overrides.upstreamBaseUrl ?? env("BRIDGE_UPSTREAM_BASE_URL"),
     upstreamModel: overrides.upstreamModel ?? env("BRIDGE_UPSTREAM_MODEL"),
     upstreamTokenEnv: overrides.upstreamTokenEnv ?? env("BRIDGE_UPSTREAM_TOKEN_ENV"),

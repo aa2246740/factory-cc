@@ -15,6 +15,12 @@ export interface RuntimeTurn {
   notes?: string[];
 }
 
+export interface StreamSink {
+  textDelta(text: string): void;
+  toolTrace(name: string, detail: string): void;
+  usage?(usage: import("../types.js").Usage): void;
+}
+
 export interface RuntimeEvent {
   at: string;
   type: string;
@@ -23,7 +29,7 @@ export interface RuntimeEvent {
 
 export interface BridgeRuntime {
   readonly kind: "mock" | "fake" | "sdk";
-  handle(input: RuntimeRequest): Promise<RuntimeTurn>;
+  handle(input: RuntimeRequest, sink?: StreamSink): Promise<RuntimeTurn>;
   cancel(sessionId: string, reason: string): Promise<void>;
   deliverResults(
     sessionId: string,
