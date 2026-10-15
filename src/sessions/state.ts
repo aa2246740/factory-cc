@@ -3,11 +3,21 @@ import type { RoleTag, SessionState } from "../types.js";
 export interface SessionRecord {
   bridgeSessionId: string;
   droidSessionId?: string;
+  factorySessionId?: string;
+  factoryCwd?: string;
   sdkSessionId?: string;
+  /** Persist replay safety independently of process-local callback state. */
+  hostEnded?: "resumable" | "terminal" | "interrupted";
   role: RoleTag;
   state: SessionState;
   model: string;
   historyHash?: string;
+  /** Stable execution configuration, excluding dynamic host context and tools. */
+  contextHash?: string;
+  /** Message fingerprints of the request currently being handled. */
+  requestMessageHashes?: string[];
+  /** Completed client-visible transcript, including the assistant response. */
+  historyMessageHashes?: string[];
   toolNames: string[];
   createdAt: string;
   updatedAt: string;
@@ -25,7 +35,7 @@ export function transition(record: SessionRecord, next: SessionState): SessionRe
   const allowed: Record<SessionState, SessionState[]> = {
     NEW: ["GENERATING", "CANCELLED", "FAILED"],
     GENERATING: ["WAITING_DROID_TOOL", "IDLE", "CANCELLED", "FAILED"],
-    WAITING_DROID_TOOL: ["RESUMING", "CANCELLED", "FAILED"],
+    WAITING_DROID_TOOL: ["RESUMING", "IDLE", "CANCELLED", "FAILED"],
     RESUMING: ["GENERATING", "WAITING_DROID_TOOL", "IDLE", "CANCELLED", "FAILED"],
     IDLE: ["GENERATING", "CANCELLED", "FAILED"],
     CANCELLED: [],

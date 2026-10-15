@@ -32,7 +32,7 @@ describe("usage / cache", () => {
     expect(fromModels?.cache_read_input_tokens).toBe(8);
   });
 
-  it("differences cumulative totals into per-request rows", () => {
+  it("differences snapshots of the same cumulative counter without treating log rows as model requests", () => {
     const delta = subtractUsage(
       { input_tokens: 30, output_tokens: 9, cache_creation_input_tokens: 5, cache_read_input_tokens: 20 },
       { input_tokens: 10, output_tokens: 3, cache_creation_input_tokens: 5, cache_read_input_tokens: 4 },
@@ -44,7 +44,11 @@ describe("usage / cache", () => {
       cache_read_input_tokens: 16,
     });
     const summary = summarizeUsage([delta, delta]);
-    expect(summary.requests).toBe(2);
+    expect(summary.requests).toBe(0);
+    expect(summary.requestCountKnown).toBe(false);
+    expect(summary.status).toBe("unknown");
+    expect(summary.source).toBe("legacy_unscoped");
+    expect(summary.cache_hit_ratio).toBeNull();
     expect(summary.cache_read_input_tokens).toBe(32);
   });
 });

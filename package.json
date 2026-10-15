@@ -16,6 +16,8 @@
     "dev": "tsx watch src/index.ts",
     "doctor": "tsx scripts/doctor.ts",
     "configure-droid": "tsx scripts/configure-droid.ts",
+    "control": "tsx scripts/control.ts",
+    "configure-hooks": "tsx scripts/configure-hooks.ts",
     "run-droid": "tsx scripts/run-droid.ts",
     "test": "vitest run",
     "test:unit": "vitest run tests/unit",

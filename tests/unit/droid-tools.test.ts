@@ -29,4 +29,12 @@ describe("droid tool split", () => {
     expect(mapPermissionToDroidTool("Write", ["Create", "Edit"])).toBe("Create");
     expect(mapPermissionToDroidTool("Edit", ["Read"])).toBeUndefined();
   });
+
+  it("keeps Factory registries and discovered plugins distinct from native tools with matching names", () => {
+    const names = ["Read", "Create", "Execute", "Skill", "Task", "TaskOutput", "TaskStop", "ToolSearch", "ExitSpecMode", "Loop", "MCP:example/query"];
+    const selected = selectDroidMcpTools(names.map((name) => ({ name, input_schema: { type: "object", properties: {} } })));
+    expect(selected.map(({ name }) => name)).toEqual(names.slice(3));
+    expect(isDroidExclusive("Skill")).toBe(true);
+    expect(isDroidExclusive("Loop")).toBe(true);
+  });
 });

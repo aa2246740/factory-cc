@@ -1,5 +1,5 @@
-import { copyFileSync, existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { basename, dirname, join } from "node:path";
+import { constants, copyFileSync, lstatSync, readdirSync, readFileSync } from "node:fs";
+import { basename, join, resolve } from "node:path";
 import type { Json, RoleTag, ToolDefinition } from "../types.js";
 
 export const MISSION_SPAWN_TOOLS = ["StartMissionRun", "ProposeMission", "Task"] as const;
@@ -14,7 +14,10 @@ export function findMissionSpawnTool(tools: ToolDefinition[] | undefined): ToolD
 }
 
 export function isMissionOrchestratorRequest(role: RoleTag, tools: ToolDefinition[] | undefined): boolean {
-  return Boolean(findMissionSpawnTool(tools) || role === "orchestrator");
+  // This is only a no-host-context fallback. Model role headers can be inherited
+  // by ordinary Task subagents, so an orchestrator tag alone is insufficient.
+  if (role !== "unknown" && role !== "orchestrator") return false;
+  return Boolean(tools?.some((tool) => tool.name === "StartMissionRun" || tool.name === "ProposeMission"));
 }
 
 export function spawnToolInput(tool: ToolDefinition, userText: string): Record<string, Json> {
@@ -57,12 +60,12 @@ const ARTIFACT_MARKERS: Array<{ note: string; pattern: RegExp }> = [
   { note: "artifact:SKILL.md", pattern: /SKILL\.md has been (created|updated) successfully/i },
 ];
 
-const REQUIRED_START_ARTIFACTS = [
-  "artifact:features.json",
-  "artifact:validation-contract.md",
-  "artifact:validation-state.json",
-  "artifact:AGENTS.md",
-  "artifact:services.yaml",
+const REQUIRED_START_FILES = [
+  "features.json",
+  "validation-contract.md",
+  "validation-state.json",
+  "AGENTS.md",
+  "services.yaml",
 ];
 
 export function noteMissionArtifacts(sessionNotes: string[], blob: string): void {
@@ -73,123 +76,92 @@ export function noteMissionArtifacts(sessionNotes: string[], blob: string): void
   }
 }
 
-export function findMissionDir(droidHome?: string): string | undefined {
-  if (!droidHome) return undefined;
-  const root = join(droidHome, ".factory/missions");
-  if (!existsSync(root)) return undefined;
-  let fallback: string | undefined;
-  for (const name of readdirSync(root)) {
-    const dir = join(root, name);
-    if (!statSync(dir).isDirectory()) continue;
-    fallback ??= dir;
-    const required = [
-      "features.json",
-      "validation-contract.md",
-      "validation-state.json",
-      "AGENTS.md",
-      "services.yaml",
-    ];
-    if (required.every((file) => existsSync(join(dir, file)))) return dir;
+/** Fixture discovery only. Production requests must supply their own mission directory. */
+export function findMissionDir(droidHome?: string, explicitMissionDir?: string): string | undefined {
+  if (explicitMissionDir) {
+    const dir = resolve(explicitMissionDir);
+    return completeMissionDir(dir) ? dir : undefined;
   }
-  return fallback;
-}
-
-export function missionDirReady(droidHome?: string): boolean {
-  const dir = findMissionDir(droidHome);
-  if (!dir) return false;
-  const skills = join(dir, "skills");
-  return existsSync(skills) && skillMarkdownExists(skills);
-}
-
-const FACTORY_ARTIFACTS = new Set(["validation-state.json", "features.json"]);
-
-export function syncFactoryArtifact(sourcePath: string, missionDir?: string): boolean {
-  if (!missionDir || !existsSync(sourcePath)) return false;
-  const base = basename(sourcePath);
-  if (!FACTORY_ARTIFACTS.has(base)) return false;
+  if (!droidHome) return undefined;
   try {
-    const raw = JSON.parse(readFileSync(sourcePath, "utf8")) as Record<string, unknown>;
-    if (base === "validation-state.json" && !raw.assertions) return false;
-    if (base === "features.json" && !Array.isArray(raw.features)) return false;
-    const dest = join(missionDir, base);
-    copyFileSync(sourcePath, dest);
-    return existsSync(dest);
+    const root = join(droidHome, ".factory/missions");
+    const candidates = readdirSync(root)
+      .map((name) => join(root, name))
+      .filter((dir) => lstatSync(dir).isDirectory());
+    // An old complete mission beside a new incomplete one is still ambiguous.
+    if (candidates.length !== 1) return undefined;
+    return completeMissionDir(candidates[0]!) ? candidates[0] : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export function missionDirReady(droidHome?: string, explicitMissionDir?: string): boolean {
+  return findMissionDir(droidHome, explicitMissionDir) !== undefined;
+}
+
+function completeMissionDir(dir: string): boolean {
+  try {
+    return lstatSync(dir).isDirectory()
+      && REQUIRED_START_FILES.every((file) => lstatSync(join(dir, file)).isFile())
+      && skillMarkdownExists(join(dir, "skills"));
   } catch {
     return false;
   }
 }
 
-export function pathFromToolInput(input: unknown): string | undefined {
-  return candidateArtifactPaths(input)[0];
-}
+const FACTORY_ARTIFACTS = new Set(["validation-state.json", "features.json"]);
 
-export function candidateArtifactPaths(input: unknown, cwd?: string): string[] {
-  const out = new Set<string>();
-  if (input && typeof input === "object") {
-    const rec = input as Record<string, unknown>;
-    for (const key of ["file_path", "path", "filePath"]) {
-      if (typeof rec[key] === "string" && rec[key]) out.add(rec[key] as string);
-    }
-    const command = typeof rec.command === "string" ? rec.command : "";
-    for (const match of command.match(/(?:\/[\w.+\-/@]+)+(?:validation-state|features)\.json/g) ?? []) {
-      out.add(match);
-    }
+/** Explicit fixture import only; never infer a source or destination from model output. */
+export function syncFactoryArtifact(sourcePath: string, missionDir?: string): boolean {
+  if (!missionDir) return false;
+  const base = basename(sourcePath);
+  if (!FACTORY_ARTIFACTS.has(base)) return false;
+  try {
+    if (!lstatSync(sourcePath).isFile() || !lstatSync(missionDir).isDirectory()) return false;
+    const raw = JSON.parse(readFileSync(sourcePath, "utf8")) as Record<string, unknown>;
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return false;
+    if (base === "validation-state.json"
+      && (!raw.assertions || typeof raw.assertions !== "object" || Array.isArray(raw.assertions))) return false;
+    if (base === "features.json" && !Array.isArray(raw.features)) return false;
+    const dest = join(missionDir, base);
+    // A fixture import may create a missing ledger, never replace a current one.
+    // COPYFILE_EXCL also protects against a destination created between checks.
+    copyFileSync(sourcePath, dest, constants.COPYFILE_EXCL);
+    return true;
+  } catch {
+    return false;
   }
-  if (cwd) {
-    for (const name of FACTORY_ARTIFACTS) out.add(join(cwd, name));
-  }
-  return [...out];
-}
-
-export function harvestFactoryArtifacts(cwd?: string, missionDir?: string): string[] {
-  if (!cwd || !missionDir) return [];
-  const copied: string[] = [];
-  for (const name of FACTORY_ARTIFACTS) {
-    const source = join(cwd, name);
-    if (syncFactoryArtifact(source, missionDir)) copied.push(source);
-  }
-  return copied;
-}
-
-/** Copy assertion-shaped Factory files after Claude Code Write/Edit/Bash. */
-export function syncFactoryArtifactsFromTool(input: unknown, cwd?: string, missionDir?: string): string[] {
-  if (!missionDir) return [];
-  const copied = new Set<string>();
-  for (const source of candidateArtifactPaths(input, cwd)) {
-    if (syncFactoryArtifact(source, missionDir)) copied.add(source);
-    for (const extra of harvestFactoryArtifacts(dirname(source), missionDir)) copied.add(extra);
-  }
-  for (const extra of harvestFactoryArtifacts(cwd, missionDir)) copied.add(extra);
-  return [...copied];
 }
 
 function skillMarkdownExists(dir: string): boolean {
+  if (!lstatSync(dir).isDirectory()) return false;
   for (const name of readdirSync(dir)) {
     const full = join(dir, name);
-    if (statSync(full).isDirectory() && skillMarkdownExists(full)) return true;
-    if (name === "SKILL.md") return true;
+    const entry = lstatSync(full);
+    if (entry.isDirectory() && skillMarkdownExists(full)) return true;
+    if (entry.isFile() && name === "SKILL.md") return true;
   }
   return false;
 }
 
+/** Deterministic fixture helper; SDK runtime must obtain real tool calls from Claude Code. */
 export function maybeForceStartWhenReady(
   sessionNotes: string[],
   tools: ToolDefinition[] | undefined,
   blob: string,
   droidHome?: string,
+  explicitMissionDir?: string,
 ): { name: string; input: Record<string, Json> } | undefined {
   noteMissionArtifacts(sessionNotes, blob);
-  if (missionDirReady(droidHome)) {
-    for (const note of [...REQUIRED_START_ARTIFACTS, "artifact:SKILL.md"]) {
-      if (!sessionNotes.includes(note)) sessionNotes.push(note);
-    }
+  // Tool-result text and old notes cannot prove that the current files exist.
+  if (!missionDirReady(droidHome, explicitMissionDir)) return undefined;
+  for (const file of [...REQUIRED_START_FILES, "SKILL.md"]) {
+    const note = `artifact:${file}`;
+    if (!sessionNotes.includes(note)) sessionNotes.push(note);
   }
   if (!tools?.some((tool) => tool.name === "StartMissionRun")) return undefined;
   if (sessionNotes.includes("mission-run-started")) return undefined;
-  if (/must exist with at least one feature before starting/i.test(blob) && !sessionNotes.includes("artifact:features.json")) {
-    return undefined;
-  }
-  if (!REQUIRED_START_ARTIFACTS.every((note) => sessionNotes.includes(note))) return undefined;
   sessionNotes.push("mission-run-started");
   sessionNotes.push("mission-spawned");
   return {
@@ -202,14 +174,14 @@ export function orchestratorAppendix(role: RoleTag, tools: ToolDefinition[] | un
   if (!isMissionOrchestratorRequest(role, tools)) return "";
   const names = (tools ?? [])
     .map((tool) => tool.name)
-    .filter((name) => MISSION_SPAWN_TOOLS.includes(name as (typeof MISSION_SPAWN_TOOLS)[number]));
+    .filter((name) => name === "StartMissionRun" || name === "ProposeMission" || name === "DismissHandoffItems");
   return [
     "You are the Droid Mission orchestrator talking through Relay Bridge.",
-    "Do not implement application code yourself. Do not finish with a plain-text plan.",
-    "Write the required mission files with Claude Code built-in Write/Edit: features.json, validation-contract.md, validation-state.json, AGENTS.md, services.yaml, and skills/<name>/SKILL.md.",
-    "Only after those files exist, call the Droid MCP tool StartMissionRun so Factory can spawn Worker and Validator sessions.",
-    `Available Droid mission tools: ${names.join(", ") || "StartMissionRun"}.`,
-    "Never claim workers already ran unless StartMissionRun succeeded.",
+    "Follow the current Droid host context, activated skills, and user instructions for the Mission workflow, required artifacts, and approval gates.",
+    "Use the current mission directory supplied in that context or an explicit workspace binding. If it is missing or conflicting, report the missing context instead of choosing another mission.",
+    `Advertised Factory Mission controls: ${names.join(", ")}.`,
+    "When the workflow requires a Factory action, call its advertised Droid MCP tool and wait for the result. Report a required capability that is unavailable.",
+    "Only report Mission or worker progress supported by actual tool results and current task evidence.",
   ].join(" ");
 }
 
@@ -218,7 +190,7 @@ export function roleAppendix(role: RoleTag): string {
     return "You are the Droid Mission worker. Use Claude Code built-in tools to implement the change. Call Droid MCP tools only for Factory-specific actions such as EndFeatureRun.";
   }
   if (role === "validator") {
-    return "You are the Droid Mission validator. Use Claude Code built-in tools to inspect the workspace and run checks. Write Factory validation-state.json with an assertions object (VAL-FILTER-001 and VAL-COUNTS-001) into the Factory mission directory from the workspace appendix, not a leftover /tmp folder, then call the Droid MCP tool EndFeatureRun.";
+    return "You are the Droid Mission validator. Use Claude Code built-in tools to inspect the workspace and run checks. Read the current mission's validation-contract.md and validation-state.json. Record evidence and results against that contract's assertion identifiers while preserving existing results. Write validation-state.json only into the explicitly selected Factory mission directory, then call the Droid MCP tool EndFeatureRun. If the current mission directory or contract is unavailable, report the missing context instead of guessing.";
   }
   if (role === "chat") {
     return "You are answering a Droid chat turn. Prefer a short direct answer. Use Claude Code built-in tools only when the user asks to read or inspect files.";

@@ -34,6 +34,7 @@ export function statusPageHtml(opts: {
 <body>
   <main>
     <h1>Relay Bridge</h1>
+    <p><a href="/control">打开原生工具审批与会话控制</a></p>
     <p>本机 Anthropic Messages 兼容入口，按 T3 Code 方式接入官方 Claude Agent SDK：<code>systemPrompt</code> 用 <code>claude_code</code> 预设再追加 Droid 说明；Claude Code 自己执行 Read/Edit/Bash；只有 Mission 等 Droid 专有工具走 MCP。本环境默认 BYOK（MiniMax / GLM），<code>BRIDGE_AUTH=subscription</code> 不改写 <code>ANTHROPIC_*</code>。</p>
     <div class="grid">
       <div class="card"><div class="label">Health</div><div class="value ${opts.healthy ? "ok" : "warn"}">${opts.healthy ? "ok" : "down"}</div></div>

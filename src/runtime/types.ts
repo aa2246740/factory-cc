@@ -11,6 +11,10 @@ export interface RuntimeRequest {
 export interface RuntimeTurn {
   response: MessagesResponse;
   pendingToolIds: string[];
+  /** Official SDK session identity, used only with the SDK's resume option. */
+  sdkSessionId?: string;
+  compactMetadata?: Record<string, unknown>;
+  sdkBillingUsage?: Record<string, unknown>;
   events?: RuntimeEvent[];
   notes?: string[];
 }
@@ -27,6 +31,51 @@ export interface RuntimeEvent {
   data?: Record<string, unknown>;
 }
 
+export type RuntimePermissionDecision =
+  | { behavior: "allow"; updatedInput?: Record<string, unknown> }
+  | { behavior: "deny"; message: string };
+
+/** A live native callback. The controller must not persist/replay its authority. */
+export interface RuntimeApprovalRequest {
+  bridgeSessionId: string;
+  sdkSessionId?: string;
+  toolName: string;
+  input: Record<string, unknown>;
+  toolUseId?: string;
+  requestId?: string;
+  agentId?: string;
+  title?: string;
+  description?: string;
+  decisionReason?: string;
+  blockedPath?: string;
+  defaultToNo?: boolean;
+  suppressAlwaysAllowRule?: boolean;
+  signal: AbortSignal;
+}
+
+export interface RuntimeControl {
+  requestApproval(request: RuntimeApprovalRequest): Promise<RuntimePermissionDecision>;
+}
+
+export interface RuntimeHostCall {
+  toolUseId: string;
+  toolName: string;
+  input: unknown;
+}
+
+export interface RuntimeHostCompletion extends RuntimeHostCall {
+  content: string | ContentBlock[];
+  isError?: boolean;
+  /** Only set after the host confirms this tool really terminated its session. */
+  terminal?: boolean;
+}
+
+export interface RuntimeHostEnd {
+  /** True only when a persisted native checkpoint has no unresolved host work. */
+  resumable: boolean;
+  sdkSessionId?: string;
+}
+
 export interface BridgeRuntime {
   readonly kind: "mock" | "fake" | "sdk";
   handle(input: RuntimeRequest, sink?: StreamSink): Promise<RuntimeTurn>;
@@ -35,5 +84,10 @@ export interface BridgeRuntime {
     sessionId: string,
     results: Array<{ tool_use_id: string; content: string | ContentBlock[]; is_error?: boolean }>,
   ): Promise<Array<"accepted" | "duplicate">>;
+  setControl?(control: RuntimeControl | undefined): void;
+  pendingHostCalls?(sessionId: string): RuntimeHostCall[];
+  completeHostTool?(sessionId: string, completion: RuntimeHostCompletion): Promise<"accepted" | "duplicate">;
+  endHostSession?(sessionId: string, reason: string): Promise<RuntimeHostEnd>;
   describe?(): Record<string, unknown>;
+  close?(): Promise<void>;
 }

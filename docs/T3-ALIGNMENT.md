@@ -1,45 +1,93 @@
 # T3-style Relay Bridge
 
-Cola chose T3 Code’s approach: keep Claude Code looking like Claude Code (most stable, least detectable), and only bolt Factory Droid on the side.
+Relay Bridge borrows T3's integration structure: use the official Agent SDK and unmodified Claude Code, preserve Claude Code's native prompt and tools, and expose host-specific actions through MCP. The purpose is compatibility and maintainability. This architecture does not establish official support, authorization, or any guarantee about account enforcement.
 
-## What the previous code did
+## What the T3 source establishes
 
-`SdkRuntime.startQuery` **replaced** the system prompt and **disabled** built-in tools:
+The comparison is pinned to T3 commit `339179f50a84dc599cce373dbb48f172f182f44e`:
 
-- `systemPrompt: { type: "custom", prompt: buildSystemPrompt(...) }` — a full replace. Claude Code’s default `claude_code` prompt was not used.
-- The custom string started with “You are running inside Relay Bridge” and “Claude Code built-in file tools are disabled.”
-- Droid `system`, role, and Mission appendix were mixed into that same custom string (dynamic prefix → poor cache).
-- `tools: []` removed Read / Edit / Bash / Grep / Glob. Every Droid tool was registered as MCP and parked on the mailbox. Claude Code never executed file or shell tools itself.
-- `includePartialMessages: false`. HTTP SSE dumped the finished message in one shot (`writeMessageSse`).
-- `canUseTool` always returned `allow`.
-- `sdkEnv` always overwrote `ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN`, and emptied `ANTHROPIC_API_KEY`.
+| Boundary | Pinned source | Application here |
+|---|---|---|
+| Native session | [Streaming input queue and official query](https://github.com/pingdotgg/t3code/blob/339179f50a84dc599cce373dbb48f172f182f44e/apps/server/src/orchestration-v2/Adapters/ClaudeAdapterV2.ts#L731-L794) | Keep Claude Code's live conversation; an HTTP tool handoff is not the end of its query. |
+| Native prompt/tools | [Query options and preset append](https://github.com/pingdotgg/t3code/blob/339179f50a84dc599cce373dbb48f172f182f44e/apps/server/src/orchestration-v2/Adapters/ClaudeAdapterV2.ts#L1117-L1177) | Use the official preset and an explicit host appendix, without rebuilding Claude's internal prompt. |
+| External orchestration | [T3-owned orchestration operations](https://github.com/pingdotgg/t3code/blob/339179f50a84dc599cce373dbb48f172f182f44e/docs/orchestration-v2/orchestrator-mcp-server.md#L5-L17) and [namespaced MCP registration](https://github.com/pingdotgg/t3code/blob/339179f50a84dc599cce373dbb48f172f182f44e/apps/server/src/orchestration-v2/Adapters/ClaudeAdapterV2.ts#L1223-L1249) | Factory orchestration, skills, task IDs and plugin operations retain Factory ownership behind `mcp__droid__*`. They are not native Claude subagent operations merely because names overlap. |
+| Native skills | [Claude skill discovery](https://github.com/pingdotgg/t3code/blob/339179f50a84dc599cce373dbb48f172f182f44e/apps/server/src/provider/Drivers/ClaudeSkills.ts#L1-L11) and [skill dispatch](https://github.com/pingdotgg/t3code/blob/339179f50a84dc599cce373dbb48f172f182f44e/apps/server/src/provider/Drivers/ClaudeSkillDispatch.ts#L43-L78) | T3 discovers Claude-native skills and turns known `$skill` mentions into native slash invocations. It does not translate Factory skills/custom droids. Bridge preserves native slash-command placement; Factory skills execute through Droid's MCP Skill tool. |
 
-## What it does now
+T3 also has an application event store, projections, command receipts and transactional outbox described in its [architecture](https://github.com/pingdotgg/t3code/blob/339179f50a84dc599cce373dbb48f172f182f44e/AGENTS.md#L137-L141). Bridge's in-memory mailbox and response queue do not reproduce that durable orchestration system or its recovery guarantees.
 
-| Lever | T3-style behavior |
+## Current integration
+
+| Part | Behavior |
 |---|---|
-| System prompt | `{ type: "preset", preset: "claude_code", append: STABLE_DROID_APPEND, snapshot: true, excludeDynamicSections: true }` |
-| Tools | `{ type: "preset", preset: "claude_code" }` — Claude Code runs Read/Edit/Write/Bash/Glob/Grep itself |
-| Droid tools | MCP server `droid` exposes **only** Factory-exclusive names: `StartMissionRun`, `ProposeMission`, `EndFeatureRun`, `DismissHandoffItems`, `TaskOutput`, `TaskStop` |
-| Droid UI | Claude Code built-in calls are traced as live assistant text (`[Read] path`). Exclusive tools still return native `tool_use` so Droid executes them |
-| Permissions | `BRIDGE_PERMISSION=ask` maps write/shell `canUseTool` onto an advertised Droid tool when one exists. BYOK e2e uses `bypass` |
-| Streaming | `includePartialMessages: true`; token deltas go out as Anthropic SSE `content_block_delta` while the HTTP request is still open |
-| Auth | `BRIDGE_AUTH=subscription` does **not** set or overwrite `ANTHROPIC_BASE_URL` / `AUTH_TOKEN` / `API_KEY` (Cola’s Mac login). Default `byok` keeps MiniMax/GLM injection |
-| Cache | Stable append only. Role, user text, and Droid `system` sit at the **end** of the user prompt. Each SDK result logs `cache_creation_input_tokens` and `cache_read_input_tokens` |
+| Query lifetime | One streaming-input `query({ prompt: AsyncIterable, options })` per live session. New user turns enter the same input queue; an HTTP response ending does not end the SDK query. |
+| System prompt | Only `{ type: "preset", preset: "claude_code", append: STABLE_DROID_APPEND }`. Prompt recording and dynamic-section handling follow the installed CLI's defaults; the adapter does not explicitly set `snapshot` or `excludeDynamicSections`. |
+| Host context | Nonempty Droid system text is preserved as the host's role/skill/workflow instructions in user input, without header-derived role appendices. Workspace context is added separately. Earlier native messages are retained, not rebuilt on each turn. |
+| Native tools | Keep `tools: { type: "preset", preset: "claude_code" }`. Only concrete file/shell equivalents in Droid's catalog are covered by native execution: Read/Edit/Write/Create/LS/Grep/Glob/Execute/Bash/MultiEdit/NotebookEdit. |
+| Droid MCP | Every other advertised host tool is registered under `mcp__droid__*`, including Factory Skill/Task/ToolSearch/ExitSpecMode, Mission controls and unknown plugin tools. Factory skill definitions and task IDs remain separate from native Claude Skill/Agent. |
+| Dynamic catalog | Retain the same SDK MCP server instance, update registrations, send `tools/list_changed`, and confirm expected tool names through `mcpServerStatus` before resuming the waiting callback. Real BYOK hot-add succeeded on the first continuation. Status lacks schema versions, so immediate visibility of a same-name schema change is not established; the server validates the new schema. |
+| Tool round trip | Return the actual host `tool_use` to Droid, keep its MCP callback waiting, and deliver the matching `tool_result` to that callback. Mixed text/base64 images and changed host context are labeled and attached once to the first fresh result, without a separate SDK user turn. Unsupported MCP content, including mixed documents, returns 422 before consuming pending results. |
+| Role | `X-Bridge-Role` is a model-configuration/session tag; actual Factory Task subagents can inherit an orchestrator header. Host instructions take precedence. Only absent host instructions enable role fallback, and orchestrator guidance additionally requires real Mission controls. |
+| Permissions | Default `ask`: native `canUseTool` waits on a live Deferred controlled by authenticated local UI/CLI. A once-only allow/deny decision does not execute a Droid tool. Expiry, cancellation and old generations deny. Explicit `BRIDGE_PERMISSION=bypass` remains available. |
+| Authentication | BYOK injects the selected Anthropic-compatible endpoint and token, and isolates `CLAUDE_CONFIG_DIR`. Subscription mode leaves the host's `ANTHROPIC_*` and Claude config alone; no real subscription was exercised in this validation. |
+| Recovery | Persist the SDK session ID and use native `resume` after restart or bounded idle-process eviction. Pending MCP callbacks cannot survive a process restart and are rejected with 409. |
+| Mission | Real SDK tool calls drive Mission lifecycle. No forced Mission spawn or automatic copying of ledger files from old workspaces occurs in the SDK runtime. Supply the current mission directory explicitly. |
 
-## Coexistence decision
+Official references: [streaming input](https://platform.claude.com/docs/en/agent-sdk/streaming-vs-single-mode), [sessions and resume](https://platform.claude.com/docs/en/agent-sdk/sessions), [permissions](https://platform.claude.com/docs/en/agent-sdk/permissions), and [dynamic MCP tool updates](https://code.claude.com/docs/en/mcp#dynamic-tool-updates). The installed SDK version is pinned in `package.json`; its public type documentation distinguishes per-turn `result.usage` from cumulative `result.modelUsage`. Tool-list notification alone is not a refresh acknowledgement: Bridge also checks the CLI-visible names before continuation.
 
-1. **Claude Code built-ins win** for anything Claude already has (Read, Edit, Write, Bash, Glob, Grep, Skill, Task). Droid’s `Execute` / `Create` / `LS` are treated as covered; they are not registered as MCP.
-2. **Droid-exclusive MCP** is the only path for Mission lifecycle. Those handlers wait on the mailbox; Droid runs the tool and the next Messages request resumes Claude Code.
-3. **Do not** echo Claude Code built-in calls as Droid `tool_use`. That would make Droid execute the same work again and deadlock the mailbox. Traces in the streamed text are how Droid’s transcript shows them.
-4. **`canUseTool`** surfaces write/shell approval to Droid only when a matching Droid tool is advertised (`Bash`→`Execute`, `Write`→`Create`/`Edit`). Read-only built-ins auto-allow. If nothing maps, Bridge allows and logs `permission_passthrough`.
-5. **Factory artifacts.** Claude Code writes into `BRIDGE_SDK_CWD`. A `PostToolUse` hook (`Write|Edit|Bash`) copies assertion-shaped `validation-state.json` and `features.json` into the current Factory mission directory. Mission dir is looked up when the hook runs, not when the query starts. Dynamic cwd / mission-dir text sits at the **end** of the user prompt.
+Claude Code can allow operations under its native rules without calling `canUseTool`. The adapter's explicit approval applies to operations that actually reach that callback. It does not turn a Droid `Execute` or `Create` tool into an approval dialog. Bypass must be an explicit configuration choice.
 
-## Still different from T3
+## 缓存与压缩验证
 
-- Relay Bridge is still an Anthropic Messages proxy in front of Droid, not T3’s own UI.
-- Mission spawn (`StartMissionRun` synthesis when files exist) is Factory-specific.
-- Cloud tests use MiniMax-M2.5 BYOK, not a Claude subscription. Cache hit numbers from MiniMax are **not** representative of Claude prompt cache.
-- `settingSources` are not forced empty, but BYOK still isolates `CLAUDE_CONFIG_DIR` under the bridge data dir so host `~/.claude` is not read. Subscription mode leaves `CLAUDE_CONFIG_DIR` alone.
-- Droid plugins that are not in the exclusive list never reach Claude Code as MCP tools.
-- Token counting remains HTTP 501.
+2026-10-15, before the latest Factory tool expansion: unmodified Claude Code with GLM-5.2 BYOK was compared with the same SDK path through Bridge. Each path completed three conversational turns and retained a codeword across turns. The raw upstream response fields for turns 2 and 3 were:
+
+| Path | Turn | `input_tokens` | `cache_read_input_tokens` |
+|---|---:|---:|---:|
+| Native SDK / Claude Code | 2 | 211 | 21,056 |
+| Native SDK / Claude Code | 3 | 108 | 21,248 |
+| Bridge / Claude Code | 2 | 74 | 21,248 |
+| Bridge / Claude Code | 3 | 98 | 21,312 |
+
+Within each path, the system hash and tools hash stayed identical over all three turns. Both paths used the same tool schemas; Bridge's stable append at that time added 546 system-prompt characters, so its system hash correctly differed from native. The current append and host-tool surface have since expanded. These measurements demonstrate cache-read activity and stable prefixes in the recorded runs; they are not current dynamic-catalog acceptance or proof that Bridge is cheaper or universally improves cache hit rate. Generated output and conversation lengths differed.
+
+GLM did not send `cache_creation_input_tokens` in the recorded wire responses. Missing is not measured zero. The SDK may normalize it to zero, so Bridge retains `coverage: partial` and does not compute an exact total cache-hit ratio from those responses. SDK `provider: firstParty` is a transport classification, not evidence that GLM is an Anthropic model or officially supported; `costBasis: unknown` and `costUSD` are not the provider's actual bill.
+
+A real Droid continuation test also passed: two `droid exec` invocations, with the second using the first Droid session ID, retained one Bridge session and one native SDK session. Recall succeeded. Claude Code's observed provider-message usage for the second turn was 196 input tokens and 21,120 cache-read tokens. These are Claude Code-side measurements; Droid's own displayed totals were not used for this conclusion.
+
+A separate Bridge run sent native `/compact Preserve codeword`. The SDK reported `compact_boundary` with `trigger: manual`, `pre_tokens: 21543`, and `post_tokens: 1918`; the next turn correctly recalled the codeword. The compact command returned HTTP 200 with empty text and provider-message usage `unknown`, because that summary request was not exposed as ordinary assistant stream usage. The wire recorder observed a real summary request and the separate SDK cumulative usage increased. **Unknown provider usage does not mean zero tokens or zero cost.**
+
+A later [automatic-compaction test](../evidence/auto-compaction-validation-2026-10-15.json) used the documented `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=40` and `CLAUDE_CODE_AUTO_COMPACT_WINDOW=100000` only in an isolated probe. After synthetic conversation growth, the official SDK and native transcript both recorded `trigger: auto`, `pre_tokens: 90038`, `post_tokens: 2245`. No `/compact` request was sent. Two subsequent recall checks passed in the same native session, and the next turn reported 155 input / 17,920 cache-read tokens. This verifies native automatic triggering with a lowered threshold; it does not establish default-threshold production behavior or real Claude subscription billing. All probe sessions closed without runtime errors or pending work.
+
+The [sanitized validation summary](../evidence/native-session-validation-2026-10-15.json) records these measurements and the then-current successful offline/build/type checks. Original wire records remain in the isolated validation workspace. These results are separate from the repository's historical MiniMax evidence and do not validate real Claude subscription behavior or the later host-tool expansion.
+
+Additional live GLM checks exercised a native `Read`, its streamed tool trace, and continuation from the full returned history without an explicit bridge session ID; the same session retained the earlier information. An actual official SDK MCP `TaskOutput` call also completed its `tool_use` / `tool_result` round trip. Its external result was a deterministic local fixture, not a real Factory Mission acceptance run.
+
+## Subsequent Factory host validation
+
+The [Factory host validation](../evidence/factory-host-validation-2026-10-15.json) records real BYOK hot-add with a deterministic external ToolSearch/FactoryProbe fixture: after the catalog update and CLI-visible-name barrier, the first continuation called the newly advertised tool successfully. Before the barrier, the observed refresh arrived one turn late. This validates new-tool availability in that run, not immediate visibility of replacement schemas under unchanged names; `mcpServerStatus` exposes no schema version.
+
+Actual Droid Skill execution also returned and used its full instruction body. Droid Task launched two readiness subagents, and real ProposeMission and StartMissionRun calls succeeded. Those subagents inherited an orchestrator model header, confirming that host instructions must determine the actual workflow role. These checks are distinct from the earlier TaskOutput fixture and historical forced-spawn/ledger-copy results.
+
+An earlier unseeded full Mission failed and was stopped: native MCP rejected incomplete EndFeatureRun arguments, but the old Bridge had already forwarded the assistant event, leading to callback-association errors. The correction publishes only after actual handler entry and joins native call identity with canonical arguments. The evidence's `validatedHandoffRetry` records a passing independent official CLI + GLM BYOK probe: native `-32602` rejected invalid arguments, a corrected EndFeatureRun with reordered fields caused exactly one external fixture execution, and the same SDK session returned the correct final answer. Factory's completed state cannot override an SDK error.
+
+The subsequent [full Mission acceptance](../evidence/mission-validation-2026-10-15.json) is PASS_WITH_RECOVERY. A fresh, unseeded fixture ran through actual orchestrator, worker and validator roles. It reached the old 20-minute harness limit after all five assertions passed, before the final validator completed. Official `droid exec --session-id` continued the same Mission, retained completed feature worker identities and finished in about 130 seconds. All three features completed, original tests/package.json were preserved, and tests passed. Before cleanup there were no native turns, tool callbacks, approvals or Bridge errors. Owned-process cleanup also passed. The timeout and a rejected CLI flag combination are recorded separately; this is not an uninterrupted pass. The harness default is now one hour.
+
+Successful EndFeatureRun can terminate a Factory worker without another tool_result request. The installed official Factory hook adapter now provides a separate authenticated lifecycle channel. SessionStart registers a random generation and supplies it via Factory's environment file; model-visible binding metadata is removed before native input. PostToolUse records the actual tool result, and SessionEnd confirms termination before terminal callback cleanup. Ordinary tool results still use the HTTP continuation so dynamic catalogs and supplemental context cannot race ahead. Normal idle notifications never imply cancellation. The run-droid wrapper registers exact launch ownership and forwards exit/cancel events only to those sessions.
+
+The local `/control` page and CLI implement the T3-style permission Deferred flow. Real official CLI + GLM BYOK checks confirm denial causes no file write and approval causes exactly one native Bash execution. Approval authority is in memory, tied to the original native callback, and cannot be restored from a stale receipt after restart.
+
+REA was reviewed at [c61c108b522de1a2b46e65b59360c9be66fb038e](https://github.com/morluto/rea/tree/c61c108b522de1a2b46e65b59360c9be66fb038e). It is a reverse-engineering MCP/CLI, not a Claude orchestration adapter. Its PendingOperations and process-ownership patterns informed once-only settlement, generation checks and bounded cleanup. No REA implementation dependency or copied source was added.
+
+## Accounting and cache boundaries
+
+`UsageLedger` merges `message_start`, partial `message_delta`, and repeated assistant blocks by provider message ID. Missing counters stay unknown. SDK `modelUsage` is kept as a separate latest cumulative snapshot: it can include subagents, sidechains and compaction, inherit usage from a resumed session, or reset after `/clear`. SDK `result.usage` is main-agent per-turn usage and is retained separately. These scopes are never added together.
+
+Changing a session ID alone does not imply a prompt-cache miss. Model/provider cache policy and the actual token prefix matter: tool schemas/order, native system prompt, the stable append, and any dynamic material before a cache boundary. Updating the MCP catalog can change that prefix and cause a miss while preserving the session. Native session continuity keeps prior conversation intact; compaction legitimately changes the history prefix and may require a new cache entry. The adapter leaves prompt-recording behavior to CLI defaults; the recorded request hashes establish prefix stability only in the measured runs.
+
+## Boundaries compared with a native client
+
+- Bridge adds an Anthropic Messages ingress, Droid session matching and Factory MCP handling; it is not the complete T3 application.
+- Explicit IDs or a unique complete history prefix identify continuation. Incompatible model/role/workspace/execution-policy changes are rejected; tool catalogs update in place. A cold history import is reference reconstruction, not restoration of an exact native transcript or signed thinking state.
+- Advertised Factory/plugin tools use namespaced MCP unless they are concrete file/shell equivalents. The bridge does not automatically translate Factory skills/custom droids into Claude-native definitions. BYOK's isolated config does not inherit ordinary user-level Claude skills automatically.
+- Local UI/CLI approvals are connected, but process loss cannot restore pending MCP callbacks or permission authority. Preserving the SDK session ID does not recover those waiting handlers.
+- Live new-tool hot-add, Factory Skill/Task, invalid-call/corrected-retry handoff and full Mission completion with official recovery have been exercised. The recorded Mission needed recovery after a harness timeout; uninterrupted completion and real Claude subscription behavior are not established by that run. Historical forced-spawn/ledger-copy results are not current acceptance.
+- Token counting remains HTTP 501. See [Compatibility](COMPATIBILITY.md) and [Limitations](LIMITATIONS.md).

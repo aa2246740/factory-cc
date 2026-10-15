@@ -3,104 +3,124 @@ import type { Json } from "../types.js";
 
 export interface SchemaConversion {
   schema: ZodTypeAny;
+  /** Whether validation and caller-supplied JSON values are preserved. */
   lossless: boolean;
   notes: string[];
 }
 
-export function jsonSchemaToZod(schema: Record<string, Json>, refs: Map<string, Record<string, Json>> = new Map()): SchemaConversion {
+const SCHEMA_MAPS = new Set(["properties", "patternProperties", "$defs", "definitions", "dependentSchemas"]);
+const SCHEMA_ARRAYS = new Set(["oneOf", "anyOf", "allOf", "prefixItems"]);
+const SCHEMA_VALUES = new Set(["items", "additionalProperties", "additionalItems", "propertyNames", "contains", "not", "if", "then", "else", "unevaluatedItems", "unevaluatedProperties"]);
+const ANNOTATIONS = new Set(["$schema", "$id", "id", "$anchor", "$comment", "title", "description", "default", "examples", "deprecated", "readOnly", "writeOnly", "contentEncoding", "contentMediaType", "contentSchema"]);
+const CONSTRAINTS = new Set([
+  "type", "$ref", "enum", "const", "required", "minProperties", "maxProperties",
+  "minItems", "maxItems", "uniqueItems", "minContains", "maxContains",
+  "minLength", "maxLength", "pattern", "format", "minimum", "maximum",
+  "exclusiveMinimum", "exclusiveMaximum", "multipleOf", "dependentRequired",
+]);
+const FORMATS = new Set(["email", "uri", "uuid", "guid", "date-time", "date", "time", "duration", "hostname", "ipv4", "ipv6"]);
+const TYPED_CONSTRAINTS = new Set([
+  "properties", "patternProperties", "required", "additionalProperties", "minProperties", "maxProperties", "propertyNames",
+  "items", "prefixItems", "additionalItems", "minItems", "maxItems", "contains", "uniqueItems", "minContains", "maxContains",
+  "minLength", "maxLength", "pattern", "format", "minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum", "multipleOf",
+]);
+
+export function jsonSchemaToZod(schema: Record<string, Json>): SchemaConversion {
   const notes: string[] = [];
   let lossless = true;
-
-  const convert = (node: Record<string, Json>, path: string): ZodTypeAny => {
-    if (typeof node.$ref === "string") {
-      const ref = resolveLocalRef(node.$ref, schema, refs);
-      if (!ref) {
-        lossless = false;
-        notes.push(`${path}: unresolved $ref ${node.$ref}`);
-        return z.record(z.string(), z.any());
-      }
-      return convert(ref, path);
-    }
-
-    if (Array.isArray(node.enum) && node.enum.length > 0) {
-      const values = node.enum.filter((item): item is string => typeof item === "string");
-      if (values.length === node.enum.length && values.length > 0) {
-        return z.enum(values as [string, ...string[]]);
-      }
-      return z.any();
-    }
-
-    if (Array.isArray(node.oneOf) || Array.isArray(node.anyOf)) {
-      const variants = ((node.oneOf ?? node.anyOf) as Record<string, Json>[]).map((item, i) =>
-        convert(item, `${path}/${node.oneOf ? "oneOf" : "anyOf"}/${i}`),
-      );
-      if (variants.length === 0) return z.any();
-      if (variants.length === 1) return variants[0]!;
-      return z.union(variants as [ZodTypeAny, ZodTypeAny, ...ZodTypeAny[]]);
-    }
-
-    const type = node.type;
-    if (type === "string") return z.string();
-    if (type === "number") return z.number();
-    if (type === "integer") return z.number().int();
-    if (type === "boolean") return z.boolean();
-    if (type === "null") return z.null();
-    if (type === "array") {
-      const items = node.items && typeof node.items === "object" && !Array.isArray(node.items)
-        ? convert(node.items as Record<string, Json>, `${path}/items`)
-        : z.any();
-      return z.array(items);
-    }
-    if (type === "object" || node.properties) {
-      const properties = (node.properties ?? {}) as Record<string, Record<string, Json>>;
-      const required = new Set(Array.isArray(node.required) ? node.required.filter((x): x is string => typeof x === "string") : []);
-      const shape: Record<string, ZodTypeAny> = {};
-      for (const [key, child] of Object.entries(properties)) {
-        let field = convert(child, `${path}.${key}`);
-        if (typeof child.description === "string") field = field.describe(child.description);
-        shape[key] = required.has(key) ? field : field.optional();
-      }
-      let object = z.object(shape);
-      if (node.additionalProperties === false) object = object.strict();
-      return object;
-    }
-
-    if (Array.isArray(type)) {
-      lossless = false;
-      notes.push(`${path}: union type ${JSON.stringify(type)} approximated`);
-      return z.any();
-    }
-
+  const lose = (path: string, message: string): void => {
     lossless = false;
-    notes.push(`${path}: unsupported schema ${JSON.stringify(node)}`);
-    return z.record(z.string(), z.any());
+    notes.push(`${path}: ${message}`);
   };
 
-  return { schema: convert(schema, "$"), lossless, notes };
+  // Use Zod's converter for nested records, local/recursive references and
+  // composition. It preserves JSON Schema's additionalProperties=true default.
+  // Traverse schema positions only: tool parameters may themselves contain
+  // keys called "default", "properties", or "$ref" as ordinary instance data.
+  const prepare = (value: Json, path: string): Json => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+    const out: Record<string, Json> = {};
+    for (const [key, child] of Object.entries(value)) {
+      if (key === "default") {
+        notes.push(`${path}: default annotation is not applied to caller arguments`);
+        continue;
+      }
+      if (!ANNOTATIONS.has(key) && !CONSTRAINTS.has(key) && !SCHEMA_MAPS.has(key)
+          && !SCHEMA_ARRAYS.has(key) && !SCHEMA_VALUES.has(key) && !key.startsWith("x-")) {
+        lose(path, `unsupported keyword ${key}`);
+      }
+      if (key === "format" && (typeof child !== "string" || !FORMATS.has(child))) {
+        lose(path, `format ${JSON.stringify(child)} is not faithfully validated`);
+      }
+      if (!value.type && !value.$ref && TYPED_CONSTRAINTS.has(key)) {
+        lose(path, `${key} without an explicit type is not faithfully validated`);
+      }
+      if (SCHEMA_MAPS.has(key) && child && typeof child === "object" && !Array.isArray(child)) {
+        out[key] = Object.fromEntries(Object.entries(child).map(([name, nested]) => [name, prepare(nested, `${path}/${key}/${name}`)]));
+      } else if ((SCHEMA_ARRAYS.has(key) || key === "items") && Array.isArray(child)) {
+        out[key] = child.map((nested, index) => prepare(nested, `${path}/${key}/${index}`));
+      } else if (SCHEMA_VALUES.has(key)) {
+        out[key] = prepare(child, `${path}/${key}`);
+      } else {
+        // Defining __proto__ as data must not mutate the schema object's prototype.
+        Object.defineProperty(out, key, { value: child, enumerable: true, configurable: true, writable: true });
+      }
+    }
+    if (Array.isArray(value.required)) {
+      const properties = value.properties && typeof value.properties === "object" && !Array.isArray(value.properties) ? value.properties : {};
+      if (value.required.some((name) => typeof name === "string" && !Object.hasOwn(properties, name))) {
+        lose(path, "required keys without a declared property are not faithfully validated");
+      }
+    }
+    // Zod's enum/const fast path does not intersect sibling type/constraints.
+    if (value.enum !== undefined && value.const !== undefined) {
+      lose(path, "combined enum and const constraints are not faithfully validated");
+    }
+    if ((value.enum !== undefined || value.const !== undefined)
+        && Object.keys(value).some((key) => TYPED_CONSTRAINTS.has(key))) {
+      lose(path, "constraints alongside enum/const are not faithfully validated");
+    }
+    const literals = Array.isArray(value.enum) ? value.enum : value.const !== undefined ? [value.const] : [];
+    if (value.type && literals.some((literal) => !matchesType(literal, value.type))) {
+      lose(path, "enum/const values conflicting with type are not faithfully validated");
+    }
+    return out;
+  };
+
+  try {
+    const prepared = prepare(schema, "$") as Parameters<typeof z.fromJSONSchema>[0];
+    const converted = z.fromJSONSchema(prepared, { defaultTarget: schema.$defs ? "draft-2020-12" : "draft-7" });
+    // Catch schema forms the MCP advertiser cannot serialize before registration.
+    z.toJSONSchema(converted, { target: "draft-7" });
+    return { schema: converted, lossless, notes };
+  } catch (error) {
+    lose("$", error instanceof Error ? error.message : "schema conversion failed");
+    // Fail closed. A permissive {} fallback could erase validation while
+    // claiming that an unsupported tool's arguments were faithfully relayed.
+    return { schema: z.never(), lossless: false, notes };
+  }
 }
 
+function matchesType(value: Json, type: Json): boolean {
+  if (Array.isArray(type)) return type.some((item) => matchesType(value, item));
+  if (type === "null") return value === null;
+  if (type === "array") return Array.isArray(value);
+  if (type === "object") return value !== null && typeof value === "object" && !Array.isArray(value);
+  if (type === "integer") return typeof value === "number" && Number.isInteger(value);
+  return typeof value === type;
+}
+
+/** MCP's list_tools path accepts complete object schemas. It cannot advertise
+ * unions/intersections at the root and otherwise silently substitutes {}. */
+export function zodToolInputSchema(schema: ZodTypeAny): z.ZodObject {
+  if (!(schema instanceof z.ZodObject)) {
+    throw new Error("Unsupported MCP tool input schema: expected a complete ZodObject; root unions/intersections cannot be registered losslessly");
+  }
+  return schema;
+}
+
+/** @deprecated Register zodToolInputSchema(schema) instead so root strictness
+ * and additionalProperties validation survive MCP registration. */
 export function zodObjectShape(schema: ZodTypeAny): Record<string, ZodTypeAny> {
-  if (schema && typeof schema === "object" && "shape" in schema && schema.shape && typeof schema.shape === "object") {
-    return schema.shape as Record<string, ZodTypeAny>;
-  }
-  return {};
-}
-
-function resolveLocalRef(
-  ref: string,
-  root: Record<string, Json>,
-  cache: Map<string, Record<string, Json>>,
-): Record<string, Json> | undefined {
-  if (cache.has(ref)) return cache.get(ref);
-  if (ref.startsWith("http://") || ref.startsWith("https://")) return undefined;
-  if (!ref.startsWith("#/")) return undefined;
-  const parts = ref.slice(2).split("/");
-  let current: Json = root;
-  for (const part of parts) {
-    if (!current || typeof current !== "object" || Array.isArray(current)) return undefined;
-    current = current[part] as Json;
-  }
-  if (!current || typeof current !== "object" || Array.isArray(current)) return undefined;
-  cache.set(ref, current);
-  return current;
+  return zodToolInputSchema(schema).shape;
 }

@@ -55,21 +55,15 @@ describe("Messages protocol", () => {
   it("emits a real tool_use from the provided schema then accepts the matching result", async () => {
     const { app, token } = await startTestBridge();
     apps.push(app);
+    const tools = [{
+      name: "Read", description: "Read a file",
+      input_schema: { type: "object", properties: { path: { type: "string" } }, required: ["path"] },
+    }];
     const first = await postMessages(app.url, token, {
       model: "relay-probe",
       max_tokens: 64,
       messages: [{ role: "user", content: "RELAY_TOOL_PROBE RELAY_CANARY_ABC CANARY_PATH=/tmp/canary.txt" }],
-      tools: [
-        {
-          name: "Read",
-          description: "Read a file",
-          input_schema: {
-            type: "object",
-            properties: { path: { type: "string" } },
-            required: ["path"],
-          },
-        },
-      ],
+      tools,
     });
     expect(first.status).toBe(200);
     const block = (first.json.content as Array<{ type: string; id: string; name: string; input: { path: string } }>)[0];
@@ -84,6 +78,7 @@ describe("Messages protocol", () => {
       {
         model: "relay-probe",
         max_tokens: 64,
+        tools,
         messages: [
           { role: "user", content: "RELAY_TOOL_PROBE RELAY_CANARY_ABC" },
           { role: "assistant", content: [block] },

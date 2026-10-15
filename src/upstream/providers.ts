@@ -31,18 +31,16 @@ export interface ProbeAttempt {
   error?: string;
 }
 
+// Region-specific keys never participate in another region's auto-discovery.
+// Official endpoint references (checked 2026-10-15):
+// https://platform.minimax.cn/docs/m-plan/claude-code
+// https://platform.minimax.io/docs/m-plan/claude-code
+// https://docs.bigmodel.cn/cn/coding-plan/tool/claude
+// https://docs.z.ai/devpack/tool/claude
 const CANDIDATES: Array<Omit<UpstreamProvider, "tokenEnv"> & { tokenEnvs: string[] }> = [
   {
     id: "minimax",
     label: "MiniMax China Anthropic-compatible",
-    baseUrl: "https://api.minimaxi.com/anthropic",
-    model: "MiniMax-M2.5",
-    tokenEnvs: ["MINIMAXCN_API_KEY"],
-    authHeader: "authorization",
-  },
-  {
-    id: "minimax",
-    label: "MiniMax CN Anthropic-compatible",
     baseUrl: "https://api.minimax.cn/anthropic",
     model: "MiniMax-M2.5",
     tokenEnvs: ["MINIMAXCN_API_KEY"],
@@ -50,26 +48,34 @@ const CANDIDATES: Array<Omit<UpstreamProvider, "tokenEnv"> & { tokenEnvs: string
   },
   {
     id: "minimax",
-    label: "MiniMax IO Anthropic-compatible",
+    label: "MiniMax International Anthropic-compatible",
     baseUrl: "https://api.minimax.io/anthropic",
     model: "MiniMax-M2.5",
-    tokenEnvs: ["MINIMAXCN_API_KEY"],
+    tokenEnvs: ["MINIMAX_INTL_API_KEY"],
     authHeader: "authorization",
   },
   {
     id: "glm",
-    label: "Zhipu GLM Anthropic-compatible x-api-key",
+    label: "Zhipu China GLM Anthropic-compatible x-api-key",
     baseUrl: "https://open.bigmodel.cn/api/anthropic",
     model: "glm-4.7",
-    tokenEnvs: ["GLM_CN_API_KEY", "ZAI_CODING_PLAN_KEY"],
+    tokenEnvs: ["GLM_CN_API_KEY"],
     authHeader: "x-api-key",
   },
   {
     id: "glm",
-    label: "Zhipu GLM Anthropic-compatible bearer",
+    label: "Zhipu China GLM Anthropic-compatible bearer",
     baseUrl: "https://open.bigmodel.cn/api/anthropic",
     model: "glm-4.7",
-    tokenEnvs: ["GLM_CN_API_KEY", "ZAI_CODING_PLAN_KEY"],
+    tokenEnvs: ["GLM_CN_API_KEY"],
+    authHeader: "authorization",
+  },
+  {
+    id: "glm",
+    label: "Z.AI International GLM Anthropic-compatible",
+    baseUrl: "https://api.z.ai/api/anthropic",
+    model: "glm-4.7",
+    tokenEnvs: ["ZAI_CODING_PLAN_KEY"],
     authHeader: "authorization",
   },
   {
@@ -106,6 +112,7 @@ export function tokenPresent(name: string): boolean {
 export function hasByokSecrets(): boolean {
   return (
     tokenPresent("MINIMAXCN_API_KEY")
+    || tokenPresent("MINIMAX_INTL_API_KEY")
     || tokenPresent("GLM_CN_API_KEY")
     || tokenPresent("ZAI_CODING_PLAN_KEY")
     || tokenPresent("OPENROUTER_ONLYUSE_FREEMODEL_API_KEY")
@@ -174,6 +181,8 @@ export async function probeProvider(
   try {
     const res = await fetch(`${provider.baseUrl.replace(/\/$/, "")}/v1/messages`, {
       method: "POST",
+      // A discovery probe must not follow a regional endpoint elsewhere.
+      redirect: "error",
       headers: headersFor(provider),
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(25_000),
@@ -246,9 +255,10 @@ export function selectionFromConfig(input: {
   tokenEnv?: string;
 }): UpstreamSelection | undefined {
   if (!input.baseUrl || !input.model || !input.tokenEnv || !tokenPresent(input.tokenEnv)) return undefined;
-  const id: UpstreamProvider["id"] = /bigmodel|zhipu|glm/i.test(input.baseUrl)
+  const hostname = new URL(input.baseUrl).hostname;
+  const id: UpstreamProvider["id"] = /bigmodel|zhipu|glm/i.test(hostname) || /(?:^|\.)z\.ai$/i.test(hostname)
     ? "glm"
-    : /openrouter/i.test(input.baseUrl)
+    : /openrouter/i.test(hostname)
       ? "openrouter"
       : "minimax";
   return {
@@ -258,7 +268,7 @@ export function selectionFromConfig(input: {
       baseUrl: input.baseUrl,
       model: input.model,
       tokenEnv: input.tokenEnv,
-      authHeader: /bigmodel/i.test(input.baseUrl) ? "x-api-key" : "authorization",
+      authHeader: /(?:^|\.)bigmodel\.cn$/i.test(hostname) ? "x-api-key" : "authorization",
     },
     modelSlots: modelSlots(input.model),
   };
@@ -283,7 +293,6 @@ export function sdkEnv(
   const env: Record<string, string> = {};
   for (const [key, value] of Object.entries(process.env)) {
     if (value === undefined) continue;
-    if (/^HTTP_PROXY|HTTPS_PROXY|ALL_PROXY$/i.test(key)) continue;
     env[key] = value;
   }
   env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC ?? "1";

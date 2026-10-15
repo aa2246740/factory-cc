@@ -1,5 +1,7 @@
 # Relay Bridge 报告（T3 对齐）
 
+> 历史报告：以下内容记录旧版 MiniMax 实现与当时的测试，不描述当前分支。旧版合成 Mission 启动、复制账本及混合 usage 的结果不能作为当前验收依据。当前实现和 GLM BYOK 验证范围见 [README](README.md#当前验证范围)、[原生会话证据](evidence/native-session-validation-2026-10-15.json) 与 [生命周期证据](evidence/control-validation-2026-10-15.json)。
+
 版本：2026-10-15。提交在 `main`。未创建 PR。未改 Droid / Claude Code 二进制。未打印、未提交密钥。`.cursor/CLOUD.md` 与 hooks 仍为 Grok-only。
 
 本轮按 Cola 决定：**按 T3 Code 方式重做 Relay Bridge**（最稳、最不像套壳），再用 MiniMax-M2.5（GLM 回退未触发）无短超时重跑全部测试 + Tiny Tasks Mission e2e。

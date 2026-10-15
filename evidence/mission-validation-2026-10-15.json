@@ -1,0 +1,506 @@
+{
+  "suite": "factory-native-mission-validation",
+  "recordedAt": "2026-10-15T10:21:05.020Z",
+  "status": "PASS_WITH_RECOVERY",
+  "uninterruptedMissionPass": false,
+  "environment": {
+    "claudeCode": "2.1.300",
+    "claudeAgentSdk": "0.3.300",
+    "droid": "0.242.0",
+    "authMode": "isolated-byok",
+    "provider": "open.bigmodel.cn",
+    "model": "glm-5.2",
+    "realClaudeSubscriptionUsed": false
+  },
+  "scope": {
+    "initialRuntimeLoadedAt": "2026-10-15T09:47:43.619Z",
+    "recoveryRuntimeLoadedAt": "2026-10-15T10:14:01.361Z",
+    "sourceHashCaptured": false,
+    "laterHardening": "The initial attempt did not load subsequent tool_choice:none/forced-choice validation or host identity scoping changes. The recovery used the then-current code; forced tool-choice cases are covered by offline tests, not this Mission. Workspace realpath checks and regional provider routing added after this Mission acceptance are covered by offline regression tests; this Mission is not evidence for those later changes.",
+    "fixture": "Intentionally broken one-line sum implementation, three immutable existing tests, no seeded Mission plan/features/skills/validation artifacts.",
+    "execution": "Factory generated its own plan, skills and Mission artifacts; official Claude Code executed native work. The same actual Factory Mission and interrupted validation worker were resumed through official CLI session continuation."
+  },
+  "attempts": [
+    {
+      "id": "helper-capability-failure",
+      "startedAt": "2026-10-15T09:32:02.341Z",
+      "durationSec": 442,
+      "status": "FAIL_CONFIRMED_TOOL_CAPABILITY_BOUNDARY",
+      "exitCode": 143,
+      "requestCount": 9,
+      "reason": "Explicit tools:[] title-helper request executed native tools including Edit on sum.js. Harness stopped this contaminated run; it is not a successful Mission.",
+      "unauthorizedHelperToolCalls": 9,
+      "processCleanup": {
+        "supported": true,
+        "observedProcessCount": 64,
+        "terminatedProcessCount": 0,
+        "remainingProcessIds": [],
+        "complete": true
+      },
+      "evidence": "evidence/local/e2e-mission-2026-10-15T09-32-02-341Z"
+    },
+    {
+      "id": "initial-clean-mission",
+      "startedAt": "2026-10-15T09:47:43.619Z",
+      "durationSec": 1203,
+      "status": "INCOMPLETE_HARNESS_TIMEOUT",
+      "exitCode": 124,
+      "timedOut": true,
+      "timeoutMs": 1200000,
+      "requestCount": 24,
+      "failedGates": [
+        "droidSuccessful",
+        "missionCompleted",
+        "featuresDone"
+      ],
+      "features": [
+        {
+          "id": "user-testing-validator-sum-fix",
+          "status": "in_progress",
+          "skillName": "user-testing-validator"
+        },
+        {
+          "id": "fix-sum-addition",
+          "status": "completed",
+          "skillName": "backend-worker",
+          "completedWorkerSessionId": "f29e11d5-1c09-46e7-b97b-81ca405899d2"
+        },
+        {
+          "id": "scrutiny-validator-sum-fix",
+          "status": "completed",
+          "skillName": "scrutiny-validator",
+          "completedWorkerSessionId": "800d05ba-388d-4ade-ade9-79d5fad7e537"
+        }
+      ],
+      "validation": [
+        {
+          "id": "VAL-SUM-001",
+          "status": "passed"
+        },
+        {
+          "id": "VAL-SUM-002",
+          "status": "passed"
+        },
+        {
+          "id": "VAL-SUM-003",
+          "status": "passed"
+        },
+        {
+          "id": "VAL-SUM-004",
+          "status": "passed"
+        },
+        {
+          "id": "VAL-REPO-001",
+          "status": "passed"
+        }
+      ],
+      "threeRoles": [
+        "orchestrator",
+        "worker",
+        "validator"
+      ],
+      "nativeRuntimeBeforeCleanup": {
+        "nativeSessions": 3,
+        "nativeTurns": 0,
+        "pendingHostCalls": 0,
+        "pendingApprovals": 0,
+        "fatalErrors": [],
+        "controlFailures": [],
+        "activeHostSessions": 0,
+        "boundNativeSessions": 0
+      },
+      "processCleanup": {
+        "supported": true,
+        "observedProcessCount": 177,
+        "terminatedProcessCount": 0,
+        "remainingProcessIds": [],
+        "complete": true
+      },
+      "toolFreeHelpers": [
+        {
+          "nativeSessionId": "f556b2ce-7f43-4d81-98e0-6625543c848f",
+          "transcriptFound": true,
+          "toolAttempts": 0,
+          "deniedAttempts": 0
+        },
+        {
+          "nativeSessionId": "627ae21a-ee7b-4913-b110-cca1bbbec994",
+          "transcriptFound": true,
+          "toolAttempts": 0,
+          "deniedAttempts": 0
+        },
+        {
+          "nativeSessionId": "ec210ee8-4b9a-4d20-90c1-b26856b45873",
+          "transcriptFound": true,
+          "toolAttempts": 0,
+          "deniedAttempts": 0
+        },
+        {
+          "nativeSessionId": "42ca31fe-8a78-457a-bfc0-af1991d9d324",
+          "transcriptFound": true,
+          "toolAttempts": 0,
+          "deniedAttempts": 0
+        },
+        {
+          "nativeSessionId": "58fc59e3-5e75-4c98-8896-47597ca06ca0",
+          "transcriptFound": true,
+          "toolAttempts": 0,
+          "deniedAttempts": 0
+        }
+      ],
+      "evidence": "evidence/local/e2e-mission-2026-10-15T09-47-43-619Z"
+    },
+    {
+      "id": "invalid-resume-cli-flags",
+      "startedAt": "2026-10-15T10:11:36.759Z",
+      "durationSec": 3,
+      "status": "FAILED_HARNESS_ARGUMENTS",
+      "exitCode": 1,
+      "requestCount": 0,
+      "reason": "Droid rejects --mission together with --session-id. Corrected to plain session continuation; no model request or Mission artifact mutation occurred in this invocation.",
+      "processCleanup": {
+        "supported": true,
+        "observedProcessCount": 1,
+        "terminatedProcessCount": 0,
+        "remainingProcessIds": [],
+        "complete": true
+      },
+      "evidence": "evidence/local/e2e-mission-resume-2026-10-15T10-11-36-759Z"
+    },
+    {
+      "id": "official-session-recovery",
+      "startedAt": "2026-10-15T10:14:01.362Z",
+      "durationSec": 130,
+      "status": "PASS_WITH_RECOVERY",
+      "exitCode": 0,
+      "timedOut": false,
+      "requestCount": 4,
+      "cliMode": "droid exec --session-id (restores existing Mission)",
+      "evidence": "evidence/local/e2e-mission-resume-2026-10-15T10-14-01-361Z",
+      "processCleanup": {
+        "supported": true,
+        "observedProcessCount": 25,
+        "terminatedProcessCount": 0,
+        "remainingProcessIds": [],
+        "complete": true
+      }
+    }
+  ],
+  "final": {
+    "missionSessionId": "a473da6f-655b-4249-a598-1d971b7b2992",
+    "missionState": "completed",
+    "totalDurationSecIncludingTimeoutAndRecoverySetup": 1708,
+    "gates": {
+      "priorAttemptValidated": true,
+      "droidSuccessful": true,
+      "missionCompleted": true,
+      "featuresDone": true,
+      "completedFeaturesRetained": true,
+      "validationGreen": true,
+      "testsGreen": true,
+      "originalTestsPreserved": true,
+      "nativeRuntimeHealthy": true,
+      "toolFreeHelpersRespected": true,
+      "nativeWorkSettled": true,
+      "cleanupSuccessful": true
+    },
+    "failedGates": [],
+    "features": [
+      {
+        "id": "fix-sum-addition",
+        "status": "completed",
+        "skillName": "backend-worker",
+        "completedWorkerSessionId": "f29e11d5-1c09-46e7-b97b-81ca405899d2"
+      },
+      {
+        "id": "scrutiny-validator-sum-fix",
+        "status": "completed",
+        "skillName": "scrutiny-validator",
+        "completedWorkerSessionId": "800d05ba-388d-4ade-ade9-79d5fad7e537"
+      },
+      {
+        "id": "user-testing-validator-sum-fix",
+        "status": "completed",
+        "skillName": "user-testing-validator",
+        "completedWorkerSessionId": "05542ef4-2efa-46dc-9643-681d02eab8c3"
+      }
+    ],
+    "validation": [
+      {
+        "id": "VAL-SUM-001",
+        "status": "passed"
+      },
+      {
+        "id": "VAL-SUM-002",
+        "status": "passed"
+      },
+      {
+        "id": "VAL-SUM-003",
+        "status": "passed"
+      },
+      {
+        "id": "VAL-SUM-004",
+        "status": "passed"
+      },
+      {
+        "id": "VAL-REPO-001",
+        "status": "passed"
+      }
+    ],
+    "originalBaselineFailed": true,
+    "originalTestsAndPackagePreserved": true,
+    "acceptanceTests": {
+      "exitCode": 0,
+      "count": 3,
+      "passed": 3
+    },
+    "completedFeatureWorkerIdentitiesRetained": true,
+    "resumedWorkerSessionId": "05542ef4-2efa-46dc-9643-681d02eab8c3",
+    "actualFactoryHandoffs": [
+      {
+        "workerSessionId": "f29e11d5-1c09-46e7-b97b-81ca405899d2",
+        "featureId": "fix-sum-addition",
+        "endFeatureRunObserved": true,
+        "matchesCompletedFeature": true
+      },
+      {
+        "workerSessionId": "800d05ba-388d-4ade-ade9-79d5fad7e537",
+        "featureId": "scrutiny-validator-sum-fix",
+        "endFeatureRunObserved": true,
+        "matchesCompletedFeature": true
+      },
+      {
+        "workerSessionId": "05542ef4-2efa-46dc-9643-681d02eab8c3",
+        "featureId": "user-testing-validator-sum-fix",
+        "endFeatureRunObserved": true,
+        "matchesCompletedFeature": true
+      }
+    ],
+    "priorThreeRoles": [
+      "orchestrator",
+      "worker",
+      "validator"
+    ],
+    "priorFactoryWorkflowObserved": true,
+    "nativeRuntimeBeforeCleanup": {
+      "nativeSessions": 0,
+      "nativeTurns": 0,
+      "pendingHostCalls": 0,
+      "pendingApprovals": 0,
+      "fatalErrors": [],
+      "controlFailures": [],
+      "activeHostSessions": 0,
+      "boundNativeSessions": 0
+    },
+    "nativeRuntimeAfterCleanup": {
+      "nativeSessions": 0,
+      "nativeTurns": 0,
+      "pendingHostCalls": 0,
+      "pendingApprovals": 0,
+      "fatalErrors": [],
+      "controlFailures": [],
+      "activeHostSessions": 0,
+      "boundNativeSessions": 0
+    },
+    "processCleanup": {
+      "supported": true,
+      "observedProcessCount": 25,
+      "terminatedProcessCount": 0,
+      "remainingProcessIds": [],
+      "complete": true
+    },
+    "toolFreeHelperVerification": {
+      "sessions": 5,
+      "allTranscriptsFound": true,
+      "unauthorizedNativeExecutions": 0,
+      "attemptedNativeTools": 0,
+      "adversarialDenialEvidence": "evidence/control-validation-2026-10-15.json"
+    }
+  },
+  "lifecycle": {
+    "hookCounts": {
+      "SessionStart": 11,
+      "PostToolUse": 12,
+      "Stop": 7,
+      "SessionEnd": 9,
+      "SubagentStop": 3,
+      "Notification": 1
+    },
+    "implementationWorkerEvents": [
+      {
+        "at": "2026-10-15T09:53:34.528Z",
+        "hook": "SessionStart"
+      },
+      {
+        "at": "2026-10-15T09:53:41.404Z",
+        "hook": "PostToolUse",
+        "tool": "Skill"
+      },
+      {
+        "at": "2026-10-15T09:53:41.578Z",
+        "hook": "PostToolUse",
+        "tool": "Skill"
+      },
+      {
+        "at": "2026-10-15T09:55:35.374Z",
+        "hook": "Stop"
+      },
+      {
+        "at": "2026-10-15T09:55:35.517Z",
+        "hook": "SessionEnd",
+        "ended": true,
+        "boundNativeSessions": 1
+      }
+    ],
+    "hostValidationErrorRecovered": true,
+    "terminalSemantics": "Factory can end a successful worker without emitting PostToolUse for EndFeatureRun. Its authentic SessionEnd closes the pending native invocation; the native transcript can accurately record interrupted/unknown result. No synthetic success, tool-result receipt, or automatic native callback replay is claimed."
+  },
+  "claudeCodeUsage": {
+    "source": "provider_messages",
+    "requestCount": 80,
+    "status": "reported",
+    "coverage": "partial",
+    "observedInputTokens": 301384,
+    "observedOutputTokens": 72021,
+    "observedCacheReadInputTokens": 2507392,
+    "cacheCreationInputTokens": null,
+    "exactCacheHitRatio": null,
+    "nativeSessions": 14,
+    "perNativeSession": [
+      {
+        "nativeSessionId": "6fa2e292-94e1-4f9f-8465-f933db8511dd",
+        "providerMessages": 10,
+        "inputTokens": 55669,
+        "outputTokens": 20565,
+        "cacheReadInputTokens": 496896,
+        "coverage": "partial"
+      },
+      {
+        "nativeSessionId": "5ca5f57b-1786-46c9-8d16-4549c52c62b8",
+        "providerMessages": 4,
+        "inputTokens": 9472,
+        "outputTokens": 2855,
+        "cacheReadInputTokens": 80640,
+        "coverage": "partial"
+      },
+      {
+        "nativeSessionId": "0d8c56b7-b576-4eee-85e0-16743a205a7a",
+        "providerMessages": 13,
+        "inputTokens": 25649,
+        "outputTokens": 3904,
+        "cacheReadInputTokens": 450112,
+        "coverage": "partial"
+      },
+      {
+        "nativeSessionId": "f556b2ce-7f43-4d81-98e0-6625543c848f",
+        "providerMessages": 1,
+        "inputTokens": 5234,
+        "outputTokens": 748,
+        "cacheReadInputTokens": 14336,
+        "coverage": "partial"
+      },
+      {
+        "nativeSessionId": "80c5d04d-df0a-4003-8587-8fe5eaf88609",
+        "providerMessages": 11,
+        "inputTokens": 38054,
+        "outputTokens": 6038,
+        "cacheReadInputTokens": 334656,
+        "coverage": "partial"
+      },
+      {
+        "nativeSessionId": "627ae21a-ee7b-4913-b110-cca1bbbec994",
+        "providerMessages": 1,
+        "inputTokens": 4020,
+        "outputTokens": 4028,
+        "cacheReadInputTokens": 15232,
+        "coverage": "partial"
+      },
+      {
+        "nativeSessionId": "c3e50c72-b0ab-4eed-a337-a8178c158886",
+        "providerMessages": 11,
+        "inputTokens": 25293,
+        "outputTokens": 6931,
+        "cacheReadInputTokens": 329536,
+        "coverage": "partial"
+      },
+      {
+        "nativeSessionId": "ec210ee8-4b9a-4d20-90c1-b26856b45873",
+        "providerMessages": 1,
+        "inputTokens": 4686,
+        "outputTokens": 1178,
+        "cacheReadInputTokens": 14336,
+        "coverage": "partial"
+      },
+      {
+        "nativeSessionId": "ccb1f3e4-1762-41d9-8579-2ab77c8082ee",
+        "providerMessages": 8,
+        "inputTokens": 46939,
+        "outputTokens": 7937,
+        "cacheReadInputTokens": 209472,
+        "coverage": "partial"
+      },
+      {
+        "nativeSessionId": "42ca31fe-8a78-457a-bfc0-af1991d9d324",
+        "providerMessages": 1,
+        "inputTokens": 4026,
+        "outputTokens": 367,
+        "cacheReadInputTokens": 15232,
+        "coverage": "partial"
+      },
+      {
+        "nativeSessionId": "4dadb723-f318-4570-b1e8-d8089f34c42c",
+        "providerMessages": 11,
+        "inputTokens": 21661,
+        "outputTokens": 8819,
+        "cacheReadInputTokens": 311936,
+        "coverage": "partial"
+      },
+      {
+        "nativeSessionId": "58fc59e3-5e75-4c98-8896-47597ca06ca0",
+        "providerMessages": 1,
+        "inputTokens": 4686,
+        "outputTokens": 900,
+        "cacheReadInputTokens": 14336,
+        "coverage": "partial"
+      },
+      {
+        "nativeSessionId": "1f851e75-3462-48e0-a8f5-295f1e97a110",
+        "providerMessages": 4,
+        "inputTokens": 32795,
+        "outputTokens": 4141,
+        "cacheReadInputTokens": 137344,
+        "coverage": "partial"
+      },
+      {
+        "nativeSessionId": "ff423a0c-1bb5-4f3f-a507-1e8af4543029",
+        "providerMessages": 3,
+        "inputTokens": 23200,
+        "outputTokens": 3610,
+        "cacheReadInputTokens": 83328,
+        "coverage": "partial"
+      }
+    ],
+    "excluded": [
+      "Droid usage counters",
+      "Repeated cumulative SDK result.modelUsage snapshots",
+      "The contaminated helper-failure attempt"
+    ],
+    "limitations": [
+      "The provider omits cache-creation counters, so missing values are unknown and no exact cache-hit ratio is asserted.",
+      "These counters are from official Claude Code using GLM BYOK; they do not establish Anthropic subscription billing, cache behavior, or a zero-ban guarantee.",
+      "Factory Task-summary helpers were observed. They are distinct from native Claude Code compaction. Automatic native compaction threshold was not reached or asserted by this Mission."
+    ]
+  },
+  "harnessChanges": {
+    "newDefaultMissionDeadlineMs": 3600000,
+    "recoveryEntrypoint": "scripts/e2e-mission-resume.ts",
+    "ownedDirectoryChecks": true,
+    "originalMissionArtifactsNeverWrittenByHarness": true,
+    "liveOwnedProcessMetadataOnly": true
+  },
+  "notes": [
+    "Final status is PASS_WITH_RECOVERY, not an uninterrupted pass. The original 20-minute timeout and failed flag combination remain explicit attempts.",
+    "All model runs used isolated BYOK configuration and official, unmodified CLIs/SDK. Real Claude subscription credentials were not used.",
+    "Local raw evidence remains in ignored evidence/local directories; this record contains no full prompts, credentials, or authentication headers."
+  ]
+}

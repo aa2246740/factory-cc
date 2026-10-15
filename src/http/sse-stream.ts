@@ -1,5 +1,5 @@
 import type { ServerResponse } from "node:http";
-import type { ContentBlock, MessagesResponse, Usage } from "../types.js";
+import { BridgeError, type ContentBlock, type MessagesResponse, type Usage } from "../types.js";
 import { writeSseHeaders } from "./sse.js";
 
 function event(res: ServerResponse, name: string, data: unknown): void {
@@ -18,6 +18,8 @@ export class SseWriter {
   private textIndex = 0;
   private finished = false;
   private streamedText = false;
+  private contentComplete = false;
+  private readonly wireContent: ContentBlock[] = [];
   private inputTokens = 0;
 
   constructor(
@@ -30,7 +32,7 @@ export class SseWriter {
   }
 
   start(usage?: Pick<Usage, "input_tokens">): void {
-    if (this.started) return;
+    if (this.started || this.finished || this.res.destroyed) return;
     this.inputTokens = usage?.input_tokens ?? 0;
     writeSseHeaders(this.res);
     event(this.res, "message_start", {
@@ -50,10 +52,15 @@ export class SseWriter {
   }
 
   textDelta(text: string): void {
-    if (!text) return;
+    this.writeTextDelta(text, true);
+  }
+
+  private writeTextDelta(text: string, modelText: boolean): void {
+    if (!text || this.finished || this.contentComplete || this.res.destroyed) return;
     this.start();
     if (!this.textOpen) {
       this.textIndex = this.index;
+      this.wireContent[this.textIndex] = { type: "text", text: "" };
       event(this.res, "content_block_start", {
         type: "content_block_start",
         index: this.textIndex,
@@ -61,26 +68,28 @@ export class SseWriter {
       });
       this.textOpen = true;
     }
+    (this.wireContent[this.textIndex] as { type: "text"; text: string }).text += text;
     event(this.res, "content_block_delta", {
       type: "content_block_delta",
       index: this.textIndex,
       delta: { type: "text_delta", text },
     });
-    this.streamedText = true;
+    if (modelText) this.streamedText = true;
   }
 
   toolTrace(name: string, detail: string): void {
-    this.textDelta(`\n[${name}] ${detail}\n`);
+    this.writeTextDelta(`\n[${name}] ${detail}\n`, false);
   }
 
   closeText(): void {
-    if (!this.textOpen) return;
+    if (!this.textOpen || this.finished || this.res.destroyed) return;
     event(this.res, "content_block_stop", { type: "content_block_stop", index: this.textIndex });
     this.textOpen = false;
     this.index = this.textIndex + 1;
   }
 
   toolUse(block: Extract<ContentBlock, { type: "tool_use" }>): void {
+    if (this.finished || this.contentComplete || this.res.destroyed) return;
     this.start();
     this.closeText();
     event(this.res, "content_block_start", {
@@ -94,22 +103,35 @@ export class SseWriter {
       delta: { type: "input_json_delta", partial_json: JSON.stringify(block.input ?? {}) },
     });
     event(this.res, "content_block_stop", { type: "content_block_stop", index: this.index });
+    this.wireContent[this.index] = JSON.parse(JSON.stringify({ type: "tool_use", id: block.id, name: block.name, input: block.input ?? {} })) as ContentBlock;
     this.index += 1;
   }
 
-  finish(message: MessagesResponse): void {
-    if (this.finished) return;
+  /** Flush content before persisting history, retaining exactly what a normal
+   * Anthropic stream client reconstructs, including traces and whitespace. */
+  completeContent(message: MessagesResponse): ContentBlock[] {
+    if (this.finished || this.contentComplete || this.res.destroyed) return structuredClone(this.wireContent);
     this.start(message.usage);
     this.closeText();
+    // Snapshot before fallback emission: every final text block must be sent
+    // when the SDK emitted only tool traces (or no deltas at all).
+    const hadModelText = this.streamedText;
     for (const block of message.content) {
       if (block.type === "text" && "text" in block && typeof block.text === "string") {
-        if (this.streamedText) continue;
+        if (hadModelText) continue;
         this.textDelta(block.text);
         this.closeText();
       } else if (block.type === "tool_use" && "id" in block && typeof block.id === "string" && typeof block.name === "string") {
         this.toolUse({ type: "tool_use", id: block.id, name: block.name, input: block.input ?? {} });
       }
     }
+    this.contentComplete = true;
+    return structuredClone(this.wireContent);
+  }
+
+  finish(message: MessagesResponse): ContentBlock[] {
+    const content = this.completeContent(message);
+    if (this.finished || this.res.destroyed) return content;
     event(this.res, "message_delta", {
       type: "message_delta",
       delta: { stop_reason: message.stop_reason, stop_sequence: message.stop_sequence },
@@ -122,5 +144,17 @@ export class SseWriter {
     event(this.res, "message_stop", { type: "message_stop" });
     this.res.end();
     this.finished = true;
+    return content;
+  }
+
+  fail(error: unknown): void {
+    if (this.finished || this.res.destroyed) return;
+    this.start();
+    const detail = error instanceof BridgeError
+      ? { type: error.code, message: error.message, ...error.extra }
+      : { type: "internal_error", message: error instanceof Error ? error.message : String(error) };
+    event(this.res, "error", { type: "error", error: detail });
+    this.finished = true;
+    this.res.end();
   }
 }

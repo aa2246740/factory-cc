@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { loadConfig } from "../src/config.js";
 import { createBridgeApp, listen } from "../src/http/app.js";
 import { createLogger } from "../src/logging.js";
-import { redactText, runCapture, writeJson } from "./lib.js";
+import { execFileAsync, redactText, runCapture, writeJson } from "./lib.js";
 
 interface CaseResult {
   id: string;
@@ -21,6 +21,13 @@ interface CaseResult {
 }
 
 async function main(): Promise<void> {
+  let droidVersion: string;
+  try {
+    const version = await execFileAsync("droid", ["--version"], { timeout: 10_000 });
+    droidVersion = (version.stdout || version.stderr).trim();
+  } catch {
+    throw new Error("Droid CLI is unavailable; install it and ensure droid is on PATH before running this probe.");
+  }
   const runId = new Date().toISOString().replace(/[:.]/g, "-");
   const evidenceDir = join(process.cwd(), "evidence", `g0-${runId}`);
   mkdirSync(evidenceDir, { recursive: true });
@@ -42,7 +49,7 @@ async function main(): Promise<void> {
   const results: CaseResult[] = [];
   const home = mkdtempSync(join(tmpdir(), "relay-g0-home-"));
   mkdirSync(join(home, ".factory"), { recursive: true });
-  writeFileSync(
+  const writeSettings = (clientToken: string): void => writeFileSync(
     join(home, ".factory/settings.json"),
     JSON.stringify(
       {
@@ -51,7 +58,7 @@ async function main(): Promise<void> {
             model: "relay-probe",
             displayName: "Relay Probe",
             baseUrl: "http://127.0.0.1:18789",
-            apiKey: "${BRIDGE_CLIENT_TOKEN}",
+            apiKey: clientToken,
             provider: "anthropic",
             authMode: "bearer",
             maxOutputTokens: 4096,
@@ -63,19 +70,21 @@ async function main(): Promise<void> {
       null,
       2,
     ),
+    { mode: 0o600 },
   );
+  writeSettings(token);
 
   const workspace = mkdtempSync(join(tmpdir(), "relay-g0-ws-"));
   writeFileSync(join(workspace, "CANARY.txt"), "RELAY_CANARY_G0FIXED\n");
   writeFileSync(join(workspace, "MISSION.md"), "# Probe\nReply with the word ping.\n");
 
-  const baseEnv = {
+  const baseEnv: NodeJS.ProcessEnv = {
     ...process.env,
     HOME: home,
     BRIDGE_CLIENT_TOKEN: token,
     FACTORY_API_KEY: "",
   };
-  delete (baseEnv as { FACTORY_API_KEY?: string }).FACTORY_API_KEY;
+  delete baseEnv.FACTORY_API_KEY;
 
   async function runCase(
     id: string,
@@ -86,9 +95,12 @@ async function main(): Promise<void> {
     tokenState: CaseResult["token"],
   ): Promise<void> {
     const before = app.records.length;
-    const env = { ...baseEnv, ...envExtra };
+    const env: NodeJS.ProcessEnv = { ...baseEnv, ...envExtra };
     if (airgap) env.FACTORY_AIRGAP_ENABLED = "1";
     else delete env.FACTORY_AIRGAP_ENABLED;
+    // Droid reads the literal apiKey; changing the environment alone does not
+    // change the credential used by the invalid-token case.
+    writeSettings(envExtra.BRIDGE_CLIENT_TOKEN ?? token);
     const captured = await runCapture("droid", args, { cwd: workspace, env, timeoutMs: 40_000 });
     results.push({
       id,
@@ -145,16 +157,11 @@ async function main(): Promise<void> {
   writeJson(join(evidenceDir, "cases.json"), results);
   writeJson(join(evidenceDir, "bridge-requests.json"), app.records);
 
-  const md = renderReport(results, { home, workspace, droid: await droidVersion(), settings: join(home, ".factory/settings.json") });
+  const md = renderReport(results, { home, workspace, droid: droidVersion, settings: join(home, ".factory/settings.json") });
   writeFileSync(join(evidenceDir, "G0-AIRGAP.md"), md);
   writeFileSync(join(process.cwd(), "docs/G0-AIRGAP.md"), md);
   await app.close();
   console.log(md);
-}
-
-async function droidVersion(): Promise<string> {
-  const r = await runCapture("droid", ["--version"]);
-  return (r.stdout || r.stderr).trim();
 }
 
 function renderReport(results: CaseResult[], meta: { home: string; workspace: string; droid: string; settings: string }): string {

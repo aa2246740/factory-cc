@@ -20,6 +20,7 @@ export function assistantMessage(
     stop_reason: stopReason,
     stop_sequence: null,
     usage: {
+      ...usage,
       input_tokens: usage?.input_tokens ?? 0,
       output_tokens: usage?.output_tokens ?? 0,
       cache_creation_input_tokens: usage?.cache_creation_input_tokens,

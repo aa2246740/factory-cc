@@ -27,11 +27,17 @@ export class SessionStore {
     return this.sessions.get(id);
   }
 
-  create(input: { role: RoleTag; model: string; droidSessionId?: string; historyHash?: string; toolNames: string[] }): SessionRecord {
-    const active = this.list().filter((s) => s.state !== "CANCELLED" && s.state !== "FAILED").length;
-    if (active >= this.maxSessions) {
-      throw new BridgeError(429, "session_limit", `active session limit ${this.maxSessions} reached`);
-    }
+  create(input: {
+    role: RoleTag;
+    model: string;
+    droidSessionId?: string;
+    historyHash?: string;
+    contextHash?: string;
+    requestMessageHashes?: string[];
+    historyMessageHashes?: string[];
+    toolNames: string[];
+  }): SessionRecord {
+    this.requireCapacity();
     const record: SessionRecord = {
       bridgeSessionId: sessionId(),
       droidSessionId: input.droidSessionId,
@@ -39,6 +45,9 @@ export class SessionStore {
       state: "NEW",
       model: input.model,
       historyHash: input.historyHash,
+      contextHash: input.contextHash,
+      requestMessageHashes: input.requestMessageHashes,
+      historyMessageHashes: input.historyMessageHashes,
       toolNames: input.toolNames,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -54,6 +63,7 @@ export class SessionStore {
 
   setState(id: string, state: SessionState): SessionRecord {
     const record = this.require(id);
+    if (!isActive(record.state) && isActive(state)) this.requireCapacity();
     transition(record, state);
     this.flush(record);
     return record;
@@ -61,6 +71,7 @@ export class SessionStore {
 
   update(id: string, patch: Partial<SessionRecord>): SessionRecord {
     const record = this.require(id);
+    if (patch.state && !isActive(record.state) && isActive(patch.state)) this.requireCapacity();
     Object.assign(record, patch, { updatedAt: new Date().toISOString() });
     this.sessions.set(id, record);
     this.flush(record);
@@ -87,6 +98,13 @@ export class SessionStore {
     this.snapshot();
   }
 
+  private requireCapacity(): void {
+    const active = this.list().filter((record) => isActive(record.state)).length;
+    if (active >= this.maxSessions) {
+      throw new BridgeError(429, "session_limit", `active session limit ${this.maxSessions} reached`);
+    }
+  }
+
   private load(): void {
     try {
       const raw = readFileSync(this.file, "utf8");
@@ -98,5 +116,20 @@ export class SessionStore {
     } catch {
       // first run
     }
+    // There is no process left to finish an interrupted generation. Keep its
+    // identity and SDK checkpoint, but never silently replay unknown side effects.
+    // WAITING_DROID_TOOL remains occupied so a lost waiter cannot be evicted or
+    // matched as a fresh conversation after a restart.
+    for (const record of this.sessions.values()) {
+      if (record.state === "NEW" || record.state === "GENERATING" || record.state === "RESUMING") {
+        transition(record, "FAILED");
+        record.notes.push("bridge-restarted-during-generation");
+        this.flush(record);
+      }
+    }
   }
+}
+
+function isActive(state: SessionState): boolean {
+  return state === "NEW" || state === "GENERATING" || state === "WAITING_DROID_TOOL" || state === "RESUMING";
 }

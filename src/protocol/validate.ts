@@ -38,5 +38,16 @@ export function parseMessagesRequest(body: unknown): MessagesRequest {
   if (!parsed.success) {
     throw new BridgeError(400, "invalid_request_error", parsed.error.issues.map((i) => i.message).join("; "));
   }
+  const choice: unknown = parsed.data.tool_choice;
+  if (choice !== undefined) {
+    if (!choice || typeof choice !== "object" || Array.isArray(choice)
+        || !["auto", "none", "any", "tool"].includes(String((choice as Record<string, unknown>).type))) {
+      throw new BridgeError(400, "invalid_request_error", "tool_choice must specify auto, none, any or tool");
+    }
+    const type = (choice as Record<string, unknown>).type;
+    if (type === "any" || type === "tool" || (choice as Record<string, unknown>).disable_parallel_tool_use === true) {
+      throw new BridgeError(422, "unsupported_tool_choice", "The native Claude Code agent cannot guarantee forced tool selection or disabled parallel execution; use auto or none.");
+    }
+  }
   return parsed.data as MessagesRequest;
 }
