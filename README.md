@@ -47,7 +47,7 @@ tsx scripts/configure-droid.ts --settings /tmp/droid-home/.factory/settings.json
 | `npm run test:g0` | 公共 CLI airgap 矩阵 | 记录真实退出码 |
 | `npm run probe:upstream` | MiniMax → GLM → OpenRouter 工具调用探针 | 需 BYOK 密钥 |
 | `npm run test:e2e:chat` | 经 Bridge 的 Droid 普通对话 | MiniMax-M2.5 已 PASS |
-| `npm run test:e2e:mission` | Mission 三角色 | MiniMax-M2.5 已 PASS（orchestrator/worker/validator） |
+| `npm run test:e2e:mission` | Mission 三角色 + Tiny Tasks 验收全绿 | MiniMax-M2.5 已 PASS（484s / 118 请求，无短超时） |
 | `npm run test:resilience` | 重试 / 取消 / 图片 | 应通过 |
 | `npm run doctor` | 脱敏诊断 | 应通过 |
 | `npm run evidence:pack` | SHA-256 清单 | 应通过 |

@@ -1,0 +1,281 @@
+[
+  {
+    "bridgeSessionId": "sess_22376be6-0da8-40df-b568-d191243b83c3",
+    "role": "orchestrator",
+    "state": "IDLE",
+    "model": "relay-orchestrator",
+    "historyHash": "63a14f3d2ebcb65e326d4a1dff574351149e9248507e6fcd6a4689edf3b50feb",
+    "toolNames": [
+      "Read",
+      "LS",
+      "Execute",
+      "Edit",
+      "Grep",
+      "Glob",
+      "Create",
+      "TaskOutput",
+      "TaskStop",
+      "ToolSearch",
+      "Skill",
+      "ProposeMission",
+      "StartMissionRun",
+      "DismissHandoffItems",
+      "Task"
+    ],
+    "createdAt": "2026-10-15T03:18:23.750Z",
+    "updatedAt": "2026-10-15T03:26:23.944Z",
+    "pendingToolIds": [],
+    "cancelRequested": false,
+    "notes": [
+      "artifact:features.json",
+      "artifact:validation-contract.md",
+      "artifact:validation-state.json",
+      "artifact:AGENTS.md",
+      "artifact:services.yaml",
+      "artifact:SKILL.md",
+      "mission-run-started",
+      "mission-spawned",
+      "sdk-mission-start-when-ready",
+      "sdk: returned tool_use while query remains alive"
+    ],
+    "usage": {
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "estimated": true
+    }
+  },
+  {
+    "bridgeSessionId": "sess_df9214ac-9d1a-4b20-b1ea-61d591ee6b42",
+    "role": "worker",
+    "state": "IDLE",
+    "model": "relay-worker",
+    "historyHash": "045f7b06420c465a233a91adc126346905bd8c029948fea70c8849626935be3d",
+    "toolNames": [],
+    "createdAt": "2026-10-15T03:18:24.053Z",
+    "updatedAt": "2026-10-15T03:18:28.665Z",
+    "pendingToolIds": [],
+    "cancelRequested": false,
+    "notes": [
+      "artifact:features.json",
+      "artifact:validation-contract.md",
+      "artifact:validation-state.json",
+      "artifact:AGENTS.md",
+      "artifact:services.yaml",
+      "artifact:SKILL.md"
+    ],
+    "usage": {
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "estimated": true
+    }
+  },
+  {
+    "bridgeSessionId": "sess_352265d8-e615-4629-8774-120276b7cb68",
+    "role": "worker",
+    "state": "IDLE",
+    "model": "relay-worker",
+    "historyHash": "67d58c270415ecc2206599b57d740f42491126d76ddf80d973246bc5d12eb0d5",
+    "toolNames": [
+      "Read",
+      "LS",
+      "Execute",
+      "Edit",
+      "Grep",
+      "Glob",
+      "Create",
+      "ExitSpecMode",
+      "TaskOutput",
+      "TaskStop",
+      "ToolSearch",
+      "Skill",
+      "EndFeatureRun",
+      "Task"
+    ],
+    "createdAt": "2026-10-15T03:18:24.066Z",
+    "updatedAt": "2026-10-15T03:21:28.679Z",
+    "pendingToolIds": [],
+    "cancelRequested": false,
+    "notes": [
+      "artifact:features.json",
+      "artifact:validation-contract.md",
+      "artifact:validation-state.json",
+      "artifact:AGENTS.md",
+      "artifact:services.yaml",
+      "artifact:SKILL.md",
+      "sdk: returned tool_use while query remains alive"
+    ],
+    "usage": {
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "estimated": true
+    }
+  },
+  {
+    "bridgeSessionId": "sess_caede43a-0256-4e5a-ae7d-1904770208e2",
+    "role": "validator",
+    "state": "IDLE",
+    "model": "relay-validator",
+    "historyHash": "abac57e28c7e1538e28c4ede0c05644c005cdf7efe46f5626ddf73c3b07a62fa",
+    "toolNames": [],
+    "createdAt": "2026-10-15T03:21:24.189Z",
+    "updatedAt": "2026-10-15T03:21:30.879Z",
+    "pendingToolIds": [],
+    "cancelRequested": false,
+    "notes": [
+      "artifact:features.json",
+      "artifact:validation-contract.md",
+      "artifact:validation-state.json",
+      "artifact:AGENTS.md",
+      "artifact:services.yaml",
+      "artifact:SKILL.md"
+    ],
+    "usage": {
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "estimated": true
+    }
+  },
+  {
+    "bridgeSessionId": "sess_48bcc9bc-a738-4491-9c89-f6ba0b399c49",
+    "role": "validator",
+    "state": "IDLE",
+    "model": "relay-validator",
+    "historyHash": "212791d5b3d51ff07eab68f1246d84efd7205961e2d3ccd2682b8ef697f07ee0",
+    "toolNames": [
+      "Read",
+      "LS",
+      "Execute",
+      "Edit",
+      "Grep",
+      "Glob",
+      "Create",
+      "ExitSpecMode",
+      "TaskOutput",
+      "TaskStop",
+      "ToolSearch",
+      "Skill",
+      "EndFeatureRun",
+      "Task"
+    ],
+    "createdAt": "2026-10-15T03:21:24.214Z",
+    "updatedAt": "2026-10-15T03:24:15.986Z",
+    "pendingToolIds": [],
+    "cancelRequested": false,
+    "notes": [
+      "artifact:features.json",
+      "artifact:validation-contract.md",
+      "artifact:validation-state.json",
+      "artifact:AGENTS.md",
+      "artifact:services.yaml",
+      "artifact:SKILL.md",
+      "sdk: returned tool_use while query remains alive"
+    ],
+    "usage": {
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "estimated": true
+    }
+  },
+  {
+    "bridgeSessionId": "sess_9c18b790-cbdd-4df7-b0aa-771f998b0c73",
+    "role": "validator",
+    "state": "IDLE",
+    "model": "relay-validator",
+    "historyHash": "2bca7f68ba1ce76dde9d2fc2714bb08345d709a68fe3a646c86d2f70089316b5",
+    "toolNames": [
+      "Read",
+      "LS",
+      "Execute",
+      "Edit",
+      "Grep",
+      "Glob",
+      "Create",
+      "ToolSearch",
+      "Skill"
+    ],
+    "createdAt": "2026-10-15T03:22:37.524Z",
+    "updatedAt": "2026-10-15T03:23:34.397Z",
+    "pendingToolIds": [],
+    "cancelRequested": false,
+    "notes": [
+      "artifact:features.json",
+      "artifact:validation-contract.md",
+      "artifact:validation-state.json",
+      "artifact:AGENTS.md",
+      "artifact:services.yaml",
+      "artifact:SKILL.md",
+      "sdk: returned tool_use while query remains alive"
+    ],
+    "usage": {
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "estimated": true
+    }
+  },
+  {
+    "bridgeSessionId": "sess_c2e132ac-16a8-4984-a4a0-b08dd53d4500",
+    "role": "validator",
+    "state": "IDLE",
+    "model": "relay-validator",
+    "historyHash": "a62152c779027ceebe4b8e65bb8b86ddb403e3f90ae24b1bc0cb8b342c7bca2b",
+    "toolNames": [],
+    "createdAt": "2026-10-15T03:24:17.849Z",
+    "updatedAt": "2026-10-15T03:24:24.453Z",
+    "pendingToolIds": [],
+    "cancelRequested": false,
+    "notes": [
+      "artifact:features.json",
+      "artifact:validation-contract.md",
+      "artifact:validation-state.json",
+      "artifact:AGENTS.md",
+      "artifact:services.yaml",
+      "artifact:SKILL.md"
+    ],
+    "usage": {
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "estimated": true
+    }
+  },
+  {
+    "bridgeSessionId": "sess_8d4a7f77-e8e7-4b12-befa-6173298ff94f",
+    "role": "validator",
+    "state": "IDLE",
+    "model": "relay-validator",
+    "historyHash": "9705560d641cabdfbbce9754bb5cd31a9f08a2218f0b256d695739aca4e4d06f",
+    "toolNames": [
+      "Read",
+      "LS",
+      "Execute",
+      "Edit",
+      "Grep",
+      "Glob",
+      "Create",
+      "ExitSpecMode",
+      "TaskOutput",
+      "TaskStop",
+      "ToolSearch",
+      "Skill",
+      "EndFeatureRun",
+      "Task"
+    ],
+    "createdAt": "2026-10-15T03:24:17.867Z",
+    "updatedAt": "2026-10-15T03:26:03.953Z",
+    "pendingToolIds": [],
+    "cancelRequested": false,
+    "notes": [
+      "artifact:features.json",
+      "artifact:validation-contract.md",
+      "artifact:validation-state.json",
+      "artifact:AGENTS.md",
+      "artifact:services.yaml",
+      "artifact:SKILL.md",
+      "sdk: returned tool_use while query remains alive"
+    ],
+    "usage": {
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "estimated": true
+    }
+  }
+]

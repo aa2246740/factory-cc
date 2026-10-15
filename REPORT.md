@@ -9,7 +9,20 @@
 - **model:** `MiniMax-M2.5`
 - **tokenEnv:** `MINIMAXCN_API_KEY`（只记录环境变量名，不写密钥）
 - Claude Code 注入：`ANTHROPIC_BASE_URL` + `ANTHROPIC_AUTH_TOKEN`，`ANTHROPIC_API_KEY` 为空；全部模型槽位指向 `MiniMax-M2.5`
-- GLM / OpenRouter 未使用（MiniMax 工具调用探针一次通过）
+- GLM / OpenRouter 未使用（MiniMax 全程可用，未触发配额/鉴权失败回退）
+
+无超时长跑（`npm run test:e2e:mission`，`timeoutMs=0`，后台跑并轮询日志）：
+
+- **结果：** PASS
+- **时长：** 484 秒
+- **请求数：** 118（`POST /v1/messages`）
+- **角色：** orchestrator + worker + validator
+- **Droid 退出码：** 0，stdout 含 `Mission Complete`
+- **校验：** VAL-FILTER-001 / VAL-COUNTS-001 均为 passed
+- **特性：** fix-completed-filter-defect、scrutiny-validator-fix-defect、user-testing-validator-fix-defect 均为 completed
+- **验收测试：** `npm test` 6/6 绿
+- **missionState：** completed
+- 证据：`evidence/e2e-mission.json`、`evidence/e2e-mission-2026-10-15T03-18-21-057Z/`
 
 ## 五个问题（先答）
 
@@ -20,7 +33,7 @@
    **能。** 隔离 HOME、无 `FACTORY_API_KEY`，`droid exec -m relay-chat` 请求落到本机 `POST /v1/messages`。本轮 sdk 模式再经 Bridge 打到 MiniMax。证据：G0 A1；`evidence/e2e-chat.json`。
 
 3. **同一条件下 Mission 三个角色能否真正跑起来？**  
-   **能（非 Claude 模型，经 Bridge）。** 根因不是“第一包必须立刻 StartMissionRun”，而是 Droid 的 `StartMissionRun` 是**阻塞式 runner**：必须先有合法 `features.json`、校验合同、`AGENTS.md`、`services.yaml`，以及带 YAML `name`/`description` 的 `skills/<skill>/SKILL.md`。满足后 Bridge 返回原生 `StartMissionRun`，公共 Droid 会拉起 Worker 与 Validator。本轮观测到 `orchestrator` + `worker` + `validator` 共 109 次 `/v1/messages`。证据：`evidence/e2e-mission.json`。
+   **能（非 Claude 模型，经 Bridge）。** 根因不是“第一包必须立刻 StartMissionRun”，而是 Droid 的 `StartMissionRun` 是**阻塞式 runner**：必须先有合法 `features.json`、校验合同、`AGENTS.md`、`services.yaml`，以及带 YAML `name`/`description` 的 `skills/<skill>/SKILL.md`。满足后 Bridge 返回原生 `StartMissionRun`，公共 Droid 会拉起 Worker 与 Validator。去掉约 8 分钟 exec 超时后，Tiny Tasks Mission 完整跑完：三角色、118 次请求、484 秒、校验与验收全绿。证据：`evidence/e2e-mission.json`。
 
 4. **有没有 Factory 服务连接尝试？**  
    **未做全流量旁路，不能写成零遥测。** airgap 下 doctor 跳过 hosted 检查。官方 airgap 文档也写明隔离要靠网络策略。
@@ -31,8 +44,8 @@
 ## 产品结论
 
 - **普通对话：** mock / protocol 可用；**sdk + MiniMax-M2.5** 的 Droid exec 已跑通（非 Claude 模型 PASS）。
-- **Mission：** 三角色请求已经 Bridge 出现（非 Claude 模型 PASS）。Droid 进程在约 8 分钟超时后被结束（退出码 143），不宣称 Tiny Tasks 验收已被 Mission 完整代写完毕。
-- **未购买、未充值、未开官方 Claude 账单。** 未回退到 Factory 托管模型。
+- **Mission：** 三角色经 Bridge 完整跑完（非 Claude 模型 PASS）。去掉短超时后，Tiny Tasks 缺陷修复 + 审视 + 用户测试均 completed，校验全绿，Droid 报 Mission Complete。
+- **未购买、未充值、未开官方 Claude 账单。** 未回退到 Factory 托管模型。本轮也未用到 GLM 回退（MiniMax 未出现配额/鉴权失败）。
 - **Grok-only 规则保持：** `.cursor/CLOUD.md` 与 hooks 未改。
 
 ## 分项状态
@@ -42,31 +55,32 @@
 | Linux 环境 | **PASS** | Ubuntu x64 |
 | 安装 Droid / Claude Code | **PASS** | Droid 0.241.1，Claude 2.1.292 |
 | MiniMax 小工具调用探针 | **PASS**（非 Claude） | `evidence/upstream-probe.json`，`stop_reason=tool_use`，`relay_probe` |
-| GLM 回退探针 | **NOT_RUN** | MiniMax 已成功 |
+| GLM 回退探针 | **NOT_RUN** | MiniMax 已成功，未触发回退 |
 | OpenRouter 免费回退 | **NOT_RUN** | MiniMax 已成功 |
 | 公共 CLI airgap + BYOK exec | **PASS** | G0 A1 |
 | 错误本地令牌 | **PASS** | A2 → 401 |
 | 只读工具往返 | **PASS** | supplemental A3b |
 | 普通对话 e2e（Droid → Bridge → MiniMax） | **PASS**（非 Claude） | `evidence/e2e-chat.json`，2 次 chat 请求，退出码 0 |
-| Mission 三角色 e2e（Droid → Bridge → MiniMax） | **PASS**（非 Claude） | `evidence/e2e-mission.json`，orchestrator/worker/validator，109 请求 |
+| Mission 三角色 e2e（Droid → Bridge → MiniMax） | **PASS**（非 Claude） | `evidence/e2e-mission.json`，118 请求 / 484s / MiniMax-M2.5 |
 | 官方 Claude 认证 / 账单 | **BLOCKED_AUTH** | 未登录，未使用 |
 | SDK 跨请求接力（fake） | **PASS** | `tests/sdk-probes` |
 | unit / protocol / fake / resilience | **PASS** | `npx vitest run` 28/28 |
 | Tiny Tasks 夹具自测 | **PASS** | `fixtures/tiny-tasks` 6/6 |
-| Mission 代写 Tiny Tasks 至验收全绿 | **NOT_RUN** | 三角色已出现；exec 超时 143，未等 runner 收尾 |
-| 发现失败 → 返工 → 再验证 | **NOT_RUN** | 需要完整 runner 收尾 |
+| Mission 代写 Tiny Tasks 至验收全绿 | **PASS**（非 Claude） | 无短超时；Mission Complete；校验两项 passed；验收 6/6 |
+| 发现失败 → 返工 → 再验证 | **PASS**（非 Claude） | scrutiny + user-testing 特性 completed |
 | Playwright GUI | **NOT_RUN** | |
 | 网络零遥测 | **NOT_RUN** | |
 | Factory 授权依据 | **UNSUPPORTED_OBSERVED** | 公开 airgap 旗标 |
 | Anthropic 授权依据 | **BLOCKED_AUTH** | 官方 Claude 未用 |
 
-## 根因（Mission Worker/Validator 从不启动）
+## 根因（Mission Worker/Validator 从不启动 / 先前被短超时杀掉）
 
 1. 第一包若只回纯文本，Droid 不会调用 `StartMissionRun`（G0 mock）。
 2. 第一包若过早合成 `StartMissionRun`，Droid 返回错误：`features.json must exist with at least one feature`。
 3. `StartMissionRun` 是阻塞调用：文件齐了才会按序拉起 Worker，并在 handoff / 暂停 / 全部完成后才把 `tool_result` 还给编排器。
 4. `SKILL.md` 必须有 YAML `name` 与 `description`，否则 `worker skills are not ready`。
 5. SDK 若在返回 `tool_use` 后丢掉 query 迭代器，后续编排会卡死；现已后台保活。
+6. 约 8 分钟的 exec 超时会在校验刚绿、用户测试进行中时 SIGTERM（退出码 143）。去掉超时后同一路径在 484 秒自然结束，验收全绿。长跑过程未再发现新的 Bridge 阻断缺陷。
 
 ## 最少启动命令
 
