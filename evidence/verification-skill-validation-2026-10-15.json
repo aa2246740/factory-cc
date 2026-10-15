@@ -1,0 +1,226 @@
+{
+  "suite": "verification-skill-chat",
+  "status": "FAIL",
+  "startedAt": "2026-10-15T23:15:17.340Z",
+  "feature": "chat",
+  "scope": [
+    "official Droid production wrapper",
+    "native Read/Write",
+    "official --session-id resume",
+    "native usage",
+    "owned cleanup"
+  ],
+  "exclusions": [
+    "every Factory model-using path",
+    "Mission",
+    "real Anthropic subscription",
+    "provider billing",
+    "compaction"
+  ],
+  "authentication": {
+    "mode": "isolated BYOK",
+    "subscriptionCredentialsRead": false,
+    "provider": "glm",
+    "label": "https://open.bigmodel.cn/api/anthropic",
+    "baseUrl": "https://open.bigmodel.cn/api/anthropic",
+    "model": "glm-5.2",
+    "tokenEnv": "READINESS_MODEL_API_KEY",
+    "authHeader": "x-api-key"
+  },
+  "versions": {
+    "sdk": "0.3.300",
+    "node": "v24.19.0",
+    "droid": "0.242.0",
+    "claude": "2.1.300 (Claude Code)"
+  },
+  "actions": [
+    {
+      "action": "chat-turn-1",
+      "startedAt": "2026-10-15T23:15:17.458Z",
+      "completedAt": "2026-10-15T23:15:37.898Z",
+      "command": [
+        "npm",
+        "run",
+        "run-droid",
+        "--",
+        "--home",
+        "/tmp/relay-e2e-home-a0kv4W",
+        "--cwd",
+        "/tmp/relay-e2e-ws-7cB8c1",
+        "--airgap",
+        "1",
+        "--timeout",
+        "600000",
+        "--out",
+        "/tmp/relay-verify-private-kPnBed/wrapper-turn-1.json",
+        "--",
+        "exec",
+        "--settings",
+        "/tmp/relay-e2e-home-a0kv4W/.factory/settings.json",
+        "--output-format",
+        "json",
+        "-m",
+        "relay-chat",
+        "--auto",
+        "high",
+        "Use native Read to read input.json in the current directory. Use native Write to create result.json with exactly the JSON object {\"nonce\": <nonce read from input.json>, \"sum\": <a+b from input.json>}. Do not modify input.json. Remember the phrase RELAY_MEMORY_e1249ba09cdf86497940 for the next message; do not put that phrase in any file. After the file is written reply exactly VERIFY_WRITE_OK."
+      ],
+      "stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"duration_ms\":19845,\"num_turns\":1,\"result\":\"[Read] Read /tmp/relay-e2e-ws-7cB8c1/input.json\\n\\n[Write] Write /tmp/relay-e2e-ws-7cB8c1/result.json\\nVERIFY_WRITE_OK\",\"session_id\":\"e76e2430-29ae-4357-93ad-74021fc7167d\",\"usage\":{\"input_tokens\":0,\"output_tokens\":229,\"cache_read_input_tokens\":47104,\"cache_creation_input_tokens\":0,\"factory_credits\":0,\"ttft_ms\":8583}}\n",
+      "stderr": "",
+      "exitCode": 0
+    }
+  ],
+  "doctor": {
+    "at": "2026-10-15T23:15:17.458Z",
+    "status": "PASS",
+    "readOnly": true,
+    "modelAvailability": "NOT_TESTED_BY_DOCTOR",
+    "checks": {
+      "healthIsSdk": true,
+      "authenticatedSdkByokRuntime": true,
+      "adminReadWorks": true,
+      "unauthenticatedAdminReadDenied": true,
+      "ownedDirectoriesMatch": true,
+      "privateFactorySettings": true,
+      "privateHookCredential": true,
+      "isolatedClaudeConfig": true
+    },
+    "runtime": {
+      "kind": "sdk",
+      "authMode": "byok",
+      "permissionMode": "bypass",
+      "prompt": {
+        "systemPrompt": "preset:claude_code + stable append",
+        "dynamicPlacement": "user input on initial turn or context change",
+        "tools": "preset:claude_code built-ins + Droid-exclusive MCP"
+      },
+      "tools": "preset:claude_code + droid-exclusive MCP",
+      "input": "persistent SDK streaming input",
+      "includePartialMessages": true,
+      "approvalChannel": "external controller",
+      "activeNativeSessions": 0,
+      "activeNativeTurns": 0,
+      "pendingHostCalls": 0,
+      "pendingApprovals": 0,
+      "fatalErrors": [],
+      "overridesAnthropicEnv": true,
+      "upstream": {
+        "selected": false,
+        "authMode": "byok"
+      },
+      "control": {
+        "pendingApprovals": 0,
+        "failures": [],
+        "activeHostSessions": 0,
+        "boundNativeSessions": 0
+      }
+    },
+    "sessionCount": 0
+  },
+  "error": "First-turn file/native-session/lifecycle assertions failed; preserved snapshot explains the failure.",
+  "failureDoctor": {
+    "at": "2026-10-15T23:15:37.905Z",
+    "status": "PASS",
+    "readOnly": true,
+    "modelAvailability": "NOT_TESTED_BY_DOCTOR",
+    "checks": {
+      "healthIsSdk": true,
+      "authenticatedSdkByokRuntime": true,
+      "adminReadWorks": true,
+      "unauthenticatedAdminReadDenied": true,
+      "ownedDirectoriesMatch": true,
+      "privateFactorySettings": true,
+      "privateHookCredential": true,
+      "isolatedClaudeConfig": true
+    },
+    "runtime": {
+      "kind": "sdk",
+      "authMode": "byok",
+      "permissionMode": "bypass",
+      "prompt": {
+        "systemPrompt": "preset:claude_code + stable append",
+        "dynamicPlacement": "user input on initial turn or context change",
+        "tools": "preset:claude_code built-ins + Droid-exclusive MCP"
+      },
+      "tools": "preset:claude_code + droid-exclusive MCP",
+      "input": "persistent SDK streaming input",
+      "includePartialMessages": true,
+      "approvalChannel": "external controller",
+      "activeNativeSessions": 0,
+      "activeNativeTurns": 0,
+      "pendingHostCalls": 0,
+      "pendingApprovals": 0,
+      "fatalErrors": [],
+      "overridesAnthropicEnv": true,
+      "upstream": {
+        "provider": "glm",
+        "label": "https://open.bigmodel.cn/api/anthropic",
+        "baseUrl": "https://open.bigmodel.cn/api/anthropic",
+        "model": "glm-5.2",
+        "tokenEnv": "READINESS_MODEL_API_KEY",
+        "authHeader": "x-api-key"
+      },
+      "control": {
+        "pendingApprovals": 0,
+        "failures": [],
+        "activeHostSessions": 0,
+        "boundNativeSessions": 0
+      }
+    },
+    "sessionCount": 1
+  },
+  "cleanup": {
+    "at": "2026-10-15T23:15:37.912Z",
+    "processes": {
+      "supported": true,
+      "observedProcessCount": 8,
+      "terminatedProcessCount": 0,
+      "remainingProcessIds": [],
+      "complete": true
+    },
+    "removed": [
+      {
+        "kind": "relay-e2e-home-<run>",
+        "removed": true
+      },
+      {
+        "kind": "relay-e2e-ws-<run>",
+        "removed": true
+      },
+      {
+        "kind": "relay-verify-private-<run>",
+        "removed": true
+      }
+    ],
+    "errors": [],
+    "evidenceRetention": [
+      {
+        "artifact": "doctor.json",
+        "exists": true,
+        "sha256": "742816890823b9cddd12ee5e6e946f15c63dc0a42e169a6848e37ef83321df21",
+        "unchangedAfterCleanup": true
+      },
+      {
+        "artifact": "action-1.json",
+        "exists": true,
+        "sha256": "790644f0c5f95ec5e94b1bcc6d0c301bccd2a70d088c46e81201d99db0cfc829",
+        "unchangedAfterCleanup": true
+      },
+      {
+        "artifact": "after-first.json",
+        "exists": true,
+        "sha256": "fdf980bf9915b5c1816a52f48b83ae37aad18679475e38ce1566a47cba832ca1",
+        "unchangedAfterCleanup": true
+      },
+      {
+        "artifact": "doctor-on-failure.json",
+        "exists": true,
+        "sha256": "e6cb0d7749f70bb711cd8d721d2fb032316dfb7e339a4b7c4403bf6bddc5d15e",
+        "unchangedAfterCleanup": true
+      }
+    ],
+    "complete": true
+  },
+  "finishedAt": "2026-10-15T23:15:37.912Z",
+  "evidenceDirectory": "/workspace/work/factory-cc-prep/repo/evidence/local/verify-relay-2026-10-15T23-15-17-339Z-c80fbc"
+}

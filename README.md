@@ -105,6 +105,12 @@ Factory 生命周期已通过官方 [hooks](https://docs.factory.com/harness/hoo
 
 ## 测试
 
+仓库专用验证入口是 `npm run verify:relay -- --feature chat`。它按[验证 skill](.cursor/skills/verify-relay-bridge/SKILL.md)启动隔离实例、运行只读 doctor，再通过真实 Droid 验证文件读写和同会话恢复，最后清理进程与私有配置并保留脱敏证据。先按 skill 设置明确的 BYOK 上游；`--offline-check` 只检查本地前提，不调用模型。
+
+[本轮 skill 执行记录](evidence/verification-skill-execution-2026-10-15.json)保留了首轮验证器误判和修正后的真实通过结果；清理后证据哈希已独立复核。该结果只证明指定的 chat/resume 用户路径。
+
+**尚未覆盖 Factory 所有模型调用入口。** [功能地图](.cursor/skills/verify-relay-bridge/features/README.md)与[模型入口清单](evidence/factory-model-surface-2026-10-15.json)逐项记录现有证据和缺口，包括 Factory 自身压缩、spec/review、自定义 Droid 生成、自动路由、风险/Shield/Local Signals 分类及图像路径。静态发现不算运行通过；REA 的文件检查也不等于完整调用图。
+
 | 命令 | 范围 | 是否调用真实模型 |
 |---|---|---|
 | `npm test` | unit、protocol、fake relay、SDK adapter 注入事件、resilience | 否 |
@@ -114,6 +120,7 @@ Factory 生命周期已通过官方 [hooks](https://docs.factory.com/harness/hoo
 | `npm run test:resilience` | 重试、取消、图片 | 否 |
 | `npm run tiny-tasks:test` | Tiny Tasks 参考夹具 | 否 |
 | `npm run doctor` | 脱敏诊断 | 否 |
+| `npm run verify:relay -- --feature chat` | 真实 CLI 文件操作、会话恢复与清理证据 | 是，隔离 BYOK |
 | `npm run test:g0` | 安装版本的 Droid airgap 行为 | 以具体探针为准 |
 | `npm run probe:upstream` | BYOK 上游工具调用探针 | 是 |
 | `npm run test:e2e:chat` / `npm run test:e2e:mission` | 在线对话 / Mission 验收 | 是，另行执行并记录结果 |

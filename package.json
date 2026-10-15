@@ -15,6 +15,7 @@
     "start": "tsx src/index.ts",
     "dev": "tsx watch src/index.ts",
     "doctor": "tsx scripts/doctor.ts",
+    "verify:relay": "tsx scripts/verify-relay.ts",
     "configure-droid": "tsx scripts/configure-droid.ts",
     "control": "tsx scripts/control.ts",
     "configure-hooks": "tsx scripts/configure-hooks.ts",

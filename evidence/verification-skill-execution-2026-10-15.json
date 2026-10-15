@@ -1,0 +1,140 @@
+{
+  "recordedAt": "2026-10-15T23:18:43.816275+00:00",
+  "status": "PASS_ONE_MAPPED_FEATURE",
+  "allFactoryModelCallsitesCovered": false,
+  "generator": {
+    "repository": "cursor/plugins",
+    "commit": "99743e9c151c8537cbbf1f98bb38f34ef3368453",
+    "path": "pstack/skills/create-verification-skill/SKILL.md",
+    "gitBlobSha": "140d033a001e8d27acd14b06004506c43053b199"
+  },
+  "generatedSkill": ".cursor/skills/verify-relay-bridge/SKILL.md",
+  "featureMapFiles": 5,
+  "provedFeature": "chat-and-resume",
+  "attempts": [
+    {
+      "result": "verification-skill-validation-2026-10-15.json",
+      "status": "FAIL",
+      "cause": "Verifier required the entire Droid result to equal a marker despite normal native tool-trace prefixes. Native file operation itself succeeded; this failed attempt is retained.",
+      "cleanupComplete": true
+    },
+    {
+      "result": "verification-skill-validation-2026-10-15-r2.json",
+      "status": "PASS",
+      "correction": "Match the final nonempty Droid line and independently require the native transcript final assistant text to equal the expected marker. No product/runtime behavior or side-effect gate was weakened.",
+      "checks": {
+        "firstDroidSucceeded": true,
+        "independentFileResult": true,
+        "inputUnchanged": true,
+        "nativeReadCompleted": true,
+        "nativeWriteCompleted": true,
+        "secondDroidSucceeded": true,
+        "sameFactorySession": true,
+        "sameNativeSession": true,
+        "bothHostSessionsEndedResumably": true,
+        "providerUsageReported": true,
+        "continuationUsageReported": true,
+        "runtimeDrainedBeforeCleanup": true,
+        "noPendingStoredTools": true
+      },
+      "cleanupComplete": true
+    }
+  ],
+  "proof": {
+    "realUserPath": "Production run-droid wrapper -> official Droid exec -> Bridge -> official Claude Code SDK -> explicit isolated GLM BYOK",
+    "doctor": "Read-only authenticated runtime/config/ownership checks; standalone doctor also executed; no model request during pre-drive doctor.",
+    "actions": "Native file Read/Write with a fixture nonce absent from the prompt; independent file observation; official --session-id continuation and exact recall.",
+    "cleanup": {
+      "at": "2026-10-15T23:17:23.530Z",
+      "processes": {
+        "supported": true,
+        "observedProcessCount": 17,
+        "terminatedProcessCount": 0,
+        "remainingProcessIds": [],
+        "complete": true
+      },
+      "removed": [
+        {
+          "kind": "relay-e2e-home-<run>",
+          "removed": true
+        },
+        {
+          "kind": "relay-e2e-ws-<run>",
+          "removed": true
+        },
+        {
+          "kind": "relay-verify-private-<run>",
+          "removed": true
+        }
+      ],
+      "errors": [],
+      "evidenceRetention": [
+        {
+          "artifact": "doctor.json",
+          "exists": true,
+          "sha256": "b4aa12569f62617ac8c79cf2e47928dbc0a2f0fff962f25e8329efa3ca48bd37",
+          "unchangedAfterCleanup": true
+        },
+        {
+          "artifact": "action-1.json",
+          "exists": true,
+          "sha256": "268206a0cfea6d1a01c779c0e962823a38c99e986273c901b2d97f6013a6bd1e",
+          "unchangedAfterCleanup": true
+        },
+        {
+          "artifact": "after-first.json",
+          "exists": true,
+          "sha256": "9c6d004c3246a26c5d63d78a1e613cee59acf86074c5687ebd8cf511ad8e511c",
+          "unchangedAfterCleanup": true
+        },
+        {
+          "artifact": "action-2.json",
+          "exists": true,
+          "sha256": "438b92c15831ce987cde7d1d58b2aa00519f6e6f5fcf0d23fa9366067a0fc8f7",
+          "unchangedAfterCleanup": true
+        },
+        {
+          "artifact": "snapshot.json",
+          "exists": true,
+          "sha256": "40da75a987d6c7076e1833f8cc4e0e44a22283594b4c4a5343294171f68203e8",
+          "unchangedAfterCleanup": true
+        }
+      ],
+      "complete": true
+    },
+    "evidenceSurvivalIndependentlyRechecked": true,
+    "subscriptionCredentialsUsed": false
+  },
+  "reaEvidence": "rea-model-surface-2026-10-15.json",
+  "surfaceInventory": "factory-model-surface-2026-10-15.json",
+  "limits": [
+    "The generator requires proving one mapped feature; this result does not verify the rest of the feature map.",
+    "REA artifact inventory and independent static byte searches cannot establish an exhaustive private/conditional/server-side model-call denominator.",
+    "Historical scoped evidence is distinct from this new execution. Unverified Factory paths remain explicit in the map."
+  ],
+  "generatedFileSha256": {
+    ".cursor/skills/verify-relay-bridge/SKILL.md": "1f606d43f2f68bc62778b9914f2d2b747e199de92d5d9b7fa49aa1d978a1bd73",
+    ".cursor/skills/verify-relay-bridge/features/README.md": "0f28a902731e8bcf2cfea5f8229a41dfd11f71d5ea792e529692231de78b1b03",
+    ".cursor/skills/verify-relay-bridge/features/chat-and-resume.md": "3b733a088ade2532e0dcaf2255334adda46c51de65c88dc5f48608dbf990b44b",
+    ".cursor/skills/verify-relay-bridge/features/mission.md": "1fb53d42b78109de3155d10c2eaa54c707681b250268c9feb378d949604d26ef",
+    ".cursor/skills/verify-relay-bridge/features/permissions-and-control.md": "c14989705cb788c03f8047222b9fdbbcd767524261ce241e2c61c82b9fc80dd8",
+    ".cursor/skills/verify-relay-bridge/features/skills-and-agents.md": "1382d993432151ebc75ea5d84ef5678e5823f7acaaf3d57ca7d0a5fc70ba1ee9",
+    ".cursor/skills/verify-relay-bridge/features/spec-review-and-auxiliary.md": "51a36172f637415c663824b1d104e91e345374d6c078e6782772733c4a79bcad",
+    "scripts/verify-relay.ts": "3a5201dc91844eff17abc8c54ce9e33e5075ebbd12f5398183daee2cda7133a5",
+    "tests/unit/verify-relay.test.ts": "142b0d8639b473970ab26929fbf9aff9098cc936a0c109279e06ff455460d3d8"
+  },
+  "maintenanceCommand": "/maintain-verification-skill",
+  "offlineValidation": {
+    "startedAt": "2026-10-15T23:18:05Z",
+    "npm test": {
+      "status": "PASS",
+      "tests": 293,
+      "files": 32
+    },
+    "npx tsc --noEmit": "PASS",
+    "npm run build": "PASS",
+    "git diff --check": "PASS",
+    "skillStructureAndLinks": "PASS",
+    "configuredKeyLiteralScan": "PASS"
+  }
+}
