@@ -55,12 +55,13 @@ umask 077
 mkdir -p tmp/relay-local
 export BRIDGE_CLIENT_TOKEN="$(openssl rand -hex 24)"
 export BRIDGE_ADMIN_TOKEN="$(openssl rand -hex 24)"
-printf 'export BRIDGE_CLIENT_TOKEN=%s\nexport BRIDGE_ADMIN_TOKEN=%s\n' "$BRIDGE_CLIENT_TOKEN" "$BRIDGE_ADMIN_TOKEN" > tmp/relay-local/tokens.env
+export BRIDGE_HOOK_TOKEN="$(openssl rand -hex 24)"
+printf 'export BRIDGE_CLIENT_TOKEN=%s\nexport BRIDGE_ADMIN_TOKEN=%s\nexport BRIDGE_HOOK_TOKEN=%s\n' "$BRIDGE_CLIENT_TOKEN" "$BRIDGE_ADMIN_TOKEN" "$BRIDGE_HOOK_TOKEN" > tmp/relay-local/tokens.env
 npm run configure-droid -- --settings "$PWD/tmp/relay-local/settings.json" --base-url http://127.0.0.1:18787 --model glm-5.2
 BRIDGE_MODE=mock BRIDGE_MODELS=glm-5.2 npm start
 ```
 
-脚本将 token 的**真实字面值**写入 JSON，不使用 `${BRIDGE_CLIENT_TOKEN}` 占位符。配置和备份权限为 `0600`，缺少 token 时拒绝修改。默认监听 `http://127.0.0.1:18787`；`GET /healthz` 探活，`POST /v1/messages` 接收 JSON 或 SSE 请求。
+脚本将 token 的**真实字面值**写入 JSON，不使用 `${BRIDGE_CLIENT_TOKEN}` 占位符。配置和备份权限为 `0600`，缺少 token 时拒绝修改。`BRIDGE_CLIENT_TOKEN`、`BRIDGE_ADMIN_TOKEN`、`BRIDGE_HOOK_TOKEN` 必须互不相同，否则启动直接失败。默认只监听回环地址（`127.0.0.1`、`localhost`、`::1` 或任意 `127.x.x.x`）。非 `subscription` 模式若要监听其他地址，必须另外设置 `BRIDGE_ALLOW_REMOTE=1`；这会把本进程的凭证提供给其他客户端，操作者自己负责服务条款。`subscription` 不允许暴露给其他机器或他人。`GET /healthz` 只返回 `{ "ok": true, "mode" }`；运行细节在带管理员令牌的 `GET /internal/runtime`。`POST /v1/messages` 接收 JSON 或 SSE 请求。未设置管理员令牌或 hook 令牌时，`sdk` 模式会把生成值写到数据目录的 `admin-token` 和 `hook-token`（权限 `0600`），启动日志只打印路径。
 
 另一个终端也先进入本仓库，加载同一份私有令牌文件，再使用该配置；`tmp/` 已被 Git 忽略。不要重新生成令牌或提交该文件：
 
@@ -112,7 +113,7 @@ npm run run-droid -- --cwd "$PROJECT" --airgap 1 -- exec --settings "$PWD/tmp/re
 npm run configure-hooks -- --hooks "$PROJECT/.factory/hooks.json" --config "$PWD/tmp/relay-local/hooks-control.json" --remove
 ```
 
-Bridge 与 wrapper 需共享同一组 `BRIDGE_ADMIN_TOKEN` / `BRIDGE_CLIENT_TOKEN`，并把 `BRIDGE_SDK_CWD` 指向目标项目。wrapper 保留 `HOME`，通过 `FACTORY_HOME_OVERRIDE` 隔离 Factory 数据；退出或取消时只清理本次启动拥有的会话。交互启动请使用 wrapper：Factory UI 的退出 hook 无法继承 Agent 进程里的会话绑定，需要本次启动的身份才能准确结束对应会话。进程被强制杀死、来不及发送结束事件时，应使用控制页取消遗留会话。
+`configure-hooks` 读取 `BRIDGE_HOOK_TOKEN`，它必须和正在运行的 Bridge 一致，用法和 `BRIDGE_ADMIN_TOKEN` 相同。这个令牌只接受 `POST /internal/host-events`；其他 `/internal/*` 只接受管理员令牌。Bridge 与 wrapper 需共享同一组 `BRIDGE_ADMIN_TOKEN` / `BRIDGE_CLIENT_TOKEN` / `BRIDGE_HOOK_TOKEN`，并把 `BRIDGE_SDK_CWD` 指向目标项目。wrapper 保留 `HOME`，通过 `FACTORY_HOME_OVERRIDE` 隔离 Factory 数据；退出或取消时只清理本次启动拥有的会话。交互启动请使用 wrapper：Factory UI 的退出 hook 无法继承 Agent 进程里的会话绑定，需要本次启动的身份才能准确结束对应会话。进程被强制杀死、来不及发送结束事件时，应使用控制页取消遗留会话。
 
 默认单次原生响应期限为 10 分钟（`BRIDGE_REQUEST_TIMEOUT_MS`）；外部工具往返等待为 8 小时（`BRIDGE_TOOL_WAIT_MS`），适用于长 Mission。它们都是明确的时间上限，超时会取消工作；官方结束事件会提前释放会话，无需等计时器。
 

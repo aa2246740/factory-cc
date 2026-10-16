@@ -187,8 +187,8 @@ describe("auth verification gate", () => {
   it("omits auth verification from /healthz and keeps the masked email on the admin runtime route", async () => {
     const { app, config } = await startTestBridge({ mode: "sdk", authMode: "subscription" });
     try {
-      const health = await fetch(`${app.url}/healthz`).then((response) => response.json()) as { upstream: Record<string, unknown> };
-      expect(health.upstream.authVerification).toBeUndefined();
+      const health = await fetch(`${app.url}/healthz`).then((response) => response.json()) as { ok: boolean; mode: string };
+      expect(health).toEqual({ ok: true, mode: "sdk" });
       expect(JSON.stringify(health)).not.toContain("example.com");
       expect(JSON.stringify(health)).not.toContain("fatalErrors");
       const admin = await fetch(`${app.url}/internal/runtime`, { headers: { "x-bridge-admin-token": config.adminToken } }).then((response) => response.json()) as { authVerification: { email: string } };

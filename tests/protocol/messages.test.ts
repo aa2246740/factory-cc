@@ -19,7 +19,8 @@ describe("Messages protocol", () => {
     });
     expect(res.status).toBe(401);
     expect(app.store.list()).toHaveLength(0);
-    expect(app.records.some((r) => r.authOk === false)).toBe(true);
+    expect(app.records).toHaveLength(0);
+    expect(app.authFailureCount).toBe(1);
   });
 
   it("returns the fixed text probe in JSON and SSE", async () => {

@@ -19,6 +19,9 @@ export async function runE2eChat(): Promise<number> {
     );
 
     const health = await fetch(`${isolated.app.url}/healthz`).then((res) => res.json()) as Record<string, unknown>;
+    const runtime = await fetch(`${isolated.app.url}/internal/runtime`, {
+      headers: { authorization: `Bearer ${isolated.config.adminToken}` },
+    }).then((res) => res.json()) as Record<string, unknown>;
     let result: Record<string, unknown> | undefined;
     try { result = JSON.parse(captured.stdout) as Record<string, unknown>; } catch { /* malformed output fails acceptance */ }
     const textHit = result?.result === "RELAY_CHAT_OK";
@@ -36,6 +39,7 @@ export async function runE2eChat(): Promise<number> {
       roles: rolesSeen(isolated.app),
       requests: isolated.app.records.length,
       health,
+      runtime,
       notes: [
         textHit ? "Droid result exactly matched RELAY_CHAT_OK" : "Droid final result did not match the expected marker",
         "Claude login unused. Official Anthropic billing unused.",

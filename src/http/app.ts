@@ -1,5 +1,6 @@
+import { randomUUID } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { BridgeConfig } from "../config.js";
 import type { Logger } from "../logging.js";
@@ -9,7 +10,7 @@ import { explicitSessionId, historyMessageHashes, historyPrefixHash, resolveSess
 import { SessionStore } from "../sessions/store.js";
 import { createRuntime } from "../runtime/factory.js";
 import type { RuntimeTurn } from "../runtime/types.js";
-import { header, requireAdminToken, requireClientToken } from "../security/auth.js";
+import { header, requireAdminOrHookToken, requireAdminToken, requireClientToken } from "../security/auth.js";
 import { assertBodySize } from "../security/limits.js";
 import { redactHeaders, redactJson } from "../security/redact.js";
 import { BridgeError, type RedactedRequestRecord } from "../types.js";
@@ -24,9 +25,21 @@ export interface BridgeApp {
   server: Server;
   store: SessionStore;
   records: RedactedRequestRecord[];
+  readonly authFailureCount: number;
   url: string;
   runtimeStatus(): Record<string, unknown>;
   close(): Promise<void>;
+}
+
+const RECORD_LIMIT = 500;
+
+function formatListenHost(host: string): string {
+  const bare = host.replace(/^\[|\]$/g, "");
+  return bare.includes(":") ? `[${bare}]` : bare;
+}
+
+function listenUrl(host: string, port: number): string {
+  return `http://${formatListenHost(host)}:${port}`;
 }
 
 export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath: string): BridgeApp {
@@ -35,6 +48,9 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
   const control = new ControlBroker(runtime, store, Math.min(config.toolWaitMs, config.requestTimeoutMs));
   runtime.setControl?.(control);
   const records: RedactedRequestRecord[] = [];
+  let authFailureCount = 0;
+  let indexTimer: ReturnType<typeof setTimeout> | undefined;
+  let indexDirty = false;
   mkdirSync(config.logDir, { recursive: true });
   const requestLog = join(config.logDir, "requests.jsonl");
   const turnLog = join(config.logDir, "turns.jsonl");
@@ -50,14 +66,15 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
     }
   });
 
-  const url = `http://${config.host}:${config.port}`;
+  const url = listenUrl(config.host, config.port);
 
   async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    assertRequestTarget(req);
     if (closing) {
       res.setHeader("Connection", "close");
       throw new BridgeError(503, "bridge_shutting_down", "bridge is shutting down");
     }
-    const urlObj = new URL(req.url ?? "/", `http://${config.host}`);
+    const urlObj = new URL(req.url ?? "/", "http://localhost");
     const path = urlObj.pathname;
 
     if (req.method === "GET" && path === "/control") {
@@ -89,7 +106,7 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
       return;
     }
     if (req.method === "POST" && path === "/internal/host-events") {
-      requireAdminToken(req.headers, config.adminToken);
+      requireAdminOrHookToken(req.headers, config.adminToken, config.hookToken);
       const envelope = await readJson(req, config.maxBodyBytes);
       const result = await control.hostEvent(envelope);
       const event = (envelope as { event?: Record<string, unknown> }).event;
@@ -99,7 +116,7 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
     }
     if (req.method === "GET" && path === "/internal/runtime") {
       requireAdminToken(req.headers, config.adminToken);
-      json(res, 200, { ...runtime.describe?.(), control: control.describe() });
+      json(res, 200, { ...runtime.describe?.(), control: control.describe(), authFailureCount });
       return;
     }
 
@@ -118,13 +135,7 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
       return;
     }
     if (req.method === "GET" && path === "/healthz") {
-      const { fatalErrors: _errors, authVerification: _auth, ...publicRuntime } = runtime.describe?.() ?? {};
-      json(res, 200, {
-        ok: true,
-        mode: config.mode,
-        sdk: config.mode === "sdk",
-        upstream: publicRuntime,
-      });
+      json(res, 200, { ok: true, mode: config.mode });
       return;
     }
     if (req.method === "GET" && path === "/internal/sessions") {
@@ -207,7 +218,6 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
       });
 
     const sessionId = session.bridgeSessionId;
-    control.bind(prepared.binding, sessionId);
     if (activeRequests.has(sessionId)) {
       throw new BridgeError(409, "session_busy", "another request is already running for this session");
     }
@@ -218,6 +228,7 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
     const previous = structuredClone(session);
     activeRequests.set(sessionId, owner);
     try {
+      control.bind(prepared.binding, sessionId);
       store.setState(sessionId, session.state === "WAITING_DROID_TOOL" ? "RESUMING" : "GENERATING");
     } catch (error) {
       activeRequests.delete(sessionId);
@@ -334,7 +345,38 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
     }
   }
 
+  function boundPort(): number {
+    const address = server.address();
+    if (address && typeof address === "object") return address.port;
+    return config.port;
+  }
+
+  function assertRequestTarget(req: IncomingMessage): void {
+    const port = boundPort();
+    const allowedHosts = new Set([`127.0.0.1:${port}`, `localhost:${port}`, `[::1]:${port}`]);
+    if (config.allowRemote) allowedHosts.add(`${formatListenHost(config.host)}:${port}`);
+    const requestHost = header(req.headers, "host");
+    if (!requestHost || ![...allowedHosts].some((item) => item.toLowerCase() === requestHost.toLowerCase())) {
+      throw new BridgeError(403, "permission_error", "Host is not allowed for this bridge.");
+    }
+    const origin = header(req.headers, "origin");
+    if (!origin) return;
+    const allowedOrigins = new Set([
+      `http://127.0.0.1:${port}`,
+      `http://localhost:${port}`,
+      `http://[::1]:${port}`,
+    ]);
+    if (config.allowRemote) allowedOrigins.add(listenUrl(config.host, port));
+    if (![...allowedOrigins].some((item) => item.toLowerCase() === origin.toLowerCase())) {
+      throw new BridgeError(403, "permission_error", "Origin is not allowed for this bridge.");
+    }
+  }
+
   function record(req: IncomingMessage, authOk: boolean, extra: Partial<RedactedRequestRecord>): void {
+    if (!authOk) {
+      authFailureCount += 1;
+      return;
+    }
     const item: RedactedRequestRecord = {
       at: new Date().toISOString(),
       method: req.method ?? "GET",
@@ -344,18 +386,44 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
       ...extra,
     };
     records.push(item);
-    writeFileSync(join(config.logDir, "request-index.json"), JSON.stringify(records, null, 2));
+    if (records.length > RECORD_LIMIT) records.splice(0, records.length - RECORD_LIMIT);
+    indexDirty = true;
+    if (indexTimer) return;
+    indexTimer = setTimeout(() => {
+      indexTimer = undefined;
+      flushRequestIndex();
+    }, 1000);
+    indexTimer.unref();
+  }
+
+  function flushRequestIndex(): void {
+    if (indexTimer) {
+      clearTimeout(indexTimer);
+      indexTimer = undefined;
+    }
+    if (!indexDirty) return;
+    indexDirty = false;
+    const target = join(config.logDir, "request-index.json");
+    const temporary = `${target}.${randomUUID()}.tmp`;
+    try {
+      writeFileSync(temporary, JSON.stringify(records, null, 2), { mode: 0o600, flag: "wx" });
+      renameSync(temporary, target);
+    } finally {
+      rmSync(temporary, { force: true });
+    }
   }
 
   return {
     server,
     store,
     records,
+    get authFailureCount() { return authFailureCount; },
     url,
-    runtimeStatus: () => ({ ...runtime.describe?.(), control: control.describe() }),
+    runtimeStatus: () => ({ ...runtime.describe?.(), control: control.describe(), authFailureCount }),
     close: () => {
       if (closePromise) return closePromise;
       closing = true;
+      flushRequestIndex();
       control.close();
       // Stop accepting before SDK cleanup begins. Handle both promises at once
       // so a server failure cannot become an unhandled rejection during cleanup.
@@ -382,9 +450,7 @@ export function listen(app: BridgeApp, config: BridgeConfig): Promise<BridgeApp>
         // The runtime shares this config and supplies the local client URL to
         // native skill commands, including when the OS chose an ephemeral port.
         config.port = address.port;
-        const url = new URL(app.url);
-        url.port = String(address.port);
-        app.url = url.toString().replace(/\/$/, "");
+        app.url = listenUrl(config.host, address.port);
       }
       resolve(app);
     });

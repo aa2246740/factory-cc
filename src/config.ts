@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { mkdirSync } from "node:fs";
+import { chmodSync, mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import type { BridgeMode } from "./types.js";
 import { parseAuthMode, type AuthMode } from "./upstream/auth-env.js";
@@ -12,6 +12,9 @@ export interface BridgeConfig {
   mode: BridgeMode;
   clientToken: string;
   adminToken: string;
+  hookToken: string;
+  /** Operator opted in to a non-loopback bind. Never true for subscription. */
+  allowRemote: boolean;
   dataDir: string;
   logDir: string;
   sandboxDir: string;
@@ -44,10 +47,26 @@ function intEnv(name: string, fallback: number): number {
   return Number.isFinite(n) ? n : fallback;
 }
 
+/** `127.0.0.1`, any other `127.x.x.x`, `localhost`, or `::1`. */
+export function isLoopbackHost(host: string): boolean {
+  const bare = host.trim().replace(/^\[|\]$/g, "").toLowerCase();
+  if (bare === "localhost" || bare === "::1") return true;
+  const parts = bare.split(".");
+  if (parts.length !== 4 || parts[0] !== "127") return false;
+  return parts.every((part) => /^\d{1,3}$/.test(part) && Number(part) <= 255);
+}
+
+function ensurePrivateDir(path: string): void {
+  mkdirSync(path, { recursive: true, mode: 0o700 });
+  // mkdir mode is filtered by umask. chmod makes the directory actually 0700.
+  chmodSync(path, 0o700);
+}
+
 export function loadConfig(overrides: Partial<BridgeConfig> = {}): BridgeConfig {
   const dataDir = resolve(overrides.dataDir ?? env("BRIDGE_DATA_DIR", resolve(process.cwd(), "tmp/bridge-data"))!);
-  mkdirSync(dataDir, { recursive: true });
-  mkdirSync(resolve(dataDir, "logs"), { recursive: true });
+  ensurePrivateDir(dataDir);
+  const logDir = resolve(dataDir, "logs");
+  ensurePrivateDir(logDir);
   mkdirSync(resolve(dataDir, "sessions"), { recursive: true });
   mkdirSync(resolve(dataDir, "sandbox"), { recursive: true });
 
@@ -56,19 +75,37 @@ export function loadConfig(overrides: Partial<BridgeConfig> = {}): BridgeConfig 
     throw new Error(`Invalid BRIDGE_MODE=${mode}. Use mock | fake | sdk.`);
   }
   const authMode = parseAuthMode(overrides.authMode ?? env("BRIDGE_AUTH", "byok"));
+  const host = overrides.host ?? env("BRIDGE_HOST", "127.0.0.1")!;
+  const allowRemote = overrides.allowRemote ?? env("BRIDGE_ALLOW_REMOTE") === "1";
+  if (!isLoopbackHost(host)) {
+    if (authMode === "subscription") {
+      throw new Error("exposing a Claude subscription to other machines/people is not permitted");
+    }
+    if (!allowRemote) {
+      throw new Error(`Refusing to listen on ${host} without BRIDGE_ALLOW_REMOTE=1.`);
+    }
+  }
+  const clientToken = overrides.clientToken ?? env("BRIDGE_CLIENT_TOKEN", randomBytes(24).toString("hex"))!;
+  const adminToken = overrides.adminToken ?? env("BRIDGE_ADMIN_TOKEN", randomBytes(24).toString("hex"))!;
+  const hookToken = overrides.hookToken ?? env("BRIDGE_HOOK_TOKEN", randomBytes(24).toString("hex"))!;
+  if (adminToken === clientToken || hookToken === adminToken || hookToken === clientToken) {
+    throw new Error("BRIDGE_CLIENT_TOKEN, BRIDGE_ADMIN_TOKEN and BRIDGE_HOOK_TOKEN must be different.");
+  }
   const permissionRaw = overrides.permissionMode ?? env("BRIDGE_PERMISSION");
   const permissionMode = (permissionRaw === "ask" || permissionRaw === "bypass"
     ? permissionRaw
     : "ask") as "bypass" | "ask";
 
   return {
-    host: overrides.host ?? env("BRIDGE_HOST", "127.0.0.1")!,
+    host,
     port: overrides.port ?? intEnv("BRIDGE_PORT", 18787),
     mode,
-    clientToken: overrides.clientToken ?? env("BRIDGE_CLIENT_TOKEN", randomBytes(24).toString("hex"))!,
-    adminToken: overrides.adminToken ?? env("BRIDGE_ADMIN_TOKEN", randomBytes(24).toString("hex"))!,
+    clientToken,
+    adminToken,
+    hookToken,
+    allowRemote,
     dataDir,
-    logDir: resolve(dataDir, "logs"),
+    logDir,
     sandboxDir: resolve(dataDir, "sandbox"),
     maxBodyBytes: overrides.maxBodyBytes ?? intEnv("BRIDGE_MAX_BODY_BYTES", 8 * 1024 * 1024),
     maxSessions: overrides.maxSessions ?? intEnv("BRIDGE_MAX_SESSIONS", 16),

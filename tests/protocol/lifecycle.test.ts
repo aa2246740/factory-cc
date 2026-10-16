@@ -189,6 +189,50 @@ describe("HTTP execution lifecycle", () => {
     expect((await first).status).toBe(200);
   });
 
+  it("does not bind a Factory host when the request is busy or the session has ended", async () => {
+    const pending = deferred<RuntimeTurn>();
+    const started = deferred<void>();
+    vi.mocked(runtime.handle).mockImplementation(async () => { started.resolve(); return pending.promise; });
+    const { app, token, config } = await startTestBridge();
+    apps.push(app);
+    const cwd = process.env.BRIDGE_SDK_CWD || config.sdkCwd;
+    const startedHost = await fetch(`${app.url}/internal/host-events`, {
+      method: "POST",
+      headers: { authorization: "Bearer admin-token", "content-type": "application/json" },
+      body: JSON.stringify({ eventId: "bind-start", event: { hook_event_name: "SessionStart", session_id: "factory-bind", cwd, source: "startup" } }),
+    });
+    expect(startedHost.status).toBe(200);
+    const hostBody = await startedHost.json() as { additionalContext: string };
+    const marker = hostBody.additionalContext;
+    const bound = () => (app.runtimeStatus().control as { boundNativeSessions: number }).boundNativeSessions;
+    expect(bound()).toBe(0);
+
+    const first = postMessages(app.url, token, body, { "x-bridge-session": "shared" });
+    await started.promise;
+    const busy = await postMessages(app.url, token, { ...body, messages: [{ role: "user", content: `${marker} conflicting` }] }, { "x-bridge-session": "shared" });
+    expect(busy.status).toBe(409);
+    expect(busy.json.error).toMatchObject({ type: "session_busy" });
+    expect(bound()).toBe(0);
+    pending.resolve(result());
+    const completed = await first;
+    expect(completed.status).toBe(200);
+
+    const cancel = await fetch(`${app.url}/internal/cancel`, {
+      method: "POST",
+      headers: { authorization: "Bearer admin-token", "content-type": "application/json" },
+      body: JSON.stringify({ sessionId: completed.session }),
+    });
+    expect(cancel.status).toBe(200);
+    const ended = await postMessages(app.url, token, { ...body, messages: [{ role: "user", content: `${marker} after end` }] }, { "x-bridge-session": "shared" });
+    expect(ended.status).toBe(409);
+    expect(ended.json.error).toMatchObject({ type: "session_unavailable" });
+    expect(bound()).toBe(0);
+
+    const accepted = await postMessages(app.url, token, { ...body, messages: [{ role: "user", content: `${marker} fresh` }] }, { "x-bridge-session": "fresh-bind" });
+    expect(accepted.status).toBe(200);
+    expect(bound()).toBe(1);
+  });
+
   it("does not cancel the next turn when the previous stream finishes", async () => {
     const pending = deferred<RuntimeTurn>();
     const started = deferred<void>();

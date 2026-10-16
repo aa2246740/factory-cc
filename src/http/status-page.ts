@@ -46,7 +46,7 @@ export function statusPageHtml(opts: {
     <div class="card">
       <div class="label">Endpoints</div>
       <ul>
-        <li><code>GET /healthz</code> 健康检查</li>
+        <li><code>GET /healthz</code> 健康检查，只返回 <code>ok</code> 和 <code>mode</code></li>
         <li><code>POST /v1/messages</code> Anthropic Messages JSON / SSE</li>
         <li><code>POST /v1/messages/count_tokens</code> 明确不支持精确计数</li>
         <li><code>GET /internal/sessions</code> 管理接口，需要管理员令牌</li>

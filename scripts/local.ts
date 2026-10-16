@@ -223,9 +223,9 @@ export async function runLocal(argv: string[], env: NodeJS.ProcessEnv = process.
     installDroidCommand(project);
     if (args.auth === "byok") setEnv(runtimeKey, key);
     setEnv("BRIDGE_DROID_HOME", home); setEnv("BRIDGE_SDK_CWD", project); setEnv("BRIDGE_WAIT_FOR_MISSION_DIR", undefined);
-    const clientToken = randomBytes(24).toString("hex"), adminToken = randomBytes(24).toString("hex");
+    const clientToken = randomBytes(24).toString("hex"), adminToken = randomBytes(24).toString("hex"), hookToken = randomBytes(24).toString("hex");
     const config = loadConfig({ mode: "sdk", authMode: args.auth, permissionMode: "ask", host: "127.0.0.1", port: 0,
-      clientToken, adminToken, dataDir: join(state, "bridge-data"), sdkCwd: project, persistSessions: true,
+      clientToken, adminToken, hookToken, dataDir: join(state, "bridge-data"), sdkCwd: project, persistSessions: true,
       maxBodyBytes: 8 * 1024 * 1024, maxSessions: 32, maxTurns: 160, toolWaitMs: 8 * 60 * 60 * 1000, requestTimeoutMs: 10 * 60 * 1000,
       claudeExecutable: env.BRIDGE_CLAUDE_EXECUTABLE ?? "claude", models: catalog,
       ...(args.auth === "byok" ? { upstreamBaseUrl: baseUrl, upstreamModel: model, upstreamTokenEnv: runtimeKey } : {}) });
@@ -234,7 +234,7 @@ export async function runLocal(argv: string[], env: NodeJS.ProcessEnv = process.
     configureDroid(["--settings", settingsPath, "--base-url", app.url, "--manifest", join(state, "manifest.env"), "--models", ids.join(","),
       ...(args.model ? ["--model", model] : [])], { BRIDGE_CLIENT_TOKEN: clientToken, ...(args.auth === "byok" ? { BRIDGE_UPSTREAM_MODEL: model } : {}), BRIDGE_AUTH: args.auth }, catalog);
     hookAttempted = true;
-    installFactoryHooks({ hooksPath, configPath: hookConfig, url: app.url, adminToken });
+    installFactoryHooks({ hooksPath, configPath: hookConfig, url: app.url, hookToken });
     privateWrite(adminPath, `${adminToken}\n`); adminWritten = true;
     if (args.auth === "byok" && baseUrl) privateWrite(preferencesPath, `${JSON.stringify({ baseUrl, model, models: ids }, null, 2)}\n`);
     const childEnv: NodeJS.ProcessEnv = { ...safeDroidEnv(env, key, args.keyEnv), BRIDGE_CLIENT_TOKEN: clientToken, BRIDGE_ADMIN_TOKEN: adminToken,

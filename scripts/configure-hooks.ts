@@ -11,7 +11,7 @@ const configPath = resolve(value("--config") ?? join(process.cwd(), "tmp/bridge-
 try {
   const result = args.includes("--remove")
     ? removeFactoryHooks({ hooksPath, configPath })
-    : installFactoryHooks({ hooksPath, configPath, url: value("--base-url") ?? "http://127.0.0.1:18787", adminToken: process.env.BRIDGE_ADMIN_TOKEN ?? "" });
+    : installFactoryHooks({ hooksPath, configPath, url: value("--base-url") ?? "http://127.0.0.1:18787", hookToken: process.env.BRIDGE_HOOK_TOKEN ?? "" });
   console.log(JSON.stringify(result, null, 2));
 } catch (error) {
   console.error(error instanceof Error ? error.message : "Unable to configure Factory lifecycle hooks");

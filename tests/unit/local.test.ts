@@ -65,8 +65,10 @@ describe("one-command isolated local launch", () => {
       const { app, config } = observed.apps[0]!; url = app.url;
       expect(config).toMatchObject({ mode: "sdk", authMode: "byok", permissionMode: "ask", sdkCwd: realpathSync(f.project), upstreamModel: "offline-selected-model" });
       expect(app.server.listening).toBe(true);
-      const health = await fetch(`${url}/healthz`).then((response) => response.json()) as { upstream: unknown };
-      expect(health.upstream).toMatchObject({ authMode: "byok", permissionMode: "ask" });
+      const health = await fetch(`${url}/healthz`).then((response) => response.json());
+      expect(health).toEqual({ ok: true, mode: "sdk" });
+      const runtime = await fetch(`${url}/internal/runtime`, { headers: { "x-bridge-admin-token": config.adminToken } }).then((response) => response.json()) as { authMode: string; permissionMode: string };
+      expect(runtime).toMatchObject({ authMode: "byok", permissionMode: "ask" });
       expect(argument(argv, "--cwd")).toBe(realpathSync(f.project));
       expect(argument(argv, "--airgap")).toBe("1");
       expect(JSON.stringify(argv)).not.toContain(providerKey);

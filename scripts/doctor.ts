@@ -112,6 +112,7 @@ export async function runDoctor(
     },
     notes: [
       "Doctor never reads Claude or Factory credential files and never prints secret values.",
+      "GET /healthz returns only ok and mode. Runtime details are GET /internal/runtime with the admin token.",
       "BRIDGE_AUTH=byok is the default and points Claude Code at an explicit upstream. subscription, anthropic-api and cloud refuse conflicting variables. inherit copies the shell environment.",
       "anthropic-api, cloud and subscription are not live-verified yet. Run npm run doctor -- --auth subscription before the first real query; that check sends no prompt.",
       "Official Claude login is unused in cloud BYOK tests.",

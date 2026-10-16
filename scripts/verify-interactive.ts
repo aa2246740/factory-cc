@@ -94,7 +94,7 @@ try {
   if (diagnosticHook) {
     const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
     const command = [process.execPath, "--import", pathToFileURL(join(root, "node_modules/tsx/dist/loader.mjs")).href, resolve(diagnosticHook), "--factory-cc-hook-config", app.hostHooks.configPath].map(quote).join(" ");
-    installFactoryHooks({ ...app.hostHooks, url: app.app.url, adminToken: app.config.adminToken, command });
+    installFactoryHooks({ ...app.hostHooks, url: app.app.url, hookToken: app.config.hookToken, command });
     report.diagnosticHookEntry = resolve(diagnosticHook);
     report.diagnosticScope = "Explicit diagnostic hook wrapper; this run cannot certify the uninstrumented production hook entry.";
   }
