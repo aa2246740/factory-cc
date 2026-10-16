@@ -3,6 +3,7 @@ import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import type { BridgeMode } from "./types.js";
 import { canonicalWorkspacePath } from "./workspace.js";
+import { modelsFromIds, parseModelIds, validateModels, type BridgeModel } from "./models.js";
 
 export interface BridgeConfig {
   host: string;
@@ -26,6 +27,7 @@ export interface BridgeConfig {
   upstreamBaseUrl?: string;
   upstreamModel?: string;
   upstreamTokenEnv?: string;
+  models?: BridgeModel[];
 }
 
 function env(name: string, fallback?: string): string | undefined {
@@ -82,5 +84,7 @@ export function loadConfig(overrides: Partial<BridgeConfig> = {}): BridgeConfig 
     upstreamBaseUrl: overrides.upstreamBaseUrl ?? env("BRIDGE_UPSTREAM_BASE_URL"),
     upstreamModel: overrides.upstreamModel ?? env("BRIDGE_UPSTREAM_MODEL"),
     upstreamTokenEnv: overrides.upstreamTokenEnv ?? env("BRIDGE_UPSTREAM_TOKEN_ENV"),
+    models: overrides.models !== undefined ? validateModels(overrides.models)
+      : env("BRIDGE_MODELS") ? modelsFromIds(parseModelIds(env("BRIDGE_MODELS")!), authMode) : undefined,
   };
 }

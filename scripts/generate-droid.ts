@@ -195,7 +195,7 @@ export async function generateDroid(args: GenerateDroidArgs, env: NodeJS.Process
   // caller-controlled and are never taken from model output.
   const response = await fetch(`${url}/v1/messages`, {
     method: "POST", headers: { "content-type": "application/json", "x-api-key": token }, redirect: "error",
-    body: JSON.stringify({ model: "relay-droid-generator", max_tokens: 4096, stream: false, tools: [], tool_choice: { type: "none" },
+    body: JSON.stringify({ model: env.BRIDGE_MODEL_ID ?? "relay-droid-generator", max_tokens: 4096, stream: false, tools: [], tool_choice: { type: "none" },
       system: "Generate a Factory custom Droid configuration. Reply with one JSON object only, with exactly description (one line) and systemPrompt (Markdown instructions). Do not use tools, write files, add frontmatter, or put the JSON in a code fence. Explain when the Droid is useful and how it should do the requested task. Respect the declared tools; do not instruct it to use unavailable capabilities.",
       messages: [{ role: "user", content: JSON.stringify({ name: args.name, task: args.description, tools: args.tools }) }] }),
     signal: AbortSignal.timeout(args.timeoutMs),

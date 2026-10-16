@@ -1,0 +1,115 @@
+{
+  "schemaVersion": 1,
+  "status": "REAL_SCREENSHOTS_WITH_VERIFIED_NATIVE_MODEL_SWITCH",
+  "createdAt": "2026-10-16T04:21:02.851991+00:00",
+  "sourceRun": "evidence/local/model-switch-2026-10-16T04-16-17-874Z-c4e00c",
+  "captureMethod": "Original live PTY ANSI bytes streamed to xterm in Chromium; original Playwright page.screenshot PNG. No redraw, image editing, mock terminal, or image generation. Input actions were sent to the live original Droid PTY.",
+  "terminal": {
+    "columns": 132,
+    "rows": 42,
+    "droidVersion": "0.242.0"
+  },
+  "authenticationScope": "Isolated GLM BYOK via official Claude Code runtime; no real subscription credentials used. This is not Anthropic Claude model validation.",
+  "providerEndpoint": "https://open.bigmodel.cn/api/anthropic",
+  "realModelSequence": [
+    "glm-5.2",
+    "glm-4.7"
+  ],
+  "defaultReasoningBehaviorPreserved": "GLM-5.2 High selected unchanged; GLM-4.7 has no reasoning picker and its default was not overridden.",
+  "functionalProof": {
+    "localPath": "evidence/local/model-switch-2026-10-16T04-16-17-874Z-c4e00c/functional-proof.json",
+    "sha256": "836cec19120c40e75be927a352250c3c823734700aa05c1609cd8692f7dc860a",
+    "checks": {
+      "firstActualModel": true,
+      "secondActualModel": true,
+      "actualModelsDiffer": true,
+      "codeAbsentFromSecondPrompt": true,
+      "nonceNotReinjectedInSecondNativeInput": true,
+      "firstInstructionAppearsOnceInNativeHistory": true,
+      "secondModelRecallsCode": true,
+      "noNativeTools": true,
+      "sameNativeSdkSession": true,
+      "sameFactorySession": true,
+      "sameBridgeSession": true,
+      "nativeCwdStable": true,
+      "requestsUseBothRealModels": true,
+      "productionResumeEventRecorded": true,
+      "runtimeSelectsSecondModel": true,
+      "permissionModeAsk": true,
+      "noFatalOrPending": true
+    },
+    "sameNativeSdkSessionId": "82ec5f1d-94d1-40df-98f6-28cf1832cc09",
+    "publicSummary": "../real-model-switch-validation-2026-10-16-r3.json",
+    "publicSummarySha256": "eb5169c3fc1948f7054689b764fe5805b889462ea2e22faecb4811ffa58e0422",
+    "runStatus": "PASS_REAL_MODEL_SWITCH_WITH_CONTEXT"
+  },
+  "persistedMissionDefaults": {
+    "missionOrchestratorModel": "custom:GLM-5.2-0",
+    "missionModelSettings": {
+      "skipScrutiny": false,
+      "skipUserTesting": false,
+      "workerModel": "custom:GLM-4.7-0",
+      "validationWorkerModel": "custom:GLM-5.2-0",
+      "workerReasoningEffort": "none"
+    }
+  },
+  "missionScope": "Actual settings UI and persisted role selections only. No Mission execution started by this capture run.",
+  "screenshots": [
+    {
+      "path": "01-actual-glm-model-menu.png",
+      "kind": "real_droid_terminal",
+      "description": "Actual /model menu offers GLM-5.2 and GLM-4.7. GLM-5.2 High remains the initial selected reasoning mode.",
+      "capturedAt": "2026-10-16T04:16:43.842Z",
+      "bytes": 70635,
+      "sha256": "6f561805eeb3e66919f2140192bda95a7051c32f6126942ac8acdfeb5afbf663",
+      "rawPtyBytesAtCapture": 175754,
+      "rawPtySha256AtCapture": "1c8afb6e082f8d95f94a17a679d8b3de56e3d7223aae35186ebd9e2d7a094580",
+      "visuallyReviewedForSecrets": true
+    },
+    {
+      "path": "03-model-switch-recall-complete.png",
+      "kind": "real_droid_terminal",
+      "description": "Actual same Droid conversation after selecting GLM-4.7, answering an earlier random code without the second prompt containing it. The screenshot shows UI behavior; the linked functional proof establishes same native SDK session and no nonce reinjection.",
+      "capturedAt": "2026-10-16T04:18:40.189Z",
+      "bytes": 97246,
+      "sha256": "33cb5896005cbb57a7e51766e9109bcefee29d326442c70a1b3803960d603e37",
+      "rawPtyBytesAtCapture": 473378,
+      "rawPtySha256AtCapture": "333936ab0c5df756dfd0bbedf040a9be9c8251a4d9a4fe2e0d5703b6b694a6d6",
+      "visuallyReviewedForSecrets": true
+    },
+    {
+      "path": "04-mission-worker-model-picker.png",
+      "kind": "real_droid_settings_terminal",
+      "description": "Actual Mission Defaults Worker model picker offers the two real GLM models. No Mission run is started.",
+      "capturedAt": "2026-10-16T04:19:22.941Z",
+      "bytes": 91578,
+      "sha256": "441d32059b80404200a4d024cb9d795c50f0a5b4e355343f897ae08b58c15964",
+      "rawPtyBytesAtCapture": 492919,
+      "rawPtySha256AtCapture": "e7692f48836e2622945d929d9c73ed7189b2655f351c382e04b13a7ed0364cd3",
+      "visuallyReviewedForSecrets": true
+    },
+    {
+      "path": "05-mission-defaults-distinct-models.png",
+      "kind": "real_droid_settings_terminal",
+      "description": "Actual Mission Defaults after selecting GLM-4.7 for Worker; Orchestrator and Validator retain GLM-5.2. This proves UI selection and the independently read persisted settings, not Mission execution routing.",
+      "capturedAt": "2026-10-16T04:19:54.294Z",
+      "bytes": 101632,
+      "sha256": "945c59e26d992c1dd1b0022962887d41386f1261efcc87f6cd90573081ddc437",
+      "rawPtyBytesAtCapture": 503439,
+      "rawPtySha256AtCapture": "cc4f02a334a1c0564c7d4db1854229c04fd12e1dbe13d2387b14658abaf68d4d",
+      "visuallyReviewedForSecrets": true
+    }
+  ],
+  "cleanup": {
+    "observedOwnedProcesses": 15,
+    "remainingOwnedProcesses": 0,
+    "forcedTerminations": 0,
+    "privateControlCopyRemoved": true,
+    "subreaper": {
+      "daemonExitCode": 0,
+      "reapedOrphanDescendants": 4,
+      "remainingChildren": 0
+    }
+  },
+  "privacy": "Private key/admin token and host binding absent from every screenshot. Raw PTY and actions remain ignored local evidence. Only this capture daemon private token copy was deleted here; runtime owner handles its own isolated configs."
+}

@@ -16,6 +16,9 @@ import { buildDynamicUserContent, buildHostContext, buildInitialUserContent, bui
 import { UsageLedger } from "./usage.js";
 import type { BridgeRuntime, RuntimeApprovalRequest, RuntimeControl, RuntimeEvent, RuntimeHostCall, RuntimeHostCompletion, RuntimeHostEnd, RuntimePermissionDecision, RuntimeRequest, RuntimeTurn, StreamSink } from "./types.js";
 import { publicSelection, sdkEnv, selectionFromConfig, type UpstreamSelection } from "../upstream/providers.js";
+import { resolveRequestModel } from "../models.js";
+
+type ModelRoute = ReturnType<typeof resolveRequestModel>;
 
 /** Kept narrow so tests can inject a deterministic SDK without starting a CLI. */
 export interface SdkHandle {
@@ -109,6 +112,7 @@ interface LiveSdk {
   names?: StableDroidToolNames;
   catalog?: DroidMcpCatalog;
   policyKey?: string;
+  modelRoute?: ModelRoute;
   abort?: AbortController;
   query?: ReturnType<SdkHandle["query"]>;
   loop?: Promise<void>;
@@ -172,6 +176,13 @@ export class SdkRuntime implements BridgeRuntime {
         ? [{ sessionId, code: live.terminal.code, message: live.terminal.message }] : []),
       overridesAnthropicEnv: this.config.authMode !== "subscription",
       upstream: this.selection ? publicSelection(this.selection) : { selected: false, authMode: this.config.authMode },
+      ...(this.config.models !== undefined ? {
+        modelRouting: "explicit-catalog",
+        sessions: [...this.lives.entries()].map(([sessionId, live]) => ({
+          sessionId, sdkSessionId: live.sdkSessionId, modelId: live.modelRoute?.id,
+          nativeModel: live.modelRoute?.model, active: live.active, ended: Boolean(live.terminal),
+        })),
+      } : {}),
     };
   }
 
@@ -251,6 +262,9 @@ export class SdkRuntime implements BridgeRuntime {
   }
 
   async handle(input: RuntimeRequest, sink?: StreamSink): Promise<RuntimeTurn> {
+    // Resolve before allocating or changing a native session. A catalog typo or
+    // missing explicit credential must never fall back to another model/login.
+    const modelRoute = this.config.models !== undefined ? resolveRequestModel(this.config, input.request.model) : undefined;
     const id = input.session.bridgeSessionId;
     let live = this.lives.get(id);
     if (live?.terminal?.code === "host_session_ended" && live.resumableAfterHostEnd) {
@@ -262,6 +276,7 @@ export class SdkRuntime implements BridgeRuntime {
       live.names = previous.names;
       live.catalog = previous.catalog;
       live.policyKey = previous.policyKey;
+      live.modelRoute = previous.modelRoute;
       live.lastHostContext = previous.lastHostContext;
       live.sentUserTurns = previous.sentUserTurns;
       this.lives.set(id, live);
@@ -304,6 +319,7 @@ export class SdkRuntime implements BridgeRuntime {
       if (live.policyKey && live.policyKey !== policy) {
         throw new BridgeError(409, "session_configuration_changed", "Working directory, model, permission policy or role changed; start a separate session");
       }
+      if (modelRoute) await this.selectModel(live, modelRoute, results.length > 0);
       const context = buildHostContext(input, resolveCwd(input, this.config));
       const continuation = results.length ? this.continuationContent(input, live, context) : [];
       if (continuation.length && results.every((result) => live.resultFingerprints.has(result.tool_use_id))) {
@@ -392,6 +408,60 @@ export class SdkRuntime implements BridgeRuntime {
       hostResultConsumptions: new Map(), hostCompletionFingerprints: new Map(), approvals: new Set(),
       starting: false, queryEpoch: 0, lastTouched: Date.now(), backgroundTasks: new Set(),
     };
+  }
+
+  private async selectModel(live: LiveSdk, route: ModelRoute, hasResults: boolean): Promise<void> {
+    const previous = live.modelRoute;
+    if (!previous) { live.modelRoute = route; return; }
+    if (previous.routeKey === route.routeKey && previous.id === route.id) return;
+    if (hasResults || live.active || live.starting || live.pending.size || live.handlerArrivals.size
+        || live.candidates.size || live.hostResultConsumptions.size || live.approvals.size
+        || live.backgroundTasks.size || live.outbox.length) {
+      throw new BridgeError(409, "model_switch_busy", "Finish the current turn, tools and background tasks before switching models.");
+    }
+    if (!this.config.persistSessions || !live.sdkSessionId) {
+      throw new BridgeError(409, "model_switch_requires_persistence", "Switching models requires a persisted native session. Keep the current model or start a separate conversation.");
+    }
+    if (live.query && !live.query.close) {
+      throw new BridgeError(409, "model_switch_unavailable", "The native query cannot be closed safely for model switching.");
+    }
+
+    // Model slots and BRIDGE_MODEL_ID are process environment. A setModel call
+    // alone leaves native subagents and generator commands on the old model.
+    // Retire the idle query, then resume its official transcript with one
+    // consistent model/environment. Late callbacks retain the retired epoch.
+    const query = live.query, loop = live.loop;
+    live.queryEpoch++;
+    live.inputs.close();
+    live.abort?.abort();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      query?.close!();
+      if (loop) await Promise.race([
+        loop,
+        new Promise<never>((_resolve, reject) => {
+          timer = setTimeout(() => reject(new Error("Native query did not close")), Math.min(5_000, Math.max(1, this.config.requestTimeoutMs)));
+        }),
+      ]);
+    } catch {
+      const failure = new BridgeError(502, "model_switch_failed", "The old native query could not be closed safely; no new model was started.");
+      this.stop(live, failure);
+      throw failure;
+    } finally { if (timer) clearTimeout(timer); }
+    if (live.terminal) throw live.terminal;
+    live.inputs = new InputQueue();
+    live.query = undefined;
+    live.loop = undefined;
+    live.abort = undefined;
+    live.modelRoute = route;
+    live.lastReply = undefined;
+    live.lastRequestKey = undefined;
+    const change = {
+      fromId: previous.id, toId: route.id, fromModel: previous.model, toModel: route.model,
+      sdkSessionId: live.sdkSessionId, sessionId: live.current?.session.bridgeSessionId, strategy: "resume",
+    };
+    live.events.push({ at: now(), type: "sdk_model_changed", data: change });
+    this.logger.info("sdk_model_changed", change);
   }
 
   private validateResults(live: LiveSdk, results: DroidResult[]): void {
@@ -490,14 +560,18 @@ export class SdkRuntime implements BridgeRuntime {
 
   private async startQueryImpl(input: RuntimeRequest, live: LiveSdk): Promise<void> {
     const sdk = await this.loadSdk();
-    const selection = await this.ensureSelection();
+    const route = live.modelRoute;
+    const selection = route ? route.selection : await this.ensureSelection();
+    if (selection) this.selection = selection;
     if (live.terminal) throw live.terminal;
     const droidTools = input.request.tools !== undefined ? selectDroidMcpTools(input.request.tools) : live.catalog?.definitions() ?? [];
     const names = live.names ?? new StableDroidToolNames();
     live.names = names;
     live.policyKey = queryPolicy(input, this.config);
+    const epoch = live.queryEpoch;
     const server = sdk.createSdkMcpServer({ name: "droid", version: "0.1.0", tools: [], alwaysLoad: true });
     const catalog = new DroidMcpCatalog(server, async (original, args, extra, mcpName) => {
+        if (live.queryEpoch !== epoch) throw new BridgeError(409, "stale_native_query", "This native query has been retired.");
         if (live.terminal) throw live.terminal;
         if (live.hostEnding) throw new BridgeError(409, "host_session_ended", live.hostEnding);
         if (!live.catalog?.has(original)) throw new BridgeError(409, "tool_not_advertised", `Droid no longer advertises ${original}`);
@@ -520,7 +594,7 @@ export class SdkRuntime implements BridgeRuntime {
           live.hostResultConsumptions.delete(call.id);
           return response;
         } catch (error) {
-          this.stop(live, asBridgeError(error));
+          if (live.queryEpoch === epoch) this.stop(live, asBridgeError(error));
           throw error;
         }
       }, names);
@@ -533,6 +607,8 @@ export class SdkRuntime implements BridgeRuntime {
     // These values stay in the process environment, never the model prompt.
     const clientHost = this.config.host === "0.0.0.0" ? "127.0.0.1" : this.config.host === "::" ? "[::1]" : this.config.host;
     env.BRIDGE_CLIENT_TOKEN = this.config.clientToken;
+    if (route) env.BRIDGE_MODEL_ID = route.id;
+    else delete env.BRIDGE_MODEL_ID;
     env.BRIDGE_CONTROL_URL = `http://${clientHost.includes(":") && !clientHost.startsWith("[") ? `[${clientHost}]` : clientHost}:${this.config.port}`;
     // The native worker receives its provider credential, never the host
     // controller's authority or Factory lifecycle generation.
@@ -554,11 +630,14 @@ export class SdkRuntime implements BridgeRuntime {
       env, permissionMode: this.config.permissionMode === "ask" ? "default" : "bypassPermissions",
       allowDangerouslySkipPermissions: this.config.permissionMode !== "ask", abortController: abort,
       systemPrompt: buildPresetSystemPrompt(),
-      canUseTool: async (name: string, toolInput: Record<string, unknown>, context?: NativePermissionContext) => this.canUseTool(live, name, toolInput, context),
+      canUseTool: async (name: string, toolInput: Record<string, unknown>, context?: NativePermissionContext) => live.queryEpoch === epoch
+        ? this.canUseTool(live, name, toolInput, context)
+        : { behavior: "deny", message: "This native query has been retired." },
     };
     // The host can change its tool capability between turns without rebuilding
     // native history. Check at invocation, including under native bypass mode.
     options.hooks = { PreToolUse: [{ hooks: [async (hook: { tool_name?: string; tool_use_id?: string }) => {
+        if (live.queryEpoch !== epoch) return { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: "This native query has been retired." } };
         if (live.terminal) return { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: "The host session has ended." } };
         const denial = toolAccessDenial(live, hook.tool_name, this.control?.factoryPermissionMode?.(input.session.bridgeSessionId));
         if (!denial) return {};
@@ -567,15 +646,17 @@ export class SdkRuntime implements BridgeRuntime {
         this.logger.info("host_tool_access_denied", data);
         return { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: denial } };
       }] }] };
-    if (selection) options.model = selection.provider.model;
+    if (route?.model) options.model = route.model;
+    else if (selection) options.model = selection.provider.model;
     else if (process.env.ANTHROPIC_MODEL) options.model = process.env.ANTHROPIC_MODEL;
     if (this.config.claudeExecutable) options.pathToClaudeCodeExecutable = this.config.claudeExecutable;
     if (live.sdkSessionId) options.resume = live.sdkSessionId;
+    const expectedResumeId = route ? live.sdkSessionId : undefined;
     live.events.push({ at: now(), type: "sdk_query_start", data: { resumed: Boolean(live.sdkSessionId), sdkSessionId: live.sdkSessionId, droidMcp: catalog.definitions().map((tool) => tool.name) } });
     try {
       live.query = sdk.query({ prompt: live.inputs, options });
       // Iterate the Query itself. Its close() owns process shutdown; never call raw generator.return().
-      live.loop = this.consume(live, live.query, live.queryEpoch);
+      live.loop = this.consume(live, live.query, live.queryEpoch, expectedResumeId);
     } catch (error) {
       this.stop(live, asBridgeError(error));
       throw asBridgeError(error);
@@ -695,7 +776,7 @@ export class SdkRuntime implements BridgeRuntime {
     }
   }
 
-  private async consume(live: LiveSdk, iterator: AsyncIterable<Record<string, unknown>>, epoch: number): Promise<void> {
+  private async consume(live: LiveSdk, iterator: AsyncIterable<Record<string, unknown>>, epoch: number, expectedResumeId?: string): Promise<void> {
     try {
       // Official Query.next()/return() manage its process; its raw iterator's
       // return() can remain parked waiting for another streaming-input turn.
@@ -705,7 +786,12 @@ export class SdkRuntime implements BridgeRuntime {
         : iterator;
       for await (const message of source) {
         if (live.terminal || live.queryEpoch !== epoch) return;
-        if (typeof message.session_id === "string") live.sdkSessionId = message.session_id;
+        if (typeof message.session_id === "string") {
+          if (expectedResumeId && !message.parent_tool_use_id && message.session_id !== expectedResumeId) {
+            throw new BridgeError(502, "sdk_resume_identity_changed", "The SDK did not resume the requested native session; refusing to continue without its history.");
+          }
+          if (!expectedResumeId || !message.parent_tool_use_id) live.sdkSessionId = message.session_id;
+        }
         const event = { at: now(), type: String(message.subtype === "compact_boundary" ? "compact_boundary" : message.type ?? "sdk"), data: summarizeSdk(message) };
         live.events.push(event);
         if (live.events.length > 1000) live.events.splice(0, live.events.length - 1000);
@@ -911,7 +997,7 @@ function mcpContent(content: string | ContentBlock[]): Record<string, unknown>[]
 }
 
 function queryPolicy(input: RuntimeRequest, config: BridgeConfig): string {
-  return JSON.stringify({ model: input.request.model, role: input.role, cwd: resolveCwd(input, config), permission: config.permissionMode });
+  return JSON.stringify({ ...(config.models === undefined ? { model: input.request.model } : {}), role: input.role, cwd: resolveCwd(input, config), permission: config.permissionMode });
 }
 function toolAccessDenial(live: LiveSdk, name: string | undefined, factoryPermissionMode?: string): string | undefined {
   const request = live.current?.request;

@@ -20,6 +20,7 @@
     "control": "tsx scripts/control.ts",
     "configure-hooks": "tsx scripts/configure-hooks.ts",
     "run-droid": "tsx scripts/run-droid.ts",
+    "local": "tsx scripts/local.ts",
     "test": "vitest run",
     "test:unit": "vitest run tests/unit",
     "test:protocol": "vitest run tests/protocol",

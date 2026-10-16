@@ -1,0 +1,68 @@
+{
+  "status": "PASS_SCOPED_OFFLINE_PTY",
+  "recordedAt": "2026-10-16T03:15:44.552Z",
+  "scope": "Two real PTY launches of the local entrypoint with an owned fake Droid executable that immediately exits. This verifies setup prompts, credential privacy and launcher cleanup, not model responses or real Droid behavior.",
+  "commandShape": "npm run local -- <owned-project>",
+  "overrides": {
+    "BRIDGE_DROID_EXECUTABLE": "<owned-executable-returning-zero>",
+    "TERM": "xterm"
+  },
+  "platform": {
+    "platform": "linux",
+    "architecture": "x64",
+    "kernel": "6.18.44",
+    "node": "v24.19.0",
+    "terminalDriver": "Python pexpect, real PTY"
+  },
+  "sourceHashesAtTest": {
+    "scripts/local.ts": "02b99a173060fb46f21a9fe1242b94405db7b28ed47df25d984cbe7acbea0b6f",
+    "package.json": "d6d4806ec8f68ffa4a39b9e60bafeccdb3e4f7e9c65a7e9ba118c0b642890c4b"
+  },
+  "sourceHashesAtReport": {
+    "scripts/local.ts": "342bb62e033f05f7405bc347d6269f868b80c06bf2c10b9d96a50849a74ca09f"
+  },
+  "postTestChange": "Only the lock-conflict error message gained instructions for safely clearing a stale lock; no prompt, credentials, startup or cleanup behavior changed.",
+  "providerRequestSent": false,
+  "modelCalls": 0,
+  "realDroidExercised": false,
+  "runs": [
+    {
+      "attempt": 1,
+      "exitCode": 0,
+      "prompts": [
+        "BYOK endpoint with default",
+        "BYOK model with default",
+        "hidden BYOK API key"
+      ],
+      "hiddenKeyAbsentFromPtyOutput": true,
+      "hiddenKeyAbsentFromStateFiles": true
+    },
+    {
+      "attempt": 2,
+      "exitCode": 0,
+      "prompts": [
+        "hidden BYOK API key"
+      ],
+      "savedEndpointAndModelReused": true,
+      "hiddenKeyAbsentFromPtyOutput": true,
+      "hiddenKeyAbsentFromStateFiles": true
+    }
+  ],
+  "assertions": {
+    "endpointAndModelPreferencesPersisted": true,
+    "keyNotPersisted": true,
+    "noKeyEcho": true,
+    "providerCredentialNotUsedForARequest": true,
+    "adminTokenFileRemovedAfterEachRun": true,
+    "launcherLockRemovedAfterEachRun": true,
+    "installedHooksRemovedAfterEachRun": true,
+    "emptyProjectHooksObjectPreserved": true,
+    "ownedProjectAndStateRemovedAfterVerification": true
+  },
+  "limitations": [
+    "No real provider request or Claude Code session was started.",
+    "The fake Droid does not prove real Droid environment handling; that requires the separate real launch verification.",
+    "User hooks and concurrency are covered by separate unit tests, not this empty-project prompt check.",
+    "No raw key or terminal transcript is retained."
+  ]
+}

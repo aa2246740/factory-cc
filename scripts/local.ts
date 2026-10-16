@@ -1,0 +1,235 @@
+import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { chmodSync, closeSync, constants, existsSync, fstatSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { createInterface } from "node:readline/promises";
+import { Writable } from "node:stream";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { loadConfig } from "../src/config.js";
+import { installFactoryHooks, removeFactoryHooks } from "../src/control/factory-hooks.js";
+import { createBridgeApp, listen, type BridgeApp } from "../src/http/app.js";
+import { createLogger } from "../src/logging.js";
+import { modelsFromIds, parseModelIds } from "../src/models.js";
+import { configureDroid } from "./configure-droid.js";
+import { installDroidCommand } from "./generate-droid.js";
+import { runDroid } from "./run-droid.js";
+
+const help = `Usage: npm run local -- <project> [options]
+
+Start an isolated BYOK Bridge and interactive Droid for an existing project.
+Claude Code and Droid must already be installed and available on PATH.
+
+  --base-url <URL>  Anthropic-compatible BYOK endpoint (prompted if omitted)
+  --model <ID>      Default BYOK model (prompted if omitted)
+  --models <IDs>    Actual model choices, e.g. glm-5.2,glm-4.7
+  --key-env <NAME>  Read the key from this explicitly named environment variable
+  -h, --help       Show help without changing any files
+
+Without --key-env, the key is requested with terminal echo disabled. It is never
+saved. Defaults are https://api.z.ai/api/anthropic and glm-5.2; endpoint and model
+are remembered per project. The launcher installs /relay-droid and its discovery
+skill, preserves other project hooks, and removes its own hooks when Droid exits.
+State stays in this repository's tmp/local directory; global Factory and Claude
+configuration is not used. Native tool permissions stay in ask mode. For native
+approvals, open the printed control URL and load its private admin-token file.
+FACTORY_AIRGAP_ENABLED=1 remains an experimental Factory CLI mode.`;
+
+export interface LocalArgs { project: string; baseUrl?: string; model?: string; models?: string[]; keyEnv?: string; help: boolean }
+
+function endpoint(value: string): string {
+  let url: URL;
+  try { url = new URL(value); } catch { throw new Error("--base-url must be an HTTP(S) URL without credentials, query or fragment."); }
+  if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash || /[\s\x00-\x1f\x7f]/.test(value)) {
+    throw new Error("--base-url must be an HTTP(S) URL without credentials, query or fragment.");
+  }
+  return url.href.replace(/\/$/, "");
+}
+
+function modelId(value: string): string {
+  const ids = parseModelIds(value);
+  if (ids.length !== 1) throw new Error("--model must specify one model ID.");
+  return ids[0]!;
+}
+
+export function parseLocalArgs(argv: string[]): LocalArgs {
+  const result: LocalArgs = { project: "", help: false };
+  const seen = new Set<string>();
+  for (let index = 0; index < argv.length; index++) {
+    const flag = argv[index]!;
+    if (flag === "--help" || flag === "-h") { result.help = true; continue; }
+    if (!flag.startsWith("-")) {
+      if (result.project) throw new Error("Provide exactly one project directory.");
+      if (/[\x00-\x1f\x7f]/.test(flag)) throw new Error("Project path cannot contain control characters.");
+      result.project = resolve(flag); continue;
+    }
+    if (!["--base-url", "--model", "--models", "--key-env"].includes(flag)) throw new Error("Unknown local option; use --help. Credentials must not appear in command arguments.");
+    if (seen.has(flag)) throw new Error(`Duplicate option ${flag}.`);
+    seen.add(flag);
+    const value = argv[++index];
+    if (!value || value.startsWith("-")) throw new Error(`Missing value for ${flag}.`);
+    if (flag === "--base-url") result.baseUrl = endpoint(value);
+    else if (flag === "--model") result.model = modelId(value);
+    else if (flag === "--models") result.models = parseModelIds(value);
+    else {
+      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(value) || ["HOME", "PATH", "SHELL", "PWD", "USER", "LOGNAME", "CODEX_HOME"].includes(value)) throw new Error("--key-env must name a dedicated key environment variable.");
+      result.keyEnv = value;
+    }
+  }
+  if (!result.help && !result.project) throw new Error("Provide the project directory: npm run local -- /path/to/project");
+  if (result.models && result.model && !result.models.includes(result.model)) throw new Error("The default --model must be included in --models.");
+  return result;
+}
+
+const repository = dirname(dirname(fileURLToPath(import.meta.url)));
+export function localStateDirectory(project: string): string {
+  return join(repository, "tmp", "local", createHash("sha256").update(realpathSync(project)).digest("hex").slice(0, 24));
+}
+
+/** Never follow configuration symlinks, including existing parent directories. */
+function directory(path: string, create = false, privateMode = false): void {
+  const parent = dirname(path);
+  if (parent !== path) directory(parent, create);
+  try {
+    const entry = lstatSync(path);
+    if (!entry.isDirectory() || entry.isSymbolicLink()) throw new Error("Refusing a symlink or non-directory in local state/configuration.");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    if (!create) return;
+    mkdirSync(path, { mode: 0o700 });
+  }
+  if (privateMode) chmodSync(path, 0o700);
+}
+
+function regularFile(path: string): void {
+  try { const entry = lstatSync(path); if (!entry.isFile() || entry.isSymbolicLink()) throw new Error("Refusing a symlink or non-file in local configuration."); }
+  catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+}
+
+function privateWrite(path: string, contents: string): void {
+  regularFile(path);
+  const temporary = `${path}.${randomUUID()}.tmp`;
+  try { writeFileSync(temporary, contents, { mode: 0o600, flag: "wx" }); renameSync(temporary, path); }
+  finally { rmSync(temporary, { force: true }); }
+}
+
+function preferences(path: string): { baseUrl?: string; model?: string; models?: string[] } {
+  regularFile(path);
+  if (!existsSync(path)) return {};
+  if (lstatSync(path).size > 4096) throw new Error("Local provider preferences are invalid.");
+  let value: unknown;
+  try { value = JSON.parse(readFileSync(path, "utf8")); } catch { throw new Error("Local provider preferences are invalid."); }
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Local provider preferences are invalid.");
+  const saved = value as Record<string, unknown>;
+  if (Object.keys(saved).some((key) => !["baseUrl", "model", "models"].includes(key)) || typeof saved.baseUrl !== "string" || typeof saved.model !== "string"
+    || (saved.models !== undefined && (!Array.isArray(saved.models) || saved.models.some((id) => typeof id !== "string")))) throw new Error("Local provider preferences are invalid.");
+  const model = modelId(saved.model), models = saved.models === undefined ? [model] : parseModelIds((saved.models as string[]).join(","));
+  if (!models.includes(model)) throw new Error("Local default model must be included in its saved model choices.");
+  return { baseUrl: endpoint(saved.baseUrl), model, models };
+}
+
+async function question(label: string, signal: AbortSignal, hidden = false): Promise<string> {
+  if (!process.stdin.isTTY || !process.stdout.isTTY) throw new Error("Interactive setup needs a terminal; otherwise provide --base-url, --model and --key-env.");
+  const muted = new Writable({ write(_chunk, _encoding, callback) { callback(); } });
+  const input = createInterface({ input: process.stdin, output: hidden ? muted : process.stdout, terminal: true });
+  if (hidden) process.stdout.write(label);
+  const interrupt = () => process.emit("SIGINT");
+  input.once("SIGINT", interrupt);
+  try { return await input.question(hidden ? "" : label, { signal }); }
+  finally { input.off("SIGINT", interrupt); input.close(); if (hidden) process.stdout.write("\n"); }
+}
+
+function safeDroidEnv(source: NodeJS.ProcessEnv, key: string, keyEnv?: string): NodeJS.ProcessEnv {
+  const result = { ...source };
+  for (const [name, value] of Object.entries(result)) {
+    if (name === keyEnv || name.startsWith("RELAY_LOCAL_PROVIDER_KEY_") || value?.includes(key)
+      || name.startsWith("ANTHROPIC_") || name.startsWith("CLAUDE_CODE_") || name.startsWith("BRIDGE_UPSTREAM_")
+      || ["FACTORY_API_KEY", "BRIDGE_FACTORY_BINDING", "BRIDGE_FACTORY_LAUNCH_ID", "BRIDGE_LAUNCH_ID", "AGENT_PROXY_AUTH_TOKEN", "CCR_AGENT_PROXY_TOKEN_FILE_DESCRIPTOR"].includes(name)) delete result[name];
+  }
+  return result;
+}
+
+export async function runLocal(argv: string[], env: NodeJS.ProcessEnv = process.env): Promise<number> {
+  const args = parseLocalArgs(argv);
+  if (args.help) { process.stdout.write(`${help}\n`); return 0; }
+  const project = realpathSync(args.project);
+  if (!lstatSync(project).isDirectory()) throw new Error("Project path must be an existing directory.");
+  const state = localStateDirectory(project);
+  directory(state); directory(join(project, ".factory"));
+  const preferencesPath = join(state, "provider.json"), saved = preferences(preferencesPath);
+  const abort = new AbortController();
+  let interrupted = false;
+  const interrupt = () => { interrupted = true; abort.abort(); };
+  process.on("SIGINT", interrupt); process.on("SIGTERM", interrupt);
+  let key = "", app: BridgeApp | undefined, releaseLock: (() => void) | undefined;
+  const runtimeKey = `RELAY_LOCAL_PROVIDER_KEY_${randomBytes(8).toString("hex").toUpperCase()}`;
+  const previous = new Map<string, string | undefined>();
+  const setEnv = (name: string, value: string | undefined) => { previous.set(name, process.env[name]); if (value === undefined) delete process.env[name]; else process.env[name] = value; };
+  const home = join(state, "factory-home"), settingsPath = join(home, ".factory/settings.json");
+  const hooksPath = join(project, ".factory/hooks.json"), hookConfig = join(state, "factory-hooks.json"), adminPath = join(state, "admin-token");
+  let hookAttempted = false, adminWritten = false;
+  try {
+    const baseDefault = saved.baseUrl ?? "https://api.z.ai/api/anthropic", modelDefault = saved.model ?? "glm-5.2";
+    const baseUrl = args.baseUrl ?? saved.baseUrl ?? endpoint((await question(`BYOK endpoint [${baseDefault}]: `, abort.signal)).trim() || baseDefault);
+    const available = args.models ?? (args.model && !saved.models?.includes(args.model) ? [args.model] : saved.models);
+    const model = args.model ?? (available ? (saved.model && available.includes(saved.model) ? saved.model : available[0]!) : saved.model)
+      ?? modelId((await question(`BYOK model [${modelDefault}]: `, abort.signal)).trim() || modelDefault);
+    const ids = available ?? [model], catalog = modelsFromIds(ids);
+    key = (args.keyEnv ? env[args.keyEnv] ?? "" : await question("BYOK API key (hidden; never saved): ", abort.signal, true)).trim();
+    if (!key || /[\x00-\x20\x7f]/.test(key) || key.length > 16384) throw new Error("Provide a nonempty BYOK API key without whitespace; no other credentials will be tried.");
+    if (abort.signal.aborted) return 130;
+    directory(join(repository, "tmp/local"), true, true); directory(state, true, true);
+    const lockPath = join(state, "launcher.lock");
+    let lock: number;
+    try { lock = openSync(lockPath, constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY | constants.O_NOFOLLOW, 0o600); }
+    catch { throw new Error(`This project already has a local launcher lock: ${lockPath}. Close the existing launcher first. If it was killed, check the PID recorded in this file; delete the lock only after confirming that process no longer exists.`); }
+    const identity = fstatSync(lock);
+    releaseLock = () => { try { const current = lstatSync(lockPath); if (current.dev === identity.dev && current.ino === identity.ino) rmSync(lockPath); } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; } };
+    try { writeFileSync(lock, `${process.pid}\n`); } finally { closeSync(lock); }
+    directory(join(home, ".factory"), true, true);
+    directory(join(state, "bridge-data"), true, true);
+    for (const path of [settingsPath, `${settingsPath}.relay-bridge.bak`, `${settingsPath}.relay-bridge.bak.absent`, `${settingsPath}.relay-bridge.models.json`, hooksPath, hookConfig, adminPath, join(state, "manifest.env")]) regularFile(path);
+    installDroidCommand(project);
+    setEnv(runtimeKey, key);
+    setEnv("BRIDGE_DROID_HOME", home); setEnv("BRIDGE_SDK_CWD", project); setEnv("BRIDGE_WAIT_FOR_MISSION_DIR", undefined);
+    const clientToken = randomBytes(24).toString("hex"), adminToken = randomBytes(24).toString("hex");
+    const config = loadConfig({ mode: "sdk", authMode: "byok", permissionMode: "ask", host: "127.0.0.1", port: 0,
+      clientToken, adminToken, dataDir: join(state, "bridge-data"), sdkCwd: project, persistSessions: true,
+      maxBodyBytes: 8 * 1024 * 1024, maxSessions: 32, maxTurns: 160, toolWaitMs: 8 * 60 * 60 * 1000, requestTimeoutMs: 10 * 60 * 1000,
+      claudeExecutable: env.BRIDGE_CLAUDE_EXECUTABLE ?? "claude", upstreamBaseUrl: baseUrl, upstreamModel: model, upstreamTokenEnv: runtimeKey, models: catalog });
+    app = createBridgeApp(config, createLogger(config.logDir), join(config.sandboxDir, "CANARY.txt"));
+    await listen(app, config);
+    configureDroid(["--settings", settingsPath, "--base-url", app.url, "--manifest", join(state, "manifest.env"), "--models", ids.join(","),
+      ...(args.model ? ["--model", model] : [])], { BRIDGE_CLIENT_TOKEN: clientToken, BRIDGE_UPSTREAM_MODEL: model, BRIDGE_AUTH: "byok" }, catalog);
+    hookAttempted = true;
+    installFactoryHooks({ hooksPath, configPath: hookConfig, url: app.url, adminToken });
+    privateWrite(adminPath, `${adminToken}\n`); adminWritten = true;
+    privateWrite(preferencesPath, `${JSON.stringify({ baseUrl, model, models: ids }, null, 2)}\n`);
+    const childEnv: NodeJS.ProcessEnv = { ...safeDroidEnv(env, key, args.keyEnv), BRIDGE_CLIENT_TOKEN: clientToken, BRIDGE_ADMIN_TOKEN: adminToken,
+      BRIDGE_CONTROL_URL: app.url, BRIDGE_DROID_HOME: home, BRIDGE_SDK_CWD: project, BRIDGE_MODEL_ID: model, FACTORY_HOME_OVERRIDE: home, FACTORY_AIRGAP_ENABLED: "1",
+      CLAUDE_CONFIG_DIR: join(config.dataDir, "claude-config") };
+    process.stdout.write(`Droid ready for ${project}\nModels: ${catalog.map((item) => item.displayName).join(", ")}\nControl: ${app.url}/control\nAdmin token file: ${adminPath}\nNative tool permissions: ask. Open Control for approval requests.\n`);
+    return await runDroid(["--home", home, "--cwd", project, "--airgap", "1", "--", "--settings", settingsPath], { env: childEnv, signal: abort.signal, handleProcessSignals: false });
+  } catch (error) {
+    if (interrupted) return 130;
+    const message = error instanceof Error ? error.message : "Local launcher failed.";
+    throw new Error(key ? message.replaceAll(key, "[REDACTED]") : message);
+  } finally {
+    const failures: unknown[] = [];
+    if (app) {
+      const timer = setTimeout(() => app!.server.closeAllConnections(), 5_000);
+      try { await app.close(); } catch (error) { failures.push(error); } finally { clearTimeout(timer); }
+    }
+    if (hookAttempted) { try { directory(join(project, ".factory")); regularFile(hooksPath); regularFile(hookConfig); removeFactoryHooks({ hooksPath, configPath: hookConfig }); } catch (error) { failures.push(error); } }
+    if (adminWritten) { try { regularFile(adminPath); rmSync(adminPath, { force: true }); } catch (error) { failures.push(error); } }
+    for (const [name, value] of previous) { if (value === undefined) delete process.env[name]; else process.env[name] = value; }
+    key = "";
+    try { releaseLock?.(); } catch (error) { failures.push(error); }
+    process.off("SIGINT", interrupt); process.off("SIGTERM", interrupt);
+    if (failures.length) throw new Error("Local cleanup failed; check the project's local state and hooks before restarting.");
+  }
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+  runLocal(process.argv.slice(2)).then((code) => { process.exitCode = code; }).catch((error: unknown) => {
+    console.error(error instanceof Error ? error.message : "Local launcher failed."); process.exitCode = 1;
+  });
+}

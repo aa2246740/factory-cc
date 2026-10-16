@@ -13,6 +13,10 @@ const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
 const tool = { name: "TaskOutput", input_schema: { type: "object" as const, properties: {} } };
 const user = (content: string | ContentBlock[]) => ({ role: "user" as const, content });
 const success = (result: string, extra = {}) => ({ type: "result", subtype: "success", is_error: false, result, session_id: "native-sdk-session", ...extra });
+const modelCatalog = [
+  { id: "first-model", model: "native-model-a", displayName: "Model A" },
+  { id: "second-model", model: "native-model-b", displayName: "Model B" },
+];
 
 class FakeSdk implements SdkHandle {
   readonly calls: Array<{ prompt: AsyncIterable<SdkUserInput>; options: Record<string, unknown> }> = [];
@@ -100,6 +104,147 @@ describe("official SDK streaming-input lifecycle (injected offline SDK)", () => 
     expect(sdk.calls[0]!.options.tools).toEqual({ type: "preset", preset: "claude_code" });
     expect(sdk.calls[0]!.options.systemPrompt).toMatchObject({ type: "preset", preset: "claude_code" });
     expect(sdk.close).not.toHaveBeenCalled();
+  });
+
+  it("routes concurrent catalog selections to their actual models with independent BYOK environments", async () => {
+    const sdk = new FakeSdk(async function* () { yield success("ok"); });
+    const { runtime } = create(sdk, { models: modelCatalog });
+    await Promise.all([
+      runtime.handle(request(session({ bridgeSessionId: "model-a-session" }), "first task", { model: "first-model" })),
+      runtime.handle(request(session({ bridgeSessionId: "model-b-session" }), "other task", { model: "second-model" })),
+    ]);
+    expect(sdk.calls).toHaveLength(2);
+    for (const [index, profile] of modelCatalog.entries()) {
+      const options = sdk.calls[index]!.options;
+      expect(options.model).toBe(profile.model);
+      expect(options.env).toMatchObject({ ANTHROPIC_MODEL: profile.model, ANTHROPIC_DEFAULT_OPUS_MODEL: profile.model,
+        ANTHROPIC_DEFAULT_SONNET_MODEL: profile.model, ANTHROPIC_DEFAULT_HAIKU_MODEL: profile.model,
+        CLAUDE_CODE_SUBAGENT_MODEL: profile.model, BRIDGE_MODEL_ID: profile.id,
+        ANTHROPIC_BASE_URL: "https://offline.invalid/anthropic", ANTHROPIC_AUTH_TOKEN: "offline-placeholder-never-sent" });
+    }
+    expect(runtime.describe().sessions).toEqual(expect.arrayContaining(modelCatalog.map((profile) => expect.objectContaining({ modelId: profile.id, nativeModel: profile.model }))));
+    await expect(runtime.handle(request(session({ bridgeSessionId: "unknown" }), "task", { model: "not-configured" }))).rejects.toMatchObject({ code: "unknown_model" });
+    expect(sdk.calls).toHaveLength(2);
+  });
+
+  it("changes the actual BYOK model by resuming the same native history and retires old query callbacks", async () => {
+    const sdk = new FakeSdk(async function* (_input, index) { yield success(`reply-${index}`); });
+    const { runtime } = create(sdk, { models: modelCatalog });
+    const s = session();
+    await runtime.handle(request(s, "Remember original context", { model: "first-model", tools: [tool] }));
+    const oldHandler = sdk.handlers.get("TaskOutput")!;
+    const oldPermission = sdk.calls[0]!.options.canUseTool as (name: string, input: object) => Promise<{ behavior: string }>;
+    const oldGuard = (sdk.calls[0]!.options.hooks as { PreToolUse: Array<{ hooks: Array<(hook: object) => Promise<unknown>> }> }).PreToolUse[0]!.hooks[0]!;
+    const reply = await runtime.handle(request(s, "ignored", { model: "second-model", tools: [tool], messages: [
+      user("Remember original context"), { role: "assistant", content: "reply-0" }, user("Use that remembered context"),
+    ] }));
+    expect(sdk.close).toHaveBeenCalledTimes(1);
+    expect(sdk.calls).toHaveLength(2);
+    expect(sdk.calls[1]!.options).toMatchObject({ model: "native-model-b", resume: "native-sdk-session" });
+    expect(sdk.calls[1]!.options.env).toMatchObject({ ANTHROPIC_MODEL: "native-model-b", ANTHROPIC_SMALL_FAST_MODEL: "native-model-b", BRIDGE_MODEL_ID: "second-model" });
+    expect(reply.sdkSessionId).toBe("native-sdk-session");
+    expect(JSON.stringify(sdk.inputs[1])).toContain("Use that remembered context");
+    expect(JSON.stringify(sdk.inputs[1])).not.toContain("Remember original context");
+    expect(reply.events).toContainEqual(expect.objectContaining({ type: "sdk_model_changed", data: expect.objectContaining({ fromModel: "native-model-a", toModel: "native-model-b", strategy: "resume" }) }));
+    await expect(oldHandler({}, { toolUseID: "late-old-call" })).rejects.toMatchObject({ code: "stale_native_query" });
+    expect(await oldPermission("Read", {})).toMatchObject({ behavior: "deny" });
+    expect(await oldGuard({ tool_name: "Read" })).toMatchObject({ hookSpecificOutput: { permissionDecision: "deny" } });
+    expect(runtime.describe().fatalErrors).toEqual([]);
+    await runtime.handle(request(s, "continue after rejected stale callbacks", { model: "second-model", tools: [tool] }));
+    expect(sdk.calls).toHaveLength(2);
+  });
+
+  it("switches subscription models through resume while preserving the original authentication environment", async () => {
+    vi.stubEnv("ANTHROPIC_BASE_URL", "https://subscription-offline.invalid");
+    vi.stubEnv("ANTHROPIC_AUTH_TOKEN", "synthetic-existing-auth-token");
+    vi.stubEnv("ANTHROPIC_API_KEY", "synthetic-existing-api-key");
+    vi.stubEnv("CLAUDE_CODE_OAUTH_TOKEN", "synthetic-existing-oauth-token");
+    const sdk = new FakeSdk(async function* () { yield success("ok"); });
+    const { runtime } = create(sdk, { authMode: "subscription", models: modelCatalog });
+    const s = session();
+    await runtime.handle(request(s, "first turn", { model: "first-model" }));
+    await runtime.handle(request(s, "second turn", { model: "second-model" }));
+    expect(sdk.calls[1]!.options).toMatchObject({ model: "native-model-b", resume: "native-sdk-session" });
+    for (const call of sdk.calls) expect(call.options.env).toMatchObject({
+      ANTHROPIC_BASE_URL: "https://subscription-offline.invalid", ANTHROPIC_AUTH_TOKEN: "synthetic-existing-auth-token",
+      ANTHROPIC_API_KEY: "synthetic-existing-api-key", CLAUDE_CODE_OAUTH_TOKEN: "synthetic-existing-oauth-token",
+    });
+    expect((sdk.calls[1]!.options.env as Record<string, string>).BRIDGE_MODEL_ID).toBe("second-model");
+  });
+
+  it("refuses to switch while a host tool is pending without breaking its original callback", async () => {
+    let result: unknown;
+    const sdk = new FakeSdk(async function* (_input, _index, fake) {
+      yield { type: "assistant", message: { content: [{ type: "tool_use", id: "pending-model-tool", name: "mcp__droid__TaskOutput", input: {} }] } };
+      result = await fake.handlers.get("TaskOutput")!({}, { toolUseID: "pending-model-tool" });
+      yield success("original model completed");
+    });
+    const { runtime } = create(sdk, { models: modelCatalog });
+    const s = session();
+    await runtime.handle(request(s, "run tool", { model: "first-model", tools: [tool] }));
+    const content: ContentBlock[] = [{ type: "tool_result", tool_use_id: "pending-model-tool", content: "real result" }];
+    await expect(runtime.handle(request(s, content, { model: "second-model", tools: [tool] }))).rejects.toMatchObject({ code: "model_switch_busy" });
+    expect(sdk.close).not.toHaveBeenCalled();
+    expect(sdk.calls).toHaveLength(1);
+    const completed = await runtime.handle(request(s, content, { model: "first-model", tools: [tool] }));
+    expect(completed.response.stop_reason).toBe("end_turn");
+    expect(result).toEqual({ content: [{ type: "text", text: "real result" }], isError: false });
+  });
+
+  it("rejects switching a nonpersistent native session while leaving its original model usable", async () => {
+    const sdk = new FakeSdk(async function* () { yield success("ok"); });
+    const { runtime } = create(sdk, { models: modelCatalog, persistSessions: false });
+    const s = session();
+    await runtime.handle(request(s, "first", { model: "first-model" }));
+    await expect(runtime.handle(request(s, "switch", { model: "second-model" }))).rejects.toMatchObject({ code: "model_switch_requires_persistence" });
+    expect(sdk.close).not.toHaveBeenCalled();
+    await runtime.handle(request(s, "still first", { model: "first-model" }));
+    expect(sdk.calls).toHaveLength(1);
+    expect(runtime.describe().fatalErrors).toEqual([]);
+  });
+
+  it("keeps background work on its original model until the native task finishes", async () => {
+    const sdk = new FakeSdk(async function* (_input, index) {
+      if (index === 0) yield { type: "system", subtype: "task_started", task_id: "background-a" };
+      else yield { type: "system", subtype: "task_notification", task_id: "background-a" };
+      yield success("ok");
+    });
+    const { runtime } = create(sdk, { models: modelCatalog });
+    const s = session();
+    await runtime.handle(request(s, "start background work", { model: "first-model" }));
+    await expect(runtime.handle(request(s, "switch while work continues", { model: "second-model" }))).rejects.toMatchObject({ code: "model_switch_busy" });
+    expect(sdk.close).not.toHaveBeenCalled();
+    await runtime.handle(request(s, "finish background work", { model: "first-model" }));
+    await runtime.handle(request(s, "switch after completion", { model: "second-model" }));
+    expect(sdk.calls[1]!.options).toMatchObject({ model: "native-model-b", resume: "native-sdk-session" });
+  });
+
+  it("does not start a replacement model when the previous native query cannot close safely", async () => {
+    const sdk = new FakeSdk(async function* () { yield success("ok"); });
+    const { runtime } = create(sdk, { models: modelCatalog });
+    const s = session();
+    await runtime.handle(request(s, "first", { model: "first-model" }));
+    sdk.close.mockImplementationOnce(() => { throw new Error("synthetic close failure"); });
+    await expect(runtime.handle(request(s, "switch", { model: "second-model" }))).rejects.toMatchObject({ code: "model_switch_failed" });
+    expect(sdk.calls).toHaveLength(1);
+    expect(runtime.describe().fatalErrors).toContainEqual(expect.objectContaining({ code: "model_switch_failed" }));
+  });
+
+  it("rejects a catalog switch if the SDK silently starts a different native conversation", async () => {
+    const sdk = new FakeSdk(async function* () { yield success("ok"); });
+    const { runtime } = create(sdk, { models: modelCatalog });
+    const s = session();
+    await runtime.handle(request(s, "remember existing context", { model: "first-model" }));
+    const original = sdk.query.bind(sdk);
+    sdk.query = (args) => {
+      const query = original(args);
+      return { ...query, async *[Symbol.asyncIterator]() {
+        for await (const message of query) yield { ...message, session_id: "unexpected-fresh-session" };
+      } };
+    };
+    await expect(runtime.handle(request(s, "switch and recall", { model: "second-model" }))).rejects.toMatchObject({ code: "sdk_resume_identity_changed" });
+    expect(sdk.calls[1]!.options.resume).toBe("native-sdk-session");
+    expect(runtime.describe().fatalErrors).toContainEqual(expect.objectContaining({ code: "sdk_resume_identity_changed" }));
   });
 
   it("rejects concurrent first requests before starting a second query", async () => {

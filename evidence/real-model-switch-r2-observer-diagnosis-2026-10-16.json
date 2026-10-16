@@ -1,0 +1,29 @@
+{
+  "status": "OBSERVER_FALSE_NEGATIVE_FIRST_RESPONSE_FORMAT",
+  "originalEvidence": "evidence/real-model-switch-validation-2026-10-16-r2.json",
+  "originalStatus": "FAIL",
+  "originalError": "First real model did not store the expected context cleanly.",
+  "scope": "First turn only; GLM-4.7 was not invoked in this attempt.",
+  "observed": {
+    "actualModel": "glm-5.2",
+    "nonemptyResponse": true,
+    "startsWithRequestedAcknowledgement": true,
+    "toolCount": 0,
+    "responseSummary": "Acknowledged storage, then correctly explained that no tools were used and the code was remembered only for the current conversation."
+  },
+  "diagnosis": "The scratch observer incorrectly required the entire answer to equal STORED. The extra clarification was compatible with the test instruction and does not indicate a product failure. Cross-model context retention was not reached or verified by this attempt.",
+  "observerCorrection": "Require an actual glm-5.2 nonempty, tool-free first response. Keep the cross-model same Factory/Bridge/native SDK IDs, real upstream model, second-input nonce absence and recall gates unchanged.",
+  "processCleanup": {
+    "supported": true,
+    "observedProcessCount": 23,
+    "terminatedProcessCount": 0,
+    "remainingProcessIds": [],
+    "complete": true
+  },
+  "credentialPrivacy": {
+    "scannedFiles": 52,
+    "upstreamKeyHits": 0
+  },
+  "removedOwnedState": true,
+  "removedOwnedProject": true
+}

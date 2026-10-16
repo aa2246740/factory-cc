@@ -1,0 +1,71 @@
+{
+  "status": "FAIL_NATIVE_CONTEXT_REUSE_CONFIRMED",
+  "recordedAt": "2026-10-16T04:08:03.691737+00:00",
+  "originalObserver": {
+    "path": "evidence/real-model-switch-validation-2026-10-16.json",
+    "status": "FAIL",
+    "error": "fetch failed",
+    "explanation": "Old observer selected the first record for this Factory session; the actual second request silently created another record. After preserving data and normal /exit, the observer received fetch failed. This analysis records the underlying product failure separately."
+  },
+  "turns": [
+    {
+      "bridgeSessionId": "sess_f822be16-dcb9-4b3f-9641-85784ac49e46",
+      "sdkSessionId": "809c1f3d-2d5e-466f-9e68-eaf2884af729",
+      "factorySessionId": "752c0ac0-b5d5-4cab-9998-f5e41db57212",
+      "contextHash": "cd836aa90d221530d142f9b8002aec575058382d2c7ece6e7ac9cfce121ba5ec",
+      "model": "glm-5.2",
+      "answer": "STORED",
+      "openingContainsRememberedCode": true,
+      "openingImportsConversationHistory": true
+    },
+    {
+      "bridgeSessionId": "sess_3e559a2b-ae87-4094-a8c1-205e0abfb4af",
+      "sdkSessionId": "68b71665-5320-442e-b594-00af0a428d9d",
+      "factorySessionId": "752c0ac0-b5d5-4cab-9998-f5e41db57212",
+      "contextHash": "1dec7df99b20dde5030833b73699fc817ecb773aab0708a1c31be3cb6cfa1467",
+      "model": "glm-4.7",
+      "answer": "memory-20b04c3f85174c2c78d9",
+      "openingContainsRememberedCode": true,
+      "openingImportsConversationHistory": true
+    }
+  ],
+  "findings": {
+    "actualProviderModelsDiffer": true,
+    "sameFactorySession": true,
+    "nativeSdkSessionWasReplaced": true,
+    "bridgeSessionWasReplaced": true,
+    "secondTurnReimportedNonce": true,
+    "correctRecallDoesNotProveNativeResume": true
+  },
+  "requestDifference": {
+    "firstThinking": {
+      "type": "enabled",
+      "budget_tokens": 4095
+    },
+    "secondThinking": null,
+    "systemAndToolsIdentical": true,
+    "firstBetaHeader": "interleaved-thinking-2025-05-14",
+    "secondBetaHeader": null
+  },
+  "ptyExit": {
+    "exitStatus": 0,
+    "signalStatus": null,
+    "alive": false
+  },
+  "processCleanup": {
+    "supported": true,
+    "observedProcessCount": 40,
+    "terminatedProcessCount": 0,
+    "remainingProcessIds": [],
+    "complete": true
+  },
+  "credentialPrivacy": {
+    "scannedFiles": 58,
+    "upstreamKeyHits": 0
+  },
+  "ownedCleanup": {
+    "stateRemoved": true,
+    "projectRemoved": true
+  },
+  "scope": "Preserved first-run failure. Real model selection and Mission UI selection worked; native context reuse did not. A fresh live run is required after the correlation fix."
+}

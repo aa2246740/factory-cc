@@ -31,8 +31,9 @@ describe("local BYOK Droid generation", () => {
   it("writes only caller-selected capabilities after a complete tool-free model reply", async () => {
     const root = own(); const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ stop_reason: "end_turn", content: [{ type: "text", text: JSON.stringify({ description: "Audits arithmetic JSON.", systemPrompt: "Read the JSON input and independently calculate a plus b. Return the nonce unchanged." }) }] })));
     vi.stubGlobal("fetch", fetch);
-    const path = await generateDroid(args(root), { BRIDGE_CLIENT_TOKEN: "test-only" });
+    const path = await generateDroid(args(root), { BRIDGE_CLIENT_TOKEN: "test-only", BRIDGE_MODEL_ID: "haiku" });
     const body = JSON.parse(fetch.mock.calls[0]![1].body);
+    expect(body.model).toBe("haiku");
     expect(body.tools).toEqual([]); expect(body.tool_choice).toEqual({ type: "none" });
     const markdown = readFileSync(path, "utf8"); expect(markdown).toContain('model: "inherit"'); expect(markdown).toContain('tools: ["Read","LS","Grep","Glob"]');
   });
