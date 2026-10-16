@@ -93,9 +93,13 @@ describe("auth verification gate", () => {
     try {
       const sdk = new FakeSdk(async () => ({ apiKeySource: "ANTHROPIC_API_KEY", email: "ada@example.com" }));
       const runtime = create(sdk, "subscription");
-      await expect(runtime.handle(request())).rejects.toMatchObject({ code: "auth_mode_mismatch" });
+      await expect(runtime.handle(request())).rejects.toMatchObject({
+        code: "auth_mode_mismatch",
+        message: expect.not.stringMatching(/ada@|example\.com|email=/),
+      });
       expect(sdk.inputs).toHaveLength(0);
       expect(JSON.stringify(runtime.describe().authVerification)).not.toContain("ada@");
+      expect(runtime.describe().authVerification).toMatchObject({ email: "a***@example.com" });
       expect(logger.info).toHaveBeenCalledWith("auth_verified", expect.objectContaining({ mode: "subscription", kind: "anthropic-api", ok: false }));
     } finally { restore(); }
   });

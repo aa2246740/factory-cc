@@ -715,7 +715,7 @@ export class SdkRuntime implements BridgeRuntime {
     const classification = classifyAuth(observed, live.initApiKeySource);
     this.rememberAuth(mode, classification, observed, email);
     if (classification.kind !== mode) {
-      const error = new BridgeError(401, "auth_mode_mismatch", mismatchMessage(mode, classification, observed, email));
+      const error = new BridgeError(401, "auth_mode_mismatch", mismatchMessage(mode, classification, observed));
       this.stop(live, error);
       throw error;
     }
@@ -760,7 +760,7 @@ export class SdkRuntime implements BridgeRuntime {
     const email = this.authVerification?.email;
     this.rememberAuth(mode, classification, live.accountSnapshot, email);
     if ((mode === "subscription" || mode === "anthropic-api") && classification.kind !== mode) {
-      this.stop(live, new BridgeError(401, "auth_mode_mismatch", mismatchMessage(mode, classification, live.accountSnapshot, email)));
+      this.stop(live, new BridgeError(401, "auth_mode_mismatch", mismatchMessage(mode, classification, live.accountSnapshot)));
     }
   }
 
@@ -1181,10 +1181,10 @@ function stringField(record: Record<string, unknown>, key: string): string | und
   return typeof value === "string" && value ? value : undefined;
 }
 
-function mismatchMessage(mode: string, classification: AuthClassification, observed: AuthObservation, email?: string): string {
+function mismatchMessage(mode: string, classification: AuthClassification, observed: AuthObservation): string {
   return `Declared BRIDGE_AUTH=${mode} but Claude Code reported ${classification.kind} (${classification.reason}). `
     + `subscriptionType=${observed.subscriptionType ?? "unset"} apiKeySource=${observed.apiKeySource ?? "unset"} `
-    + `tokenSource=${observed.tokenSource ?? "unset"} email=${email ?? "unset"}.`;
+    + `tokenSource=${observed.tokenSource ?? "unset"}.`;
 }
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {

@@ -165,7 +165,7 @@ export function buildChildEnv(
   if (mode === "inherit") return inheritEnv(sourceEnv, bridgeListen);
 
   const passthrough = parsePassthrough(opts.passthrough !== undefined ? opts.passthrough : sourceEnv.BRIDGE_ENV_PASSTHROUGH);
-  const passthroughHits = passthrough.filter((key) => isForbiddenName(mode, key, sourceEnv[key]));
+  const passthroughHits = passthrough.filter((key) => passthroughRejected(mode, key, sourceEnv));
   if (passthroughHits.length) throw authEnvError(mode, passthroughHits, "BRIDGE_ENV_PASSTHROUGH includes");
   const present = forbiddenNamesIn(mode, sourceEnv);
   if (present.length) throw authEnvError(mode, present, "these environment variables are set");
@@ -253,6 +253,41 @@ function assertRequirements(mode: AuthMode, sourceEnv: NodeJS.ProcessEnv, select
       throw new BridgeError(400, "auth_env_rejected", `BRIDGE_AUTH=cloud requires exactly one of ${CLOUD_SWITCHES.join(", ")}. Found ${enabled.length ? enabled.join(", ") : "none"}. Values are not shown.`);
     }
   }
+}
+
+const PASSTHROUGH_DENIED_PREFIXES = ["ANTHROPIC_", "CLAUDE_CODE_", "_CLAUDE_CODE_", "CCR_", "AGENT_PROXY_"] as const;
+const PASSTHROUGH_DENIED_EXACT = new Set<string>([
+  "CLAUDE_CONFIG_DIR",
+  "FALLBACK_FOR_ALL_PRIMARY_MODELS",
+  "BRIDGE_ADMIN_TOKEN",
+  "BRIDGE_FACTORY_BINDING",
+  "BRIDGE_FACTORY_LAUNCH_ID",
+  "BRIDGE_LAUNCH_ID",
+  ...BRIDGE_UPSTREAM_NAMES,
+]);
+
+/**
+ * Passthrough must not reintroduce credential or routing selectors that the
+ * allowlist omitted. Names the mode already copies are redundant, not a bypass.
+ */
+function passthroughRejected(mode: AuthMode, key: string, sourceEnv: NodeJS.ProcessEnv): boolean {
+  if (isExplicitExtra(mode, key, sourceEnv)) return false;
+  if (PASSTHROUGH_DENIED_EXACT.has(key) || PASSTHROUGH_DENIED_PREFIXES.some((prefix) => key.startsWith(prefix))) return true;
+  return isForbiddenName(mode, key, sourceEnv[key]);
+}
+
+function isExplicitExtra(mode: AuthMode, key: string, sourceEnv: NodeJS.ProcessEnv): boolean {
+  if (mode === "subscription") return key === "CLAUDE_CODE_OAUTH_TOKEN" || key === "CLAUDE_CONFIG_DIR";
+  if (mode === "anthropic-api") {
+    if (key === "ANTHROPIC_API_KEY" || (MODEL_SLOT_NAMES as readonly string[]).includes(key)) return true;
+    return key === "ANTHROPIC_BASE_URL" && Boolean(sourceEnv.ANTHROPIC_BASE_URL && isOfficialAnthropicApiBase(sourceEnv.ANTHROPIC_BASE_URL));
+  }
+  if (mode === "cloud") {
+    if ((CLOUD_SWITCHES as readonly string[]).includes(key) && truthy(sourceEnv[key])) return true;
+    if ((CLOUD_PASSTHROUGH as readonly string[]).includes(key) || (MODEL_SLOT_NAMES as readonly string[]).includes(key)) return true;
+    return key.startsWith("ANTHROPIC_FOUNDRY_") || key.startsWith("VERTEX_REGION_");
+  }
+  return false;
 }
 
 function parsePassthrough(raw: string | undefined): string[] {

@@ -85,6 +85,64 @@ describe("auth environment", () => {
     expect(String(blocked)).not.toContain(secret);
   });
 
+  const passthroughDenied = [
+    "ANTHROPIC_BASE_URL",
+    "ANTHROPIC_AUTH_TOKEN",
+    "CLAUDE_CODE_USE_BEDROCK",
+    "CLAUDE_CODE_SESSION_ACCESS_TOKEN",
+    "CLAUDE_CODE_HOST_API",
+    "CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST",
+    "CLAUDE_CODE_SDK_HAS_API",
+    "_CLAUDE_CODE_AGENT_PROXY_HTTP_SOCKET",
+    "CLAUDE_CODE_SUBAGENT_MODEL_FORCE",
+    "CCR_AGENT_PROXY_BASE_URL",
+    "AGENT_PROXY_AUTH_TOKEN",
+    "FALLBACK_FOR_ALL_PRIMARY_MODELS",
+    "BRIDGE_ADMIN_TOKEN",
+    "BRIDGE_FACTORY_BINDING",
+    "BRIDGE_FACTORY_LAUNCH_ID",
+    "BRIDGE_LAUNCH_ID",
+    "BRIDGE_UPSTREAM_BASE_URL",
+    "BRIDGE_UPSTREAM_MODEL",
+    "BRIDGE_UPSTREAM_TOKEN_ENV",
+  ] as const;
+
+  it.each(passthroughDenied)("byok passthrough cannot reintroduce %s", (name) => {
+    let error: unknown;
+    try {
+      buildChildEnv("byok", { ...base, TEST_AUTH_ENV_KEY: "offline-byok", BRIDGE_ENV_PASSTHROUGH: name, [name]: secret }, selection());
+    } catch (caught) { error = caught; }
+    expect(error).toMatchObject({ code: "auth_env_rejected" });
+    expect(String(error)).toContain(name);
+    expect(String(error)).not.toContain(secret);
+  });
+
+  it.each(passthroughDenied)("subscription passthrough cannot reintroduce %s", (name) => {
+    let error: unknown;
+    try {
+      buildChildEnv("subscription", { ...base, BRIDGE_ENV_PASSTHROUGH: name, [name]: secret });
+    } catch (caught) { error = caught; }
+    expect(error).toMatchObject({ code: "auth_env_rejected" });
+    expect(String(error)).toContain(name);
+    expect(String(error)).not.toContain(secret);
+  });
+
+  it("refuses CLAUDE_CONFIG_DIR via byok passthrough and still copies the subscription extras", () => {
+    expect(() => buildChildEnv("byok", {
+      ...base, TEST_AUTH_ENV_KEY: "offline-byok", BRIDGE_ENV_PASSTHROUGH: "CLAUDE_CONFIG_DIR", CLAUDE_CONFIG_DIR: secret,
+    }, selection())).toThrow(/CLAUDE_CONFIG_DIR/);
+    const copied = buildChildEnv("subscription", {
+      ...base,
+      CLAUDE_CODE_OAUTH_TOKEN: "oauth-offline",
+      CLAUDE_CONFIG_DIR: "/tmp/claude-home",
+      GLM_CN_API_KEY: secret,
+      BRIDGE_ENV_PASSTHROUGH: "CLAUDE_CODE_OAUTH_TOKEN,CLAUDE_CONFIG_DIR,GLM_CN_API_KEY",
+    });
+    expect(copied.CLAUDE_CODE_OAUTH_TOKEN).toBe("oauth-offline");
+    expect(copied.CLAUDE_CONFIG_DIR).toBe("/tmp/claude-home");
+    expect(copied.GLM_CN_API_KEY).toBe(secret);
+  });
+
   it("keeps unrelated secrets out unless BRIDGE_ENV_PASSTHROUGH names them", () => {
     const source = { ...base, GLM_CN_API_KEY: secret, HTTPS_PROXY: "http://proxy.invalid:3128" };
     const byok = buildChildEnv("byok", { ...source, TEST_AUTH_ENV_KEY: "offline-byok" }, selection());
