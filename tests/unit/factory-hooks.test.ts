@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
+import { createServer } from "node:http";
+import { spawn } from "node:child_process";
 import { FACTORY_HOOK_EVENTS, factoryHookEndpoint, forwardFactoryHook, installFactoryHooks, persistFactoryBinding, removeFactoryHooks } from "../../src/control/factory-hooks.js";
 
 const directories: string[] = [];
@@ -91,16 +93,58 @@ describe("Factory hook forwarding", () => {
     expect(send.mock.calls[0]![1]).toMatchObject({ redirect: "error", headers: { authorization: "Bearer private-token" } });
   });
 
-  it("carries generation ownership on events and launch ownership only on SessionStart", async () => {
+  it("carries generation ownership and supplies wrapper launch only for session lifecycle boundaries", async () => {
     const send = vi.fn<typeof fetch>().mockImplementation(async () => new Response(JSON.stringify({ ok: true })));
     const options = { fetch: send, eventId: "receipt", bindingToken: "a".repeat(64), launchId: "launch-owned" };
     const config = { url: "http://localhost:1", adminToken: "token" };
     await forwardFactoryHook(config, start, options);
     await forwardFactoryHook(config, { ...start, hook_event_name: "SessionEnd" }, options);
+    await forwardFactoryHook(config, { ...start, hook_event_name: "UserPromptSubmit" }, options);
     expect(JSON.parse(send.mock.calls[0]![1]!.body as string)).toMatchObject({ bindingToken: options.bindingToken, launchId: options.launchId });
     const endEnvelope = JSON.parse(send.mock.calls[1]![1]!.body as string);
     expect(endEnvelope.bindingToken).toBe(options.bindingToken);
-    expect(endEnvelope).not.toHaveProperty("launchId");
+    expect(endEnvelope.launchId).toBe(options.launchId);
+    expect(JSON.parse(send.mock.calls[2]![1]!.body as string)).not.toHaveProperty("launchId");
+  });
+
+  it("never silently drops a present empty binding into the missing-binding fallback", async () => {
+    const send = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ ok: true })));
+    await forwardFactoryHook({ url: "http://localhost:1", adminToken: "token" }, { ...start, hook_event_name: "SessionEnd" },
+      { fetch: send, bindingToken: "", launchId: "owned-launch" });
+    expect(JSON.parse(send.mock.calls[0]![1]!.body as string)).toMatchObject({ bindingToken: "", launchId: "owned-launch" });
+  });
+
+  it("runs the actual hook entrypoint for missing-binding client exit while rejecting other missing or malformed authority", async () => {
+    const { configPath } = paths(); const received: Array<Record<string, unknown>> = [];
+    const server = createServer(async (request, response) => {
+      let body = ""; for await (const chunk of request) body += chunk.toString();
+      received.push(JSON.parse(body));
+      response.writeHead(200, { "content-type": "application/json" }); response.end(JSON.stringify({ ok: true }));
+    });
+    await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
+    const address = server.address(); if (!address || typeof address === "string") throw new Error("Missing test listener");
+    writeFileSync(configPath, JSON.stringify({ url: `http://127.0.0.1:${address.port}`, adminToken: "offline-hook-test-only" }));
+    const invoke = async (hook: string, launchId?: string, bindingToken?: string) => {
+      const env = { ...process.env }; delete env.BRIDGE_FACTORY_BINDING; delete env.BRIDGE_FACTORY_LAUNCH_ID;
+      if (launchId !== undefined) env.BRIDGE_FACTORY_LAUNCH_ID = launchId;
+      if (bindingToken !== undefined) env.BRIDGE_FACTORY_BINDING = bindingToken;
+      const child = spawn(process.execPath, ["--import", "tsx", resolve("scripts/factory-hook.ts"), "--factory-cc-hook-config", configPath], { env, stdio: ["pipe", "pipe", "pipe"] });
+      let stderr = ""; child.stderr.on("data", (chunk) => { stderr += chunk.toString(); });
+      const completed = new Promise<{ code: number | null; stderr: string }>((done, reject) => { child.once("error", reject); child.once("close", (code) => done({ code, stderr })); });
+      child.stdin.end(JSON.stringify({ ...start, hook_event_name: hook }));
+      return completed;
+    };
+    try {
+      expect(await invoke("SessionEnd", "owned-launch")).toEqual({ code: 0, stderr: "" });
+      expect(received).toHaveLength(1); expect(received[0]).toMatchObject({ launchId: "owned-launch", event: { hook_event_name: "SessionEnd" } });
+      expect(received[0]).not.toHaveProperty("bindingToken");
+      expect(await invoke("SessionEnd")).toMatchObject({ code: 1, stderr: expect.stringContaining("npm run run-droid") });
+      expect(await invoke("SessionEnd", "owned-launch", "")).toMatchObject({ code: 1 });
+      expect(await invoke("UserPromptSubmit", "owned-launch")).toMatchObject({ code: 1 });
+      expect(received).toHaveLength(1);
+    } finally {
+      server.closeAllConnections(); await new Promise<void>((done) => server.close(() => done()));
+    }
   });
 
   it("never converts a response for another event into model context", async () => {

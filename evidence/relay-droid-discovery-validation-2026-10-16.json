@@ -1,0 +1,109 @@
+{
+  "status": "PASS_SCOPED",
+  "recordedAt": "2026-10-16T02:30:42.343795+00:00",
+  "baseCommit": "836bea50923d1786f559758accb21425b815dc34",
+  "authentication": {
+    "mode": "isolated explicit BYOK",
+    "baseUrl": "https://open.bigmodel.cn/api/anthropic",
+    "model": "glm-5.2",
+    "realSubscriptionUsed": false,
+    "officialBinariesModified": false
+  },
+  "changes": [
+    "Install a discoverable Factory relay-droid skill alongside the existing executable command; preserve conflicts and support identical command-only upgrades.",
+    "Pin native command client credentials to this Bridge and its actual bound port without passing administrator or lifecycle tokens to native workers.",
+    "Accept missing-binding client SessionEnd only through the authenticated wrapper launch, exact workspace/session and unique generation; reject stale bindings, unrelated sessions and ambiguous generations.",
+    "Discard an inherited Factory generation binding before starting a new wrapper launch."
+  ],
+  "realUserJourney": {
+    "evidence": "evidence/interactive-natural-generation-validation-2026-10-16-r3.json",
+    "sha256": "302ab69c0ac740f6f86468b9d731dbd83c5a36330ab76b0ad299f969c3ccdace",
+    "creation": "An unhinted Chinese prompt activates the real Factory Skill, receives its complete body, invokes the installed generator through native Bash and creates one read-only definition through one authenticated tool-free generator request.",
+    "invocation": "A separate explicitly requested Factory Task uses a distinct child to read the nonce-bearing fixture and return correct JSON; parent does not read the file during delegation.",
+    "ordinaryChat": "Correct answer with zero tool calls; no extra generator requests or definition changes.",
+    "completionChecks": {
+      "noActiveTurns": true,
+      "noPendingHostCalls": true,
+      "noPendingApprovals": true,
+      "noActiveHostSessions": true,
+      "noFatalErrors": true,
+      "noControlFailures": true,
+      "terminalLifecycleDeliverySucceeded": true,
+      "sourceUnchangedDuringRun": true
+    },
+    "sessionEndEvents": [
+      {
+        "at": "2026-10-16T02:27:38.744Z",
+        "eventId": "05d3fbf0-feec-4f7a-910f-609546f989ce",
+        "hook": "SessionEnd",
+        "hostSessionId": "4754e9c7-7267-474a-8516-b90eea966e77",
+        "ended": true,
+        "sessions": 1
+      },
+      {
+        "at": "2026-10-16T02:28:03.679Z",
+        "eventId": "311a273e-8749-41a7-b5f0-0a0750f56c28",
+        "hook": "SessionEnd",
+        "hostSessionId": "dbb4d0d6-ed24-4c52-9c9c-881a3e77d8fe",
+        "ended": true,
+        "sessions": 1
+      },
+      {
+        "at": "2026-10-16T02:28:03.971Z",
+        "eventId": "5ea076aa-09f9-4ced-97a1-b561717bf18a",
+        "hook": "SessionEnd",
+        "hostSessionId": "dbb4d0d6-ed24-4c52-9c9c-881a3e77d8fe"
+      }
+    ],
+    "processCleanup": {
+      "supported": true,
+      "observedProcessCount": 60,
+      "terminatedProcessCount": 0,
+      "remainingProcessIds": [],
+      "complete": true
+    }
+  },
+  "offlineChecksOnFinalSources": {
+    "testsPassed": 392,
+    "testFiles": 43,
+    "failures": 0,
+    "typecheck": "PASS: npx tsc --noEmit",
+    "build": "PASS: npm run build",
+    "wrapperEnvironmentRegression": "PASS: existing child-process wrapper test injects stale binding/launch and confirms a new launch with no inherited binding"
+  },
+  "postOnlineSourceChange": {
+    "files": [
+      {
+        "path": "scripts/run-droid.ts",
+        "onlineSha256": "2c4ad9c98f22753504606b27ec3e84d12e7fbc711cb3ef5420df36cb32d94179",
+        "publishedSha256": "3e93f7d95d74d3e8dd160a4ba1008f5b1e40b7320acff9191f531bc624d348f5"
+      }
+    ],
+    "reason": "Final wrapper hygiene removes inherited BRIDGE_FACTORY_BINDING. The r3 fixture already removed this variable via droidEnv, so this does not change its observed environment. The new stale-environment case was verified separately by the actual child-process wrapper test; the full online journey was not repeated after this final edit."
+  },
+  "preservedAttempts": [
+    {
+      "evidence": "evidence/interactive-natural-generation-validation-2026-10-16.json",
+      "result": "FAIL retained: actual generation succeeded, but the first verifier incorrectly expected Factory to advertise the complete untruncated description."
+    },
+    {
+      "evidence": "evidence/interactive-natural-generation-validation-2026-10-16-r2.json",
+      "result": "Functional creation/delegation/chat passed, but the original PASS missed a client SessionEnd terminal error. Superseded by the explicit failure recheck below."
+    },
+    {
+      "evidence": "evidence/interactive-natural-generation-recheck-2026-10-16.json",
+      "result": "FAIL_LIFECYCLE_DELIVERY"
+    },
+    {
+      "evidence": "evidence/interactive-exit-diagnostic-validation-2026-10-16.json",
+      "result": "FAIL retained: an instrumented focused reproduction confirms the exit issue even without generation or Task."
+    }
+  ],
+  "limits": [
+    "Skill selection is model behavior, not a guaranteed natural-language router; explicit /relay-droid remains available.",
+    "The builtin /droids hosted menu is unchanged and still has its own authorization.",
+    "Existing-agent invocation in this run was explicitly requested through Factory Task, not a separate unhinted invocation experiment.",
+    "Mission and standalone Agent Readiness were not rerun for this change.",
+    "This does not certify all hidden Factory model entry points or real Claude subscription billing/account behavior."
+  ]
+}

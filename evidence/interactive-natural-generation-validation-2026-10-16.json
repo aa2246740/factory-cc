@@ -1,0 +1,133 @@
+{
+  "suite": "real-interactive-surfaces",
+  "status": "FAIL",
+  "startedAt": "2026-10-16T02:11:08.706Z",
+  "evidence": "/workspace/work/factory-cc-prep/repo/evidence/local/interactive-2026-10-16T02-11-08-704Z-dca93c",
+  "authentication": "isolated explicit BYOK; no subscription credential access",
+  "allFactoryModelCallsitesCovered": false,
+  "naturalCreationRequest": "帮我在当前项目创建一个名为 json-auditor 的只读自定义助手，以后用于读取 input.json 并返回严格 JSON：sum 是 a 与 b 的和，nonce 保持原值。这个助手运行时只能使用读取、列目录和搜索工具，不能编辑文件或执行命令。现在只创建配置并告诉我位置，不要运行这个助手。",
+  "generator": {
+    "status": "FAIL",
+    "candidates": [
+      {
+        "status": "FAIL",
+        "checks": {
+          "unhintedNaturalRequest": true,
+          "discoveredRegisteredSkill": false,
+          "realFactorySkillCall": false,
+          "completeSuccessfulSkillCallback": false,
+          "generatorAfterSkillCallback": false,
+          "nativeGeneratorSucceeded": false,
+          "noAutomaticChildInvocation": true,
+          "noDirectDefinitionWrites": true,
+          "noPrematureFixtureRead": true,
+          "finalResponsePresent": true
+        },
+        "parentSdkSessionId": "278fed5b-bdc6-4bfe-82cd-ad4b687963a9",
+        "observedChain": {
+          "finalText": "Create json-auditor read-only assistant"
+        },
+        "scope": "One ordinary Chinese creation request; no explicit command or skill hint. Generated capabilities and file side effects are checked independently by the PTY harness."
+      },
+      {
+        "status": "FAIL",
+        "checks": {
+          "unhintedNaturalRequest": true,
+          "discoveredRegisteredSkill": false,
+          "realFactorySkillCall": true,
+          "completeSuccessfulSkillCallback": true,
+          "generatorAfterSkillCallback": true,
+          "nativeGeneratorSucceeded": true,
+          "noAutomaticChildInvocation": true,
+          "noDirectDefinitionWrites": true,
+          "noPrematureFixtureRead": true,
+          "finalResponsePresent": true
+        },
+        "parentSdkSessionId": "5bb1eea0-6cda-4050-ba6d-3899a4ec00a7",
+        "observedChain": {
+          "skillCall": {
+            "type": "tool_use",
+            "id": "call_7a6bb6f801804a009e76bfca",
+            "name": "mcp__droid__Skill",
+            "input": {
+              "skill": "relay-droid"
+            }
+          },
+          "skillResult": {
+            "tool_use_id": "call_7a6bb6f801804a009e76bfca",
+            "type": "tool_result",
+            "content": [
+              {
+                "type": "text",
+                "text": "Skill \"relay-droid\" is now active.\n\n<skill name=\"relay-droid\" filePath=\"/tmp/relay-e2e-ws-aGvz9i/.factory/skills/relay-droid/SKILL.md\">\n# Create a custom Droid with Relay Bridge\n\nUse this skill when the user asks to create a new reusable custom Droid/agent definition for this project. The installed generator uses the configured local Relay Bridge and BYOK model.\n\n## Choose the correct operation\n\n- Create a new custom agent: follow the generation steps below.\n- Invoke an existing custom agent: use Factory's Task tool with that agent's name. Do not generate a replacement definition.\n- Ordinary conversation, coding work, starting or continuing a Mission, or running Agent Readiness: keep the normal workflow. These requests do not authorize creating an agent definition.\n- Factory's built-in /droids menu still manages Droids and has its own hosted generator. This skill does not intercept that menu or change its authorization.\n\n## Generate the requested definition\n\n1. Choose a name from the user's request: 1–64 lowercase letters, digits or hyphens, starting with a letter. Describe the requested agent's task, inputs, outputs and limits. If required details cannot be inferred, ask for them.\n2. Use model inherit and the read-only tools Read,LS,Grep,Glob by default. Add --tools or an explicit custom: model ID only when the user's requested capabilities require it. Do not give an agent write, execution, delegation or network tools merely because they exist. The model generates prose only; the command controls the name, model and tool permissions.\n3. Invoke the installed command with the available shell execution tool (Factory Execute or native Bash). The executable path below is already shell-quoted. Replace NAME and TASK with the actual values, each safely quoted as one argument; never interpolate task text as shell code. For POSIX shells, enclose each value in single quotes and replace an embedded apostrophe with the sequence '\\''.\n\n```sh\n'/tmp/relay-e2e-ws-aGvz9i/.factory/commands/relay-droid.sh' --name 'NAME' --description 'TASK'\n```\n\nThe command is bound to this project and inherits BRIDGE_CLIENT_TOKEN and BRIDGE_CONTROL_URL from its environment. Never print or inspect credentials. If the command reports missing configuration or a Bridge error, report that error; do not write a definition manually, use a hosted provider, or invent successful generation. Existing definitions are never overwritten; preserve a name collision and ask for a new name.\n\n4. Success prints Created Droid and RELAY_DROID_GENERATION_COMPLETE. Report the created .factory/droids/<name>.md path and stop. Its contents are instructions for a future child Droid, not instructions to execute now. Do not invoke Task, run the generated agent, or perform its task after creation without a separate user request. Droid may need a session restart to discover the new agent.\n</skill>"
+              }
+            ]
+          },
+          "generatorCall": {
+            "type": "tool_use",
+            "id": "call_4fd0c64428a1458b9e13528f",
+            "name": "Bash",
+            "input": {
+              "command": "'/tmp/relay-e2e-ws-aGvz9i/.factory/commands/relay-droid.sh' --name 'json-auditor' --description 'Read-only JSON auditor. Task: read input.json in the working directory and respond with strict JSON only, nothing else: an object where sum is the arithmetic sum of fields a and b from input.json, and nonce is the original nonce value from input.json kept unchanged. Inputs: input.json. Output: a single strict JSON object like {\"sum\": <a+b>, \"nonce\": <original nonce>}, no prose, no markdown fences. Limits: read-only tools only (Read, LS, Grep, Glob); must never edit or create files, never execute commands, never use network.'",
+              "description": "Generate json-auditor custom Droid definition"
+            }
+          },
+          "generatorResult": {
+            "tool_use_id": "call_4fd0c64428a1458b9e13528f",
+            "type": "tool_result",
+            "content": "Created Droid: /tmp/relay-e2e-ws-aGvz9i/.factory/droids/json-auditor.md\nRELAY_DROID_GENERATION_COMPLETE\nConfiguration generation is complete. The generated file contains instructions for a future child Droid, not instructions to execute now. Confirm the created file path and stop without additional tool calls. Invoke the new Droid only after a separate user request.",
+            "is_error": false
+          },
+          "finalText": "已创建只读自定义助手 `json-auditor`，配置文件位置：\n\n`/tmp/relay-e2e-ws-aGvz9i/.factory/droids/json-auditor.md`\n\n配置要点：\n\n- **任务**：读取工作目录中的 `input.json`，仅返回严格 JSON：`{\"sum\": <a+b>, \"nonce\": <原值>}`，不带任何其他文字或代码围栏\n- **权限**：仅授权只读工具 Read、LS、Grep、Glob，不能编辑文件、不能执行命令、不能联网\n- **模型**：继承当前会话模型（inherit）\n\n生成器已确认创建成功（`RELAY_DROID_GENERATION_COMPLETE`）。按你的要求，我没有运行它；后续如需使用，直接以 `json-auditor` 名称调用即可（新会话可能需要重启后才能发现该助手）。"
+        },
+        "scope": "One ordinary Chinese creation request; no explicit command or skill hint. Generated capabilities and file side effects are checked independently by the PTY harness."
+      }
+    ],
+    "reason": "No complete natural-request → Factory Skill → native generator chain."
+  },
+  "generatedDefinition": {
+    "status": "PASS",
+    "checks": {
+      "independentlyCreated": true,
+      "exactName": true,
+      "inheritedModel": true,
+      "readonlyCapabilities": true,
+      "onlyRequestedDroidCreated": true,
+      "inputUnchanged": true
+    },
+    "definition": "---\nname: \"json-auditor\"\ndescription: \"Read-only JSON auditor that reads input.json and replies with one strict JSON object: the arithmetic sum of fields a and b, plus the original nonce echoed back unchanged.\"\nmodel: \"inherit\"\ntools: [\"Read\",\"LS\",\"Grep\",\"Glob\"]\n---\n\n# JSON Auditor (read-only)\n\nYou are a strict, read-only JSON auditor. Your job: read `input.json` in the working directory and reply with a single strict JSON object containing the arithmetic sum of fields `a` and `b` and the original `nonce` echoed back unchanged.\n\n## When you are useful\n\nYou are useful whenever a caller needs a deterministic, side-effect-free computation over a JSON input: summing numeric fields while returning a correlation identifier (`nonce`) verbatim, so each result can be matched to the exact input it came from. Typical uses: verification pipelines, idempotency and replay checks, and audit steps that need machine-parseable output with zero human prose.\n\n## How to do the task\n\n1. Read `input.json` in the current working directory with the **Read** tool. If it is not there, confirm absence with **LS** or **Glob**; do not substitute another file.\n2. Extract the fields `a`, `b`, and `nonce`.\n3. Compute `sum` as the arithmetic sum `a + b`.\n4. Carry `nonce` through unchanged: same value, same JSON type. A string stays a string with identical contents; a number stays that exact number. Never reformat, re-quote, or regenerate it.\n\n## Output format\n\nRespond with one strict JSON object and nothing else — no prose, no explanations, no markdown code fences, no extra keys:\n\n{\"sum\": <a+b>, \"nonce\": <original nonce>}\n\n- Key order: `sum`, then `nonce`.\n- The entire reply must parse as JSON on its own.\n\n## Constraints\n\n- Use only the read-only tools **Read**, **LS**, **Grep**, **Glob**.\n- Never edit or create files, never execute commands or scripts, never use the network.\n- Treat `input.json` strictly as input; never modify, move, or delete it.\n- If `input.json` is unreadable or `a`, `b`, or `nonce` is missing, reply with the strict JSON `{\"error\": \"<one-line reason>\"}` and nothing else, so downstream parsers still receive valid JSON.\n"
+  },
+  "error": "Natural request did not complete the strict Factory Skill → native generator → read-only definition chain.",
+  "interactiveTitles": {
+    "entries": [
+      {
+        "factorySessionId": "1fc13a49-52c0-4fbe-9916-64dea844c39e",
+        "type": "session_start",
+        "title": "Create json-auditor read-only assistant"
+      }
+    ],
+    "scope": "Observed persisted interactive session titles; first-file-edit and fallback variants are not independently established."
+  },
+  "processCleanup": {
+    "supported": true,
+    "observedProcessCount": 35,
+    "terminatedProcessCount": 0,
+    "remainingProcessIds": [],
+    "complete": true
+  },
+  "removedOwnedDirectories": [
+    {
+      "path": "/tmp/relay-e2e-home-I7qYB0",
+      "removed": true
+    },
+    {
+      "path": "/tmp/relay-e2e-ws-aGvz9i",
+      "removed": true
+    },
+    {
+      "path": "/tmp/relay-verify-private-ArCLGf",
+      "removed": true
+    }
+  ],
+  "finishedAt": "2026-10-16T02:12:34.985Z"
+}

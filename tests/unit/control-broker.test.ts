@@ -65,6 +65,65 @@ describe("live permission requests", () => {
 });
 
 describe("authentic Factory lifecycle", () => {
+  it("ends only the exact unique wrapper session when the UI client has no agent binding", async () => {
+    const f = fixture(); const { launchId } = f.broker.createLaunch({ cwd: f.dir });
+    const start = await f.broker.hostEvent({ eventId: randomUUID(), event: f.event("SessionStart"), launchId });
+    const id = f.session(); f.broker.bind(start.bindingToken as string, id);
+    const sibling = await f.broker.hostEvent({ eventId: randomUUID(), event: f.event("SessionStart", { session_id: "child" }), launchId });
+    const siblingId = f.session(); f.broker.bind(sibling.bindingToken as string, siblingId);
+    const ended = await f.broker.hostEvent({ eventId: randomUUID(), event: f.event("SessionEnd", { reason: "clear" }), launchId });
+    expect(ended).toMatchObject({ ok: true, ended: true });
+    expect(f.runtime.endHostSession).toHaveBeenCalledExactlyOnceWith(id, "Factory SessionEnd: clear");
+    expect(f.broker.describe()).toMatchObject({ activeHostSessions: 1, boundNativeSessions: 1 });
+    expect(await f.send("SessionEnd", start.bindingToken as string)).toMatchObject({ alreadyEnded: true });
+    expect(f.runtime.endHostSession).toHaveBeenCalledTimes(1);
+  });
+
+  it("never substitutes launch authority for another event, a present invalid binding or another workspace/session", async () => {
+    const f = fixture(); const { launchId } = f.broker.createLaunch({ cwd: f.dir });
+    const otherLaunch = f.broker.createLaunch({ cwd: f.dir }).launchId;
+    const start = await f.broker.hostEvent({ eventId: randomUUID(), event: f.event("SessionStart"), launchId });
+    const id = f.session(); f.broker.bind(start.bindingToken as string, id);
+    for (const bindingToken of ["", "wrong-generation", null]) {
+      await expect(f.broker.hostEvent({ eventId: randomUUID(), event: f.event("SessionEnd"), launchId, bindingToken })).rejects.toMatchObject({ code: "stale_host_event" });
+    }
+    for (const hook of ["UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop", "SubagentStop", "Notification"]) {
+      await expect(f.broker.hostEvent({ eventId: randomUUID(), event: f.event(hook), launchId })).rejects.toMatchObject({ code: "stale_host_event" });
+    }
+    await expect(f.send("SessionEnd")).rejects.toMatchObject({ code: "stale_host_event" });
+    await expect(f.broker.hostEvent({ eventId: randomUUID(), event: f.event("SessionEnd"), launchId: "unknown-launch" })).rejects.toMatchObject({ code: "invalid_host_launch" });
+    await expect(f.broker.hostEvent({ eventId: randomUUID(), event: f.event("SessionEnd"), launchId: otherLaunch })).rejects.toMatchObject({ code: "host_not_registered" });
+    await expect(f.broker.hostEvent({ eventId: randomUUID(), event: f.event("SessionEnd", { session_id: "another-session" }), launchId })).rejects.toMatchObject({ code: "host_not_registered" });
+    await expect(f.broker.hostEvent({ eventId: randomUUID(), event: f.event("SessionEnd", { cwd: `${f.dir}-different` }), launchId })).rejects.toMatchObject({ code: "invalid_host_launch" });
+    expect(f.runtime.endHostSession).not.toHaveBeenCalled();
+    expect(f.broker.describe()).toMatchObject({ activeHostSessions: 1 });
+  });
+
+  it("rejects missing-binding closure after a Factory session ID is reused within one launch", async () => {
+    const f = fixture(); const { launchId } = f.broker.createLaunch({ cwd: f.dir });
+    const first = await f.broker.hostEvent({ eventId: randomUUID(), event: f.event("SessionStart"), launchId });
+    await f.send("SessionEnd", first.bindingToken as string);
+    const second = await f.broker.hostEvent({ eventId: randomUUID(), event: f.event("SessionStart"), launchId });
+    const id = f.session(); f.broker.bind(second.bindingToken as string, id);
+    await expect(f.broker.hostEvent({ eventId: randomUUID(), event: f.event("SessionEnd"), launchId })).rejects.toMatchObject({ code: "ambiguous_host_generation" });
+    expect(f.runtime.endHostSession).not.toHaveBeenCalled();
+    expect(f.broker.describe()).toMatchObject({ activeHostSessions: 1 });
+    await f.send("SessionEnd", second.bindingToken as string);
+    expect(f.runtime.endHostSession).toHaveBeenCalledExactlyOnceWith(id, expect.any(String));
+  });
+
+  it("acknowledges an ended old launch without ending the same session ID in a newer launch", async () => {
+    const f = fixture(); const oldLaunch = f.broker.createLaunch({ cwd: f.dir }).launchId;
+    await f.broker.hostEvent({ eventId: randomUUID(), event: f.event("SessionStart"), launchId: oldLaunch });
+    await f.broker.endLaunch(oldLaunch, false);
+    const newLaunch = f.broker.createLaunch({ cwd: f.dir }).launchId;
+    const current = await f.broker.hostEvent({ eventId: randomUUID(), event: f.event("SessionStart"), launchId: newLaunch });
+    const id = f.session(); f.broker.bind(current.bindingToken as string, id);
+    expect(await f.broker.hostEvent({ eventId: randomUUID(), event: f.event("SessionEnd"), launchId: oldLaunch })).toMatchObject({ alreadyEnded: true });
+    expect(f.runtime.endHostSession).not.toHaveBeenCalled();
+    expect(f.broker.describe()).toMatchObject({ activeHostSessions: 1, boundNativeSessions: 1 });
+  });
+
   it("renews ownership on authenticated user turns after Factory discarded its original start context", async () => {
     const f = fixture(); const start = await f.send("SessionStart");
     const token = start.bindingToken as string;

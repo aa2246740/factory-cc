@@ -1,0 +1,835 @@
+{
+  "suite": "real-interactive-surfaces",
+  "status": "PASS_NATURAL_GENERATION_ONLY",
+  "startedAt": "2026-10-16T02:26:01.820Z",
+  "evidence": "/workspace/work/factory-cc-prep/repo/evidence/local/interactive-2026-10-16T02-26-01-819Z-7e0581",
+  "authentication": "isolated explicit BYOK; no subscription credential access",
+  "allFactoryModelCallsitesCovered": false,
+  "sourceHashesAtStart": {
+    "scripts/e2e-lib.ts": "b9ada2fa7cde87fe4e12350ddd3797d480c5d8bc4bbbaab4d7b7efd60f622362",
+    "scripts/factory-hook.ts": "ac1a6e666989d15a8a60852e6df316168d5f9c3b9b2807a64ec1a1a8c9fd1336",
+    "scripts/generate-droid.ts": "ffb141601f5220819bd39ab158322cb2b9460fdf981d3e1f2e39b0b021c4c5d1",
+    "scripts/interactive-proof.ts": "53937e697bd080a41965702df0d96429b6132f991f3baa6129389131cbc412ef",
+    "scripts/run-droid.ts": "2c4ad9c98f22753504606b27ec3e84d12e7fbc711cb3ef5420df36cb32d94179",
+    "scripts/verify-interactive.py": "fd15dc49e2ee976f1910a2e63b6976049a7d3b5ff0ee427fe1106cf3901a012f",
+    "scripts/verify-interactive.ts": "187a12f4964afdb11b37f4929c4281484f492c8f9391e3dbf7a0294f24a03acd",
+    "src/config.ts": "2cb252ffd010751c28cb26560a3c6ed06177cc8a89d3eb10f54f2546aa155ac7",
+    "src/control/broker.ts": "6ffdcb56a44408efdd136b0351ac32e3e7cba627fb9ae2fc5e28f0a8f639296c",
+    "src/control/factory-hooks.ts": "0581a23488cf28615a8a124993784ff90914023ed0fd9b14f11b99d832a4f903",
+    "src/http/app.ts": "ddaa45796f4c1a34f828649f29010e86bb90cd8889c97d4356cee1ac2017a1af",
+    "src/http/control-page.ts": "39d6a87e3ee020fbee919047cafce62d7a3a740230a0fef8f240d27cc2e92a66",
+    "src/http/sse-stream.ts": "7d167d6540c28b3ff705ee10e4b3e4f9a09be4389958e7f7470552aa534a02b0",
+    "src/http/sse.ts": "736b7e28d209d0ab6735b888bf2f1df02cea0cf5f4a5dd0c5e176c20947f9bfd",
+    "src/http/status-page.ts": "923b463d01293252c85b1eb7ba1dc4120f18e34e2dc7d6ef6f911f0ba0eabb46",
+    "src/index.ts": "3f0d52fbf96a7cdee18ef0fe432aa2b0f9c9be6eee9943b2d692c4b993f4e718",
+    "src/logging.ts": "e2c92fbb29d0d895b92717de6cdde44ece0ed6277dcdaa417d804c7ccb2675e8",
+    "src/protocol/content.ts": "199656bed9ab99cc2180c8a69d5ba671287d0ddcdd9e91af44dd1fa09789b147",
+    "src/protocol/messages.ts": "1ad1e1feb631169277645f395d4e3d6f324e8dab7dc7832f3573353ea79b249b",
+    "src/protocol/schema-to-zod.ts": "7471c2a10432486026ccf2ca6587d0812d4252bd3df8af9eb733a54ebb37b8e8",
+    "src/protocol/tool-names.ts": "f4a5f0b14fa922dbfafef4158bce9444ae228d34b55e775568639c10d269904f",
+    "src/protocol/validate.ts": "dc6eb620522fd65e3e5aefc1398dcf273932af712561cf584d0220afeaa64dc9",
+    "src/relay/ids.ts": "2711da6afa47ea7e26d947d57517a251cd1d6a138b5045125d0edf06da48762e",
+    "src/relay/mailbox.ts": "a52a9d7bef0e00c73b0a6e55c8fc699dfc88899fb893fc799564ce7830e238e7",
+    "src/runtime/droid-mcp-catalog.ts": "bd6494fbebcda021b5afc0f03ce446641e40e227048fdea848053897d284db76",
+    "src/runtime/droid-tools.ts": "09781bc4bdf76761707afc9d6dab3e98d9629f6f4341ff10eb071cead8be0ea5",
+    "src/runtime/factory-capabilities.ts": "12d89a54eee639286fc36ffc8a51d2553e06a28b1d586bfbda13436b96312f32",
+    "src/runtime/factory.ts": "731ff989b00903445819acf61d8108bc80c43bd3c422393ad75eeed32f81d3f8",
+    "src/runtime/fake-runtime.ts": "da08586a2c97dac39a5e78c768910ade495de89fb409ba96a1ba8027ae1c2690",
+    "src/runtime/mission-tools.ts": "a1bc9b27954f79fb280e131e98779a3c28698ff9785d9e5ab35367b2472af623",
+    "src/runtime/mock-runtime.ts": "8299dc619ea7b9ec359d78c3a3035f8f6fcaad4bd48ba3893d756a5e855d3674",
+    "src/runtime/native-tool-policy.ts": "f78bdab44ae412897ee5bc1a9de0abac6facfd4e3deaca214ac80765c1d2fe5c",
+    "src/runtime/safe-tools.ts": "82a4122b1d98ede94337f8aa2393c37ab2db15844d5d62c100dd0ddf443e371b",
+    "src/runtime/sdk-runtime.ts": "c7cd71b704c15d3b6316cd1aa4168cb6abc310afbe22a4702773dbd79d8554ac",
+    "src/runtime/system-prompt.ts": "d30bbd9fc565361a1f6219c1f5195c3556b2d1da1536be58217ac2d2eacc67f8",
+    "src/runtime/types.ts": "f98038399c968f5a4add1fd2aa6db321f111e13c0ec7a0bf0f1de192bcdb1e07",
+    "src/runtime/usage.ts": "81b25a74b7a37c03f3b42a256099f1f64a35b9ccbef7d912359a771c0228f777",
+    "src/security/auth.ts": "28b3d0a62769f1501bb67d84dd9f252ee9d603929b28ee4de7da45e0bb363cd3",
+    "src/security/limits.ts": "f1c5a8b653a826ec257e691b4f48ecb34e75f6dbc232d4418945c7058621986e",
+    "src/security/redact.ts": "65514578ea87343e0891351966ceaae1e5deedac44d5d53679cf795214b3527f",
+    "src/sessions/correlate.ts": "411df2d6fbbbbbe1fb49188b93ce72419c33f8e042fb97e4a5052ab7dfd22997",
+    "src/sessions/state.ts": "e4c75bcdeb2a6fdd1fe183c7ee8641226b8fd574afbdcc931302e2556159f1bf",
+    "src/sessions/store.ts": "4599fca2fa1369aa76b66cd439501570031dd967095509cb32c973a899176505",
+    "src/types.ts": "f98912af94b152bbeacd2ce69560855c7769f049c024115ef1199d9ba0b0e82a",
+    "src/upstream/providers.ts": "df130d84d5875909736498a4bb2d6de53c5dff640696fad7ca904dc463b80387",
+    "src/workspace.ts": "3f475d5a0ef32c690d3f335e1d4e307d7e95447fc5d8a3c1ddd958944bee1180"
+  },
+  "naturalCreationRequest": "帮我在当前项目创建一个名为 json-auditor 的只读自定义助手，以后用于读取 input.json 并返回严格 JSON：sum 是 a 与 b 的和，nonce 保持原值。这个助手运行时只能使用读取、列目录和搜索工具，不能编辑文件或执行命令。现在只创建配置并告诉我位置，不要运行这个助手。",
+  "generator": {
+    "status": "PASS",
+    "checks": {
+      "unhintedNaturalRequest": true,
+      "discoveredRegisteredSkill": true,
+      "realFactorySkillCall": true,
+      "completeSuccessfulSkillCallback": true,
+      "generatorAfterSkillCallback": true,
+      "nativeGeneratorSucceeded": true,
+      "noAutomaticChildInvocation": true,
+      "noDirectDefinitionWrites": true,
+      "noPrematureFixtureRead": true,
+      "finalResponsePresent": true
+    },
+    "parentSdkSessionId": "bff522fe-f608-4323-aca6-5f4be5207ed8",
+    "observedChain": {
+      "advertisedSkill": "relay-droid: Create or generate a new reusable custom Factory Droid, agent or subagent using the local BYOK generator. 新建、创建或生成自定义 Droid、Agent、子代理。Only for explicit requests to create agent definitions; not norma…",
+      "skillCall": {
+        "type": "tool_use",
+        "id": "call_0b9a9ef8fdb347b2b58e337f",
+        "name": "mcp__droid__Skill",
+        "input": {
+          "skill": "relay-droid"
+        }
+      },
+      "skillResult": {
+        "tool_use_id": "call_0b9a9ef8fdb347b2b58e337f",
+        "type": "tool_result",
+        "content": [
+          {
+            "type": "text",
+            "text": "Skill \"relay-droid\" is now active.\n\n<skill name=\"relay-droid\" filePath=\"/tmp/relay-e2e-ws-aO8gEK/.factory/skills/relay-droid/SKILL.md\">\n# Create a custom Droid with Relay Bridge\n\nUse this skill when the user asks to create a new reusable custom Droid/agent definition for this project. The installed generator uses the configured local Relay Bridge and BYOK model.\n\n## Choose the correct operation\n\n- Create a new custom agent: follow the generation steps below.\n- Invoke an existing custom agent: use Factory's Task tool with that agent's name. Do not generate a replacement definition.\n- Ordinary conversation, coding work, starting or continuing a Mission, or running Agent Readiness: keep the normal workflow. These requests do not authorize creating an agent definition.\n- Factory's built-in /droids menu still manages Droids and has its own hosted generator. This skill does not intercept that menu or change its authorization.\n\n## Generate the requested definition\n\n1. Choose a name from the user's request: 1–64 lowercase letters, digits or hyphens, starting with a letter. Describe the requested agent's task, inputs, outputs and limits. If required details cannot be inferred, ask for them.\n2. Use model inherit and the read-only tools Read,LS,Grep,Glob by default. Add --tools or an explicit custom: model ID only when the user's requested capabilities require it. Do not give an agent write, execution, delegation or network tools merely because they exist. The model generates prose only; the command controls the name, model and tool permissions.\n3. Invoke the installed command with the available shell execution tool (Factory Execute or native Bash). The executable path below is already shell-quoted. Replace NAME and TASK with the actual values, each safely quoted as one argument; never interpolate task text as shell code. For POSIX shells, enclose each value in single quotes and replace an embedded apostrophe with the sequence '\\''.\n\n```sh\n'/tmp/relay-e2e-ws-aO8gEK/.factory/commands/relay-droid.sh' --name 'NAME' --description 'TASK'\n```\n\nThe command is bound to this project and inherits BRIDGE_CLIENT_TOKEN and BRIDGE_CONTROL_URL from its environment. Never print or inspect credentials. If the command reports missing configuration or a Bridge error, report that error; do not write a definition manually, use a hosted provider, or invent successful generation. Existing definitions are never overwritten; preserve a name collision and ask for a new name.\n\n4. Success prints Created Droid and RELAY_DROID_GENERATION_COMPLETE. Report the created .factory/droids/<name>.md path and stop. Its contents are instructions for a future child Droid, not instructions to execute now. Do not invoke Task, run the generated agent, or perform its task after creation without a separate user request. Droid may need a session restart to discover the new agent.\n</skill>"
+          }
+        ]
+      },
+      "generatorCall": {
+        "type": "tool_use",
+        "id": "call_0b83a502916e470d90b74d34",
+        "name": "Bash",
+        "input": {
+          "command": "'/tmp/relay-e2e-ws-aO8gEK/.factory/commands/relay-droid.sh' --name 'json-auditor' --description 'Read-only JSON auditor. Task: read the file input.json in the current project and reply with strictly valid JSON only, no prose and no code fences. Output: a single JSON object with two fields: sum, the arithmetic sum of the a and b fields from input.json, and nonce, the original nonce value from input.json passed through unchanged. Inputs: the path to input.json in the working directory. Limits: strictly read-only; may use only the Read, LS, Grep and Glob tools; must not edit files, must not execute commands, must not delegate and must not access the network.'",
+          "description": "Generate json-auditor read-only Droid definition"
+        }
+      },
+      "generatorResult": {
+        "tool_use_id": "call_0b83a502916e470d90b74d34",
+        "type": "tool_result",
+        "content": "Created Droid: /tmp/relay-e2e-ws-aO8gEK/.factory/droids/json-auditor.md\nRELAY_DROID_GENERATION_COMPLETE\nConfiguration generation is complete. The generated file contains instructions for a future child Droid, not instructions to execute now. Confirm the created file path and stop without additional tool calls. Invoke the new Droid only after a separate user request.",
+        "is_error": false
+      },
+      "finalText": "已创建完成，配置文件位于：\n\n`/tmp/relay-e2e-ws-aO8gEK/.factory/droids/json-auditor.md`\n\n该助手定义为：\n- **名称**：`json-auditor`\n- **任务**：读取当前项目的 `input.json`，仅返回严格 JSON（无文字说明、无代码围栏），其中 `sum` 为 `a` 与 `b` 的和，`nonce` 保持原值不变\n- **权限**：只读，仅可使用 Read、LS、Grep、Glob 工具，不能编辑文件、执行命令、委派或访问网络\n- **模型**：继承当前会话模型\n\n按要求未运行该助手。注意：新 Droid 可能需要会话重启后才能被发现；今后需要运行时请单独提出。"
+    },
+    "scope": "One ordinary Chinese creation request; no explicit command or skill hint. Generated capabilities and file side effects are checked independently by the PTY harness."
+  },
+  "generationRequestProof": {
+    "status": "PASS",
+    "checks": {
+      "exactlyOneNewAuthenticatedGeneratorRequest": true,
+      "exactlyOneRecordedBody": true,
+      "modelMatches": true,
+      "toolsDisabled": true,
+      "expectedName": true,
+      "readonlyRequestedTools": true
+    },
+    "source": "isolated Bridge requests.jsonl plus authenticated request index",
+    "before": 0,
+    "after": 1,
+    "request": {
+      "model": "relay-droid-generator",
+      "tools": [],
+      "tool_choice": {
+        "type": "none"
+      },
+      "definition": {
+        "name": "json-auditor",
+        "task": "Read-only JSON auditor. Task: read the file input.json in the current project and reply with strictly valid JSON only, no prose and no code fences. Output: a single JSON object with two fields: sum, the arithmetic sum of the a and b fields from input.json, and nonce, the original nonce value from input.json passed through unchanged. Inputs: the path to input.json in the working directory. Limits: strictly read-only; may use only the Read, LS, Grep and Glob tools; must not edit files, must not execute commands, must not delegate and must not access the network.",
+        "tools": [
+          "Read",
+          "LS",
+          "Grep",
+          "Glob"
+        ]
+      }
+    }
+  },
+  "generatedDefinition": {
+    "status": "PASS",
+    "checks": {
+      "independentlyCreated": true,
+      "exactName": true,
+      "inheritedModel": true,
+      "readonlyCapabilities": true,
+      "onlyRequestedDroidCreated": true,
+      "authenticatedGeneratorRequest": true,
+      "inputUnchanged": true
+    },
+    "definition": "---\nname: \"json-auditor\"\ndescription: \"Read-only JSON auditor that reads input.json in the working directory and replies with strict JSON only — the arithmetic sum of its a and b fields plus the unchanged nonce — useful for safe, side-effect-free extraction and verification over JSON inputs in pipelines.\"\nmodel: \"inherit\"\ntools: [\"Read\",\"LS\",\"Grep\",\"Glob\"]\n---\n\n# JSON Auditor (Read-Only)\n\nYou are a read-only JSON auditor. You inspect a JSON input file and return a computed result as strictly valid JSON, nothing else. You are useful whenever a workflow needs a trustworthy, side-effect-free pass over JSON data — computing derived values, echoing identifiers, or verifying file shape — with zero risk of mutating files or executing anything.\n\n## Task\n\n1. Locate `input.json` in the current working directory. If the path is uncertain, confirm it with Glob or LS.\n2. Read the file with the Read tool.\n3. Parse the JSON and extract the numeric fields `a` and `b`, and the `nonce` value.\n4. Compute `sum` as the exact arithmetic sum of `a` and `b`.\n5. Pass `nonce` through unchanged: same value, same type, no reformatting or re-encoding.\n\n## Output format\n\nReply with a single JSON object and nothing else — no prose, no explanations, no code fences, no trailing text:\n\n{\"sum\": <a + b>, \"nonce\": <original nonce>}\n\n## Rules\n\n- Strictly read-only: never create, modify, move, or delete any file.\n- Use only the Read, LS, Grep, and Glob tools. Do not edit files, execute commands or scripts, delegate or spawn subagents, or access the network.\n- If `input.json` is missing, unreadable, or not valid JSON, or lacks `a`, `b`, or `nonce`, reply with `{\"error\": \"...\"}` containing a one-sentence description of the problem — still strict JSON only.\n- Never embellish, summarize, or add fields beyond those specified.\n"
+  },
+  "generatedDroidExecution": {
+    "status": "PASS",
+    "checks": {
+      "parentFactoryTask": true,
+      "awaited": true,
+      "taskResultSucceeded": true,
+      "factoryChildSessionIdPresent": true,
+      "distinctNativeChild": true,
+      "childTaskPromptMatches": true,
+      "nonceAbsentFromChildPrompt": true,
+      "childReadSucceeded": true,
+      "childFinalJsonCorrect": true,
+      "parentFinalJsonCorrect": true,
+      "parentNoNativeFileAccessDuringDelegation": true
+    },
+    "parentSdkSessionId": "bff522fe-f608-4323-aca6-5f4be5207ed8",
+    "childSdkSessionId": "d1985482-e858-4624-841f-c6bac21df450",
+    "factoryChildSessionId": "4754e9c7-7267-474a-8516-b90eea966e77",
+    "taskCallId": "call_94f0b7d0081440118577e66d",
+    "childReadCallId": "call_8e3b3fd1f95b45f19dbf5d05",
+    "expected": {
+      "sum": 56,
+      "nonce": "5e032bd4ed6d588b6cd1a40a"
+    },
+    "observedChain": {
+      "parentTaskCall": {
+        "type": "tool_use",
+        "id": "call_94f0b7d0081440118577e66d",
+        "name": "mcp__droid__Task",
+        "input": {
+          "subagent_type": "json-auditor",
+          "description": "Audit input.json sum and nonce",
+          "await": true,
+          "prompt": "Read the file input.json in the current working directory and return strict JSON only: an object where sum is the arithmetic sum of the fields a and b, and nonce is the original nonce value from input.json unchanged. No prose, no code fences."
+        }
+      },
+      "parentTaskResult": {
+        "tool_use_id": "call_94f0b7d0081440118577e66d",
+        "type": "tool_result",
+        "content": [
+          {
+            "type": "text",
+            "text": "session_id: 4754e9c7-7267-474a-8516-b90eea966e77\nUse this report as the source of record. Continue from it without repeating its searches, reads, or validation. If a concrete gap blocks progress, fill only that gap; resume the child when its retained context is useful, or re-open covered files when you must edit them.\n[Read] Read /tmp/relay-e2e-ws-aO8gEK/input.json\n{\"sum\":56,\"nonce\":\"5e032bd4ed6d588b6cd1a40a\"}"
+          }
+        ]
+      },
+      "childReadCall": {
+        "type": "tool_use",
+        "id": "call_8e3b3fd1f95b45f19dbf5d05",
+        "name": "Read",
+        "input": {
+          "file_path": "/tmp/relay-e2e-ws-aO8gEK/input.json"
+        }
+      },
+      "childReadResult": {
+        "tool_use_id": "call_8e3b3fd1f95b45f19dbf5d05",
+        "type": "tool_result",
+        "content": "1\t{\"a\":19,\"b\":37,\"nonce\":\"5e032bd4ed6d588b6cd1a40a\"}"
+      },
+      "childFinalText": "{\"sum\":56,\"nonce\":\"5e032bd4ed6d588b6cd1a40a\"}",
+      "parentFinalText": "`json-auditor` 已完成任务，它读取了 `input.json` 并返回了严格 JSON。子代理结果：\n\n```json\n{\"sum\":56,\"nonce\":\"5e032bd4ed6d588b6cd1a40a\"}\n```\n\n即 `sum` 为 56，`nonce` 原值为 `5e032bd4ed6d588b6cd1a40a`。该结果完全来自子代理（会话 ID `4754e9c7-7267-474a-8516-b90eea966e77`），我未亲自读取 `input.json`。"
+    },
+    "scope": "Parent did not access files during the delegation turn. Earlier generation-command turns may have read the fixture."
+  },
+  "existingAgentRouting": {
+    "status": "PASS",
+    "generatorRequestsBefore": 1,
+    "generatorRequestsAfter": 1,
+    "definitionUnchanged": true,
+    "noAdditionalDroids": true
+  },
+  "ordinaryChat": {
+    "status": "PASS",
+    "checks": {
+      "finalAnswerCorrect": true,
+      "noToolsInvoked": true,
+      "finalResponsePresent": true
+    },
+    "parentSdkSessionId": "bff522fe-f608-4323-aca6-5f4be5207ed8",
+    "finalText": "巴黎",
+    "toolCalls": [],
+    "prompt": "谢谢。顺便问一个常识问题：法国的首都是哪里？只回答城市中文名。",
+    "definitionUnchanged": true,
+    "generatorRequestsBefore": 1,
+    "generatorRequestsAfter": 1,
+    "noAdditionalDroids": true
+  },
+  "command": {
+    "code": 0,
+    "stdout": "",
+    "stderr": "",
+    "timedOut": false,
+    "signal": null,
+    "processCleanup": {
+      "supported": true,
+      "observedProcessCount": 0,
+      "terminatedProcessCount": 0,
+      "remainingProcessIds": [],
+      "complete": true
+    }
+  },
+  "ptyExit": {
+    "exitStatus": 0,
+    "signalStatus": null
+  },
+  "requests": [
+    {
+      "at": "2026-10-16T02:26:06.266Z",
+      "method": "POST",
+      "path": "/v1/messages",
+      "role": "chat",
+      "authOk": true,
+      "sessionHint": "sess_03684737-642d-48e1-9d3c-ef89284b116f",
+      "model": "relay-chat",
+      "stream": true,
+      "toolNames": [],
+      "messageCount": 1,
+      "notes": [
+        "new-session"
+      ]
+    },
+    {
+      "at": "2026-10-16T02:26:06.440Z",
+      "method": "POST",
+      "path": "/v1/messages",
+      "role": "chat",
+      "authOk": true,
+      "sessionHint": "sess_2fa97d42-68f6-40d1-8e6f-64f146a24203",
+      "model": "relay-chat",
+      "stream": true,
+      "toolNames": [
+        "Read",
+        "LS",
+        "Execute",
+        "Edit",
+        "Grep",
+        "Glob",
+        "Create",
+        "ExitSpecMode",
+        "AskUser",
+        "TodoWrite",
+        "TaskOutput",
+        "TaskStop",
+        "ToolSearch",
+        "Skill",
+        "Task"
+      ],
+      "messageCount": 2,
+      "notes": [
+        "new-session"
+      ]
+    },
+    {
+      "at": "2026-10-16T02:26:12.805Z",
+      "method": "POST",
+      "path": "/v1/messages",
+      "role": "chat",
+      "authOk": true,
+      "sessionHint": "sess_2fa97d42-68f6-40d1-8e6f-64f146a24203",
+      "model": "relay-chat",
+      "stream": true,
+      "toolNames": [
+        "Read",
+        "LS",
+        "Execute",
+        "Edit",
+        "Grep",
+        "Glob",
+        "Create",
+        "ExitSpecMode",
+        "AskUser",
+        "TodoWrite",
+        "TaskOutput",
+        "TaskStop",
+        "ToolSearch",
+        "Skill",
+        "Task"
+      ],
+      "messageCount": 4,
+      "notes": [
+        "tool-use-id"
+      ]
+    },
+    {
+      "at": "2026-10-16T02:26:26.880Z",
+      "method": "POST",
+      "path": "/v1/messages",
+      "role": "unknown",
+      "authOk": true,
+      "sessionHint": "sess_67cb7073-9e4a-4dfe-961f-e6bf41422590",
+      "model": "relay-droid-generator",
+      "stream": false,
+      "toolNames": [],
+      "messageCount": 1,
+      "notes": [
+        "new-session"
+      ]
+    },
+    {
+      "at": "2026-10-16T02:27:11.367Z",
+      "method": "POST",
+      "path": "/v1/messages",
+      "role": "chat",
+      "authOk": true,
+      "sessionHint": "sess_2fa97d42-68f6-40d1-8e6f-64f146a24203",
+      "model": "relay-chat",
+      "stream": true,
+      "toolNames": [
+        "Read",
+        "LS",
+        "Execute",
+        "Edit",
+        "Grep",
+        "Glob",
+        "Create",
+        "ExitSpecMode",
+        "AskUser",
+        "TodoWrite",
+        "TaskOutput",
+        "TaskStop",
+        "ToolSearch",
+        "Skill",
+        "Task"
+      ],
+      "messageCount": 6,
+      "notes": [
+        "history-prefix"
+      ]
+    },
+    {
+      "at": "2026-10-16T02:27:24.096Z",
+      "method": "POST",
+      "path": "/v1/messages",
+      "role": "chat",
+      "authOk": true,
+      "sessionHint": "sess_93298d88-a56e-49a0-b5be-78f812561785",
+      "model": "relay-chat",
+      "stream": true,
+      "toolNames": [
+        "Read",
+        "LS",
+        "Grep",
+        "Glob",
+        "Skill"
+      ],
+      "messageCount": 3,
+      "notes": [
+        "new-session"
+      ]
+    },
+    {
+      "at": "2026-10-16T02:27:39.086Z",
+      "method": "POST",
+      "path": "/v1/messages",
+      "role": "chat",
+      "authOk": true,
+      "sessionHint": "sess_2fa97d42-68f6-40d1-8e6f-64f146a24203",
+      "model": "relay-chat",
+      "stream": true,
+      "toolNames": [
+        "Read",
+        "LS",
+        "Execute",
+        "Edit",
+        "Grep",
+        "Glob",
+        "Create",
+        "ExitSpecMode",
+        "AskUser",
+        "TodoWrite",
+        "TaskOutput",
+        "TaskStop",
+        "ToolSearch",
+        "Skill",
+        "Task"
+      ],
+      "messageCount": 8,
+      "notes": [
+        "tool-use-id"
+      ]
+    },
+    {
+      "at": "2026-10-16T02:27:44.198Z",
+      "method": "POST",
+      "path": "/v1/messages",
+      "role": "chat",
+      "authOk": true,
+      "sessionHint": "sess_2fa97d42-68f6-40d1-8e6f-64f146a24203",
+      "model": "relay-chat",
+      "stream": true,
+      "toolNames": [
+        "Read",
+        "LS",
+        "Execute",
+        "Edit",
+        "Grep",
+        "Glob",
+        "Create",
+        "ExitSpecMode",
+        "AskUser",
+        "TodoWrite",
+        "TaskOutput",
+        "TaskStop",
+        "ToolSearch",
+        "Skill",
+        "Task"
+      ],
+      "messageCount": 10,
+      "notes": [
+        "history-prefix"
+      ]
+    }
+  ],
+  "sessions": [
+    {
+      "bridgeSessionId": "sess_03684737-642d-48e1-9d3c-ef89284b116f",
+      "role": "chat",
+      "state": "IDLE",
+      "model": "relay-chat",
+      "historyHash": "2a03737761ff11d613e79f1c21e10244bb8b809f0fe6c840f73006111551eb7b",
+      "contextHash": "b826e9676e4c4689536e18525fa4bf59a61b9839d5e2375599c03167ea43a436",
+      "requestMessageHashes": [
+        "5d424713f446d7b2fb70fea63adad83de29bb529d26d0e3a66acbbf696f554ed"
+      ],
+      "historyMessageHashes": [
+        "5d424713f446d7b2fb70fea63adad83de29bb529d26d0e3a66acbbf696f554ed",
+        "e46c928b268d14c6ebcfbdcf1303b4c93de0679474085a182e3cec1bb97ef698"
+      ],
+      "toolNames": [],
+      "createdAt": "2026-10-16T02:26:06.265Z",
+      "updatedAt": "2026-10-16T02:26:13.572Z",
+      "pendingToolIds": [],
+      "cancelRequested": false,
+      "notes": [],
+      "usage": {
+        "input_tokens": 4741,
+        "output_tokens": 11,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 14336,
+        "status": "reported",
+        "coverage": "partial",
+        "knownFields": [
+          "input_tokens",
+          "output_tokens",
+          "cache_read_input_tokens"
+        ],
+        "scope": "provider_messages",
+        "estimated": true,
+        "modelRequests": 1
+      },
+      "sdkSessionId": "fe158990-9854-467f-bab3-2538eae72a21"
+    },
+    {
+      "bridgeSessionId": "sess_2fa97d42-68f6-40d1-8e6f-64f146a24203",
+      "role": "chat",
+      "state": "IDLE",
+      "model": "relay-chat",
+      "historyHash": "2b6d2d19fc1d20a16eac53f0c1f913b74c0180ec6b42b4888c9351fb1f581148",
+      "contextHash": "b826e9676e4c4689536e18525fa4bf59a61b9839d5e2375599c03167ea43a436",
+      "requestMessageHashes": [
+        "be73b3f9a6717a91a5d1c5e98852a67dd090ca1171c0ff412fa957d48d9a4aab",
+        "5d424713f446d7b2fb70fea63adad83de29bb529d26d0e3a66acbbf696f554ed",
+        "8228c14ed2bf59692cf6061f7cac732069b073208f91ad72263eb8d4dce0a76a",
+        "13b725cc80d1dce5410b575857def60a35423cea8df707a3cfdcd78ab05c6704",
+        "00267206797c025aa3f21c6c612389745c6b4744cdf5fa6f5ba1c70b27d69434",
+        "3b662c889521b718f70c26eae85267dc54d534791b0b014924b862a2e675225b",
+        "c3e2df079d2dd15c9e7bed78cd02a09ff3ee722a669062b991b1adb1a9e025d3",
+        "768b577c482a5ac93ca75fb98ba39375f27d33903875347f0cdc88eb1296fad7",
+        "2601756a4e12eace5de1e17c80bb89446ace07373bbde5245a174f4a064b9b50",
+        "124dfb1bf721f7666ba1f38f68582a1bad893624dc226b95ee4bc7d661ec4ff7"
+      ],
+      "historyMessageHashes": [
+        "be73b3f9a6717a91a5d1c5e98852a67dd090ca1171c0ff412fa957d48d9a4aab",
+        "5d424713f446d7b2fb70fea63adad83de29bb529d26d0e3a66acbbf696f554ed",
+        "8228c14ed2bf59692cf6061f7cac732069b073208f91ad72263eb8d4dce0a76a",
+        "13b725cc80d1dce5410b575857def60a35423cea8df707a3cfdcd78ab05c6704",
+        "00267206797c025aa3f21c6c612389745c6b4744cdf5fa6f5ba1c70b27d69434",
+        "3b662c889521b718f70c26eae85267dc54d534791b0b014924b862a2e675225b",
+        "c3e2df079d2dd15c9e7bed78cd02a09ff3ee722a669062b991b1adb1a9e025d3",
+        "768b577c482a5ac93ca75fb98ba39375f27d33903875347f0cdc88eb1296fad7",
+        "2601756a4e12eace5de1e17c80bb89446ace07373bbde5245a174f4a064b9b50",
+        "124dfb1bf721f7666ba1f38f68582a1bad893624dc226b95ee4bc7d661ec4ff7",
+        "7b410203d6843566579dce1f6607f8773725c14a1d5692adfc7fbed097cf32a6"
+      ],
+      "toolNames": [
+        "Read",
+        "LS",
+        "Execute",
+        "Edit",
+        "Grep",
+        "Glob",
+        "Create",
+        "ExitSpecMode",
+        "AskUser",
+        "TodoWrite",
+        "TaskOutput",
+        "TaskStop",
+        "ToolSearch",
+        "Skill",
+        "Task"
+      ],
+      "createdAt": "2026-10-16T02:26:06.439Z",
+      "updatedAt": "2026-10-16T02:28:03.679Z",
+      "pendingToolIds": [],
+      "cancelRequested": false,
+      "notes": [
+        "factory-session-ended"
+      ],
+      "usage": {
+        "input_tokens": 247,
+        "output_tokens": 3,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 27008,
+        "status": "reported",
+        "coverage": "partial",
+        "knownFields": [
+          "input_tokens",
+          "output_tokens",
+          "cache_read_input_tokens"
+        ],
+        "scope": "provider_messages",
+        "estimated": true,
+        "modelRequests": 1
+      },
+      "factorySessionId": "dbb4d0d6-ed24-4c52-9c9c-881a3e77d8fe",
+      "factoryCwd": "/tmp/relay-e2e-ws-aO8gEK",
+      "hostEnded": "resumable",
+      "sdkSessionId": "bff522fe-f608-4323-aca6-5f4be5207ed8"
+    },
+    {
+      "bridgeSessionId": "sess_67cb7073-9e4a-4dfe-961f-e6bf41422590",
+      "role": "unknown",
+      "state": "IDLE",
+      "model": "relay-droid-generator",
+      "historyHash": "9078ad2c2560841135291672e5e47a8faf79dc940ede2f9ac6301dc096512b03",
+      "contextHash": "037d1ecc3cf7a209bf60f1138583405f57a47d7139538d9e168222d31ad48532",
+      "requestMessageHashes": [
+        "69903d6e48e0b37ca33c84ddcda44be0cf51cf021d8d797221bbcee106aa55d2"
+      ],
+      "historyMessageHashes": [
+        "69903d6e48e0b37ca33c84ddcda44be0cf51cf021d8d797221bbcee106aa55d2",
+        "74f8e7c7f887cbadeb0f14ec8474e05c3d5f48bbbc9f169ac2767176e6b24f82"
+      ],
+      "toolNames": [],
+      "createdAt": "2026-10-16T02:26:26.880Z",
+      "updatedAt": "2026-10-16T02:27:04.303Z",
+      "pendingToolIds": [],
+      "cancelRequested": false,
+      "notes": [],
+      "usage": {
+        "input_tokens": 11377,
+        "output_tokens": 2530,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 7552,
+        "status": "reported",
+        "coverage": "partial",
+        "knownFields": [
+          "input_tokens",
+          "output_tokens",
+          "cache_read_input_tokens"
+        ],
+        "scope": "provider_messages",
+        "estimated": true,
+        "modelRequests": 1
+      },
+      "sdkSessionId": "f35a60dc-3966-47e5-9342-bd8bb51297e2"
+    },
+    {
+      "bridgeSessionId": "sess_93298d88-a56e-49a0-b5be-78f812561785",
+      "role": "chat",
+      "state": "IDLE",
+      "model": "relay-chat",
+      "historyHash": "208f446d6e6ca96c9c466000ec14653b9c63e048299110e8f930e99619a66955",
+      "contextHash": "b826e9676e4c4689536e18525fa4bf59a61b9839d5e2375599c03167ea43a436",
+      "requestMessageHashes": [
+        "f1e1469a5664d9d2f3f14e577453b5fb327c7c189a591c6b977a441d996090a0",
+        "77ee1ddb5a9104132d51cb14b9752ab1d8b6b4befa78a4594d7d0bb291cc4a21",
+        "884a7a523935f6d79de03f73aede8146d90cd6eb2ccb55e773f6eca6407f28c1"
+      ],
+      "historyMessageHashes": [
+        "f1e1469a5664d9d2f3f14e577453b5fb327c7c189a591c6b977a441d996090a0",
+        "77ee1ddb5a9104132d51cb14b9752ab1d8b6b4befa78a4594d7d0bb291cc4a21",
+        "884a7a523935f6d79de03f73aede8146d90cd6eb2ccb55e773f6eca6407f28c1",
+        "ad78cebf677a7778d6aa9e3b6cf1426e8887c2c9f0bcc8f6e6256d65e4704550"
+      ],
+      "toolNames": [
+        "Read",
+        "LS",
+        "Grep",
+        "Glob",
+        "Skill"
+      ],
+      "createdAt": "2026-10-16T02:27:24.096Z",
+      "updatedAt": "2026-10-16T02:27:38.743Z",
+      "pendingToolIds": [],
+      "cancelRequested": false,
+      "notes": [
+        "factory-session-ended"
+      ],
+      "usage": {
+        "input_tokens": 6505,
+        "output_tokens": 204,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 34944,
+        "status": "reported",
+        "coverage": "partial",
+        "knownFields": [
+          "input_tokens",
+          "output_tokens",
+          "cache_read_input_tokens"
+        ],
+        "scope": "provider_messages",
+        "estimated": true,
+        "modelRequests": 2
+      },
+      "factorySessionId": "4754e9c7-7267-474a-8516-b90eea966e77",
+      "factoryCwd": "/tmp/relay-e2e-ws-aO8gEK",
+      "hostEnded": "resumable",
+      "sdkSessionId": "d1985482-e858-4624-841f-c6bac21df450"
+    }
+  ],
+  "runtimeBeforeClose": {
+    "kind": "sdk",
+    "authMode": "byok",
+    "permissionMode": "bypass",
+    "prompt": {
+      "systemPrompt": "preset:claude_code + stable append",
+      "dynamicPlacement": "user input on initial turn or context change",
+      "tools": "preset:claude_code built-ins + Droid-exclusive MCP"
+    },
+    "tools": "preset:claude_code + droid-exclusive MCP",
+    "input": "persistent SDK streaming input",
+    "includePartialMessages": true,
+    "approvalChannel": "external controller",
+    "activeNativeSessions": 2,
+    "activeNativeTurns": 0,
+    "pendingHostCalls": 0,
+    "pendingApprovals": 0,
+    "fatalErrors": [],
+    "overridesAnthropicEnv": true,
+    "upstream": {
+      "provider": "glm",
+      "label": "https://open.bigmodel.cn/api/anthropic",
+      "baseUrl": "https://open.bigmodel.cn/api/anthropic",
+      "model": "glm-5.2",
+      "tokenEnv": "READINESS_MODEL_API_KEY",
+      "authHeader": "x-api-key"
+    },
+    "control": {
+      "pendingApprovals": 0,
+      "failures": [],
+      "activeHostSessions": 0,
+      "boundNativeSessions": 0
+    }
+  },
+  "sourceHashesAtCompletion": {
+    "scripts/e2e-lib.ts": "b9ada2fa7cde87fe4e12350ddd3797d480c5d8bc4bbbaab4d7b7efd60f622362",
+    "scripts/factory-hook.ts": "ac1a6e666989d15a8a60852e6df316168d5f9c3b9b2807a64ec1a1a8c9fd1336",
+    "scripts/generate-droid.ts": "ffb141601f5220819bd39ab158322cb2b9460fdf981d3e1f2e39b0b021c4c5d1",
+    "scripts/interactive-proof.ts": "53937e697bd080a41965702df0d96429b6132f991f3baa6129389131cbc412ef",
+    "scripts/run-droid.ts": "2c4ad9c98f22753504606b27ec3e84d12e7fbc711cb3ef5420df36cb32d94179",
+    "scripts/verify-interactive.py": "fd15dc49e2ee976f1910a2e63b6976049a7d3b5ff0ee427fe1106cf3901a012f",
+    "scripts/verify-interactive.ts": "187a12f4964afdb11b37f4929c4281484f492c8f9391e3dbf7a0294f24a03acd",
+    "src/config.ts": "2cb252ffd010751c28cb26560a3c6ed06177cc8a89d3eb10f54f2546aa155ac7",
+    "src/control/broker.ts": "6ffdcb56a44408efdd136b0351ac32e3e7cba627fb9ae2fc5e28f0a8f639296c",
+    "src/control/factory-hooks.ts": "0581a23488cf28615a8a124993784ff90914023ed0fd9b14f11b99d832a4f903",
+    "src/http/app.ts": "ddaa45796f4c1a34f828649f29010e86bb90cd8889c97d4356cee1ac2017a1af",
+    "src/http/control-page.ts": "39d6a87e3ee020fbee919047cafce62d7a3a740230a0fef8f240d27cc2e92a66",
+    "src/http/sse-stream.ts": "7d167d6540c28b3ff705ee10e4b3e4f9a09be4389958e7f7470552aa534a02b0",
+    "src/http/sse.ts": "736b7e28d209d0ab6735b888bf2f1df02cea0cf5f4a5dd0c5e176c20947f9bfd",
+    "src/http/status-page.ts": "923b463d01293252c85b1eb7ba1dc4120f18e34e2dc7d6ef6f911f0ba0eabb46",
+    "src/index.ts": "3f0d52fbf96a7cdee18ef0fe432aa2b0f9c9be6eee9943b2d692c4b993f4e718",
+    "src/logging.ts": "e2c92fbb29d0d895b92717de6cdde44ece0ed6277dcdaa417d804c7ccb2675e8",
+    "src/protocol/content.ts": "199656bed9ab99cc2180c8a69d5ba671287d0ddcdd9e91af44dd1fa09789b147",
+    "src/protocol/messages.ts": "1ad1e1feb631169277645f395d4e3d6f324e8dab7dc7832f3573353ea79b249b",
+    "src/protocol/schema-to-zod.ts": "7471c2a10432486026ccf2ca6587d0812d4252bd3df8af9eb733a54ebb37b8e8",
+    "src/protocol/tool-names.ts": "f4a5f0b14fa922dbfafef4158bce9444ae228d34b55e775568639c10d269904f",
+    "src/protocol/validate.ts": "dc6eb620522fd65e3e5aefc1398dcf273932af712561cf584d0220afeaa64dc9",
+    "src/relay/ids.ts": "2711da6afa47ea7e26d947d57517a251cd1d6a138b5045125d0edf06da48762e",
+    "src/relay/mailbox.ts": "a52a9d7bef0e00c73b0a6e55c8fc699dfc88899fb893fc799564ce7830e238e7",
+    "src/runtime/droid-mcp-catalog.ts": "bd6494fbebcda021b5afc0f03ce446641e40e227048fdea848053897d284db76",
+    "src/runtime/droid-tools.ts": "09781bc4bdf76761707afc9d6dab3e98d9629f6f4341ff10eb071cead8be0ea5",
+    "src/runtime/factory-capabilities.ts": "12d89a54eee639286fc36ffc8a51d2553e06a28b1d586bfbda13436b96312f32",
+    "src/runtime/factory.ts": "731ff989b00903445819acf61d8108bc80c43bd3c422393ad75eeed32f81d3f8",
+    "src/runtime/fake-runtime.ts": "da08586a2c97dac39a5e78c768910ade495de89fb409ba96a1ba8027ae1c2690",
+    "src/runtime/mission-tools.ts": "a1bc9b27954f79fb280e131e98779a3c28698ff9785d9e5ab35367b2472af623",
+    "src/runtime/mock-runtime.ts": "8299dc619ea7b9ec359d78c3a3035f8f6fcaad4bd48ba3893d756a5e855d3674",
+    "src/runtime/native-tool-policy.ts": "f78bdab44ae412897ee5bc1a9de0abac6facfd4e3deaca214ac80765c1d2fe5c",
+    "src/runtime/safe-tools.ts": "82a4122b1d98ede94337f8aa2393c37ab2db15844d5d62c100dd0ddf443e371b",
+    "src/runtime/sdk-runtime.ts": "c7cd71b704c15d3b6316cd1aa4168cb6abc310afbe22a4702773dbd79d8554ac",
+    "src/runtime/system-prompt.ts": "d30bbd9fc565361a1f6219c1f5195c3556b2d1da1536be58217ac2d2eacc67f8",
+    "src/runtime/types.ts": "f98038399c968f5a4add1fd2aa6db321f111e13c0ec7a0bf0f1de192bcdb1e07",
+    "src/runtime/usage.ts": "81b25a74b7a37c03f3b42a256099f1f64a35b9ccbef7d912359a771c0228f777",
+    "src/security/auth.ts": "28b3d0a62769f1501bb67d84dd9f252ee9d603929b28ee4de7da45e0bb363cd3",
+    "src/security/limits.ts": "f1c5a8b653a826ec257e691b4f48ecb34e75f6dbc232d4418945c7058621986e",
+    "src/security/redact.ts": "65514578ea87343e0891351966ceaae1e5deedac44d5d53679cf795214b3527f",
+    "src/sessions/correlate.ts": "411df2d6fbbbbbe1fb49188b93ce72419c33f8e042fb97e4a5052ab7dfd22997",
+    "src/sessions/state.ts": "e4c75bcdeb2a6fdd1fe183c7ee8641226b8fd574afbdcc931302e2556159f1bf",
+    "src/sessions/store.ts": "4599fca2fa1369aa76b66cd439501570031dd967095509cb32c973a899176505",
+    "src/types.ts": "f98912af94b152bbeacd2ce69560855c7769f049c024115ef1199d9ba0b0e82a",
+    "src/upstream/providers.ts": "df130d84d5875909736498a4bb2d6de53c5dff640696fad7ca904dc463b80387",
+    "src/workspace.ts": "3f475d5a0ef32c690d3f335e1d4e307d7e95447fc5d8a3c1ddd958944bee1180"
+  },
+  "terminalLifecycle": {
+    "status": "PASS",
+    "failures": [],
+    "reservedFailureMessages": [],
+    "terminalSha256": "85623c7c88a9c5ae56df23882c627d5a0f0eefc31834a33b8357195f7af6139c"
+  },
+  "completionChecks": {
+    "noActiveTurns": true,
+    "noPendingHostCalls": true,
+    "noPendingApprovals": true,
+    "noActiveHostSessions": true,
+    "noFatalErrors": true,
+    "noControlFailures": true,
+    "terminalLifecycleDeliverySucceeded": true,
+    "sourceUnchangedDuringRun": true
+  },
+  "sessionEndEvents": [
+    {
+      "at": "2026-10-16T02:27:38.744Z",
+      "eventId": "05d3fbf0-feec-4f7a-910f-609546f989ce",
+      "hook": "SessionEnd",
+      "hostSessionId": "4754e9c7-7267-474a-8516-b90eea966e77",
+      "ended": true,
+      "sessions": 1
+    },
+    {
+      "at": "2026-10-16T02:28:03.679Z",
+      "eventId": "311a273e-8749-41a7-b5f0-0a0750f56c28",
+      "hook": "SessionEnd",
+      "hostSessionId": "dbb4d0d6-ed24-4c52-9c9c-881a3e77d8fe",
+      "ended": true,
+      "sessions": 1
+    },
+    {
+      "at": "2026-10-16T02:28:03.971Z",
+      "eventId": "5ea076aa-09f9-4ced-97a1-b561717bf18a",
+      "hook": "SessionEnd",
+      "hostSessionId": "dbb4d0d6-ed24-4c52-9c9c-881a3e77d8fe"
+    }
+  ],
+  "interactiveTitles": {
+    "entries": [
+      {
+        "factorySessionId": "4754e9c7-7267-474a-8516-b90eea966e77",
+        "type": "session_start",
+        "title": "Json-auditor: Audit input.json sum and nonce"
+      },
+      {
+        "factorySessionId": "dbb4d0d6-ed24-4c52-9c9c-881a3e77d8fe",
+        "type": "session_start",
+        "title": "创建只读 JSON 审计助手配置"
+      }
+    ],
+    "scope": "Observed persisted interactive session titles; first-file-edit and fallback variants are not independently established."
+  },
+  "processCleanup": {
+    "supported": true,
+    "observedProcessCount": 60,
+    "terminatedProcessCount": 0,
+    "remainingProcessIds": [],
+    "complete": true
+  },
+  "removedOwnedDirectories": [
+    {
+      "path": "/tmp/relay-e2e-home-LZVuYs",
+      "removed": true
+    },
+    {
+      "path": "/tmp/relay-e2e-ws-aO8gEK",
+      "removed": true
+    },
+    {
+      "path": "/tmp/relay-verify-private-ZNZK7y",
+      "removed": true
+    }
+  ],
+  "finishedAt": "2026-10-16T02:28:04.491Z"
+}

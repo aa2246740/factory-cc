@@ -71,9 +71,21 @@ npm run run-droid -- --cwd "$PROJECT" --airgap 1 -- exec --settings "$PWD/tmp/re
 npm run configure-hooks -- --hooks "$PROJECT/.factory/hooks.json" --config "$PWD/tmp/relay-local/hooks-control.json" --remove
 ```
 
-Bridge 与 wrapper 需共享同一组 `BRIDGE_ADMIN_TOKEN` / `BRIDGE_CLIENT_TOKEN`，并把 `BRIDGE_SDK_CWD` 指向目标项目。wrapper 保留 `HOME`，通过 `FACTORY_HOME_OVERRIDE` 隔离 Factory 数据；退出或取消时只清理本次启动拥有的会话。直接运行 `droid` 也支持已安装的 hooks，但进程被强制杀死、来不及发送结束事件时，应使用控制页取消遗留会话。
+Bridge 与 wrapper 需共享同一组 `BRIDGE_ADMIN_TOKEN` / `BRIDGE_CLIENT_TOKEN`，并把 `BRIDGE_SDK_CWD` 指向目标项目。wrapper 保留 `HOME`，通过 `FACTORY_HOME_OVERRIDE` 隔离 Factory 数据；退出或取消时只清理本次启动拥有的会话。交互启动请使用 wrapper：Factory UI 的退出 hook 无法继承 Agent 进程里的会话绑定，需要本次启动的身份才能准确结束对应会话。进程被强制杀死、来不及发送结束事件时，应使用控制页取消遗留会话。
 
 默认单次原生响应期限为 10 分钟（`BRIDGE_REQUEST_TIMEOUT_MS`）；外部工具往返等待为 8 小时（`BRIDGE_TOOL_WAIT_MS`），适用于长 Mission。它们都是明确的时间上限，超时会取消工作；官方结束事件会提前释放会话，无需等计时器。
+
+在目标项目安装自定义 Agent 生成入口：
+
+```bash
+npm run generate-droid -- --cwd "$PROJECT" --install-command
+```
+
+这会同时安装 `/relay-droid` 命令和 Factory 可发现的 `relay-droid` skill。重启 Droid 后，可以直接说“帮我创建一个只读的 JSON 检查子 Agent，名字叫 json-auditor”，由 Droid 根据 skill 描述选择本地 BYOK 生成器。生成配置后停止；需要执行时再单独提出要求，已有 Agent 继续通过 Factory `Task` 调用。普通对话、Mission、Agent Readiness 不需要先创建 Agent。
+
+安装器可重复运行，也能为此前只安装了命令的项目补上 skill；不同内容的已有文件或符号链接会报错，不覆盖用户配置。命令引用当前仓库的位置，移动仓库后需检查安装路径。Factory 自带 `/droids` 管理菜单保持原样，手动进入其中的托管生成仍需要 Factory 授权；skill 不拦截该菜单。显式 `/relay-droid --name json-auditor --description "Read JSON fixtures"` 仍可使用。
+
+[自然语言入口验收](evidence/relay-droid-discovery-validation-2026-10-16.json)记录了真实 Droid 无命令提示的创建、后续独立 Task 调用、普通聊天负例及正常退出；只使用隔离 BYOK，保留失败记录和修复后的证据。
 
 ## 会话与工具
 

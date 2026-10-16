@@ -140,8 +140,8 @@ export async function forwardFactoryHook(
       || !FACTORY_HOOK_EVENTS.includes(event.hook_event_name as typeof FACTORY_HOOK_EVENTS[number])) throw new Error("Invalid Factory lifecycle hook event");
   if (!config.adminToken.trim()) throw new Error("Factory hooks require a nonempty admin token");
   const url = factoryHookEndpoint(config.url);
-  const body = JSON.stringify({ eventId: options.eventId ?? randomUUID(), event, ...(options.bindingToken ? { bindingToken: options.bindingToken } : {}),
-    ...(event.hook_event_name === "SessionStart" && options.launchId ? { launchId: options.launchId } : {}) });
+  const body = JSON.stringify({ eventId: options.eventId ?? randomUUID(), event, ...(options.bindingToken !== undefined ? { bindingToken: options.bindingToken } : {}),
+    ...(["SessionStart", "SessionEnd"].includes(event.hook_event_name) && options.launchId ? { launchId: options.launchId } : {}) });
   if (Buffer.byteLength(body) > MAX_HOOK_BYTES) throw new Error("Factory lifecycle hook event exceeds size limit");
   const send = options.fetch ?? fetch;
   for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -167,6 +167,14 @@ export async function forwardFactoryHook(
   throw new Error("Factory lifecycle event was not accepted by the bridge");
 }
 class HookRejectedError extends Error {}
+class MissingClientLaunchError extends Error {}
+
+/** Fixed diagnostics only: hook inputs, response bodies and errors may contain secrets. */
+export function factoryHookFailureMessage(error: unknown): string {
+  return error instanceof MissingClientLaunchError
+    ? "Factory SessionEnd has no agent binding or wrapper launch; start interactive Droid with npm run run-droid so its lifecycle can be authenticated."
+    : "Factory lifecycle bridge unavailable; event delivery failed.";
+}
 
 /** Factory loads this official SessionStart environment file for later hooks. */
 export function persistFactoryBinding(event: unknown, bindingToken: string): void {
@@ -195,10 +203,13 @@ export async function factoryHookMain(argv = process.argv.slice(2)): Promise<voi
   let event: unknown;
   try { event = JSON.parse(Buffer.concat(chunks).toString("utf8")); } catch { throw new Error("Invalid Factory lifecycle hook JSON"); }
   const bindingToken = process.env.BRIDGE_FACTORY_BINDING;
-  if (object(event) && event.hook_event_name !== "SessionStart" && (!bindingToken || !/^[a-f0-9]{64}$/.test(bindingToken))) {
+  const launchId = process.env.BRIDGE_FACTORY_LAUNCH_ID;
+  const clientSessionEnd = object(event) && event.hook_event_name === "SessionEnd" && bindingToken === undefined;
+  if (clientSessionEnd && !launchId?.trim()) throw new MissingClientLaunchError();
+  if (object(event) && event.hook_event_name !== "SessionStart" && !clientSessionEnd && (!bindingToken || !/^[a-f0-9]{64}$/.test(bindingToken))) {
     throw new Error("Factory lifecycle event has no SessionStart generation binding");
   }
-  const result = await forwardFactoryHook(config, event, { bindingToken, launchId: process.env.BRIDGE_FACTORY_LAUNCH_ID });
+  const result = await forwardFactoryHook(config, event, { bindingToken, launchId });
   if (object(event) && event.hook_event_name === "SessionStart") {
     if (!result.bindingToken || !result.additionalContext) throw new Error("Factory SessionStart received no generation binding");
     persistFactoryBinding(event, result.bindingToken);
@@ -207,8 +218,8 @@ export async function factoryHookMain(argv = process.argv.slice(2)): Promise<voi
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
-  factoryHookMain().catch(() => {
-    process.stderr.write("Factory lifecycle bridge unavailable; event delivery failed.\n");
+  factoryHookMain().catch((error: unknown) => {
+    process.stderr.write(`${factoryHookFailureMessage(error)}\n`);
     process.exitCode = 1;
   });
 }

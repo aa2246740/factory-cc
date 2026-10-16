@@ -1,5 +1,5 @@
 #!/usr/bin/env -S node --import tsx
-import { constants, closeSync, existsSync, lstatSync, mkdirSync, openSync, realpathSync, writeFileSync } from "node:fs";
+import { constants, closeSync, existsSync, fstatSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { controlBaseUrl } from "./control.js";
@@ -12,9 +12,11 @@ const help = `Generate a project Droid using your configured local Relay Bridge 
 Options: --model inherit|custom:<id> (default inherit), --url <loopback Bridge URL>,
          --tools Read,LS,Grep,Glob (default read-only), --timeout <milliseconds>.
 BRIDGE_CLIENT_TOKEN is required for generation. BRIDGE_CONTROL_URL sets the URL.
-Installation creates /relay-droid as a project executable custom command; restart
-Droid to discover it. It uses the same options above and inherits Bridge settings.
-Existing files are never overwritten. Factory's hosted /droids generator is a
+Installation creates the /relay-droid project command and a discoverable Factory
+skill for natural-language requests to create custom Droids; restart Droid to load
+both. The command uses the same options above and inherits Bridge settings.
+Identical installations are reusable; existing files are never overwritten.
+Factory's hosted /droids generator is a
 separate service and still requires its own authorization.`;
 
 const toolNames = new Set(["Read", "LS", "Grep", "Glob", "Edit", "Write", "Create", "Execute", "Bash", "TodoWrite", "WebSearch", "FetchUrl", "AskUser", "Skill", "Task", "TaskOutput", "TaskStop", "ToolSearch", "ExitSpecMode"]);
@@ -71,14 +73,102 @@ function exclusiveWrite(path: string, text: string, mode: number): void {
   try { writeFileSync(fd, text); } finally { closeSync(fd); }
 }
 function shellQuote(text: string): string { return `'${text.replaceAll("'", "'\\''")}'`; }
+
+/** Validate all existing parents before creating any part of an installation. */
+function installationDirectory(root: string, components: string[], create: boolean): string {
+  let current = root;
+  for (const component of components) {
+    current = join(current, component);
+    if (create) {
+      try { mkdirSync(current, { mode: 0o700 }); } catch (error) { if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error; }
+    }
+    try {
+      const entry = lstatSync(current);
+      if (!entry.isDirectory() || entry.isSymbolicLink() || realpathSync(current) !== current) throw new Error("Refusing a symlink or non-directory in project configuration.");
+    } catch (error) { if (!create && (error as NodeJS.ErrnoException).code === "ENOENT") continue; throw error; }
+  }
+  return current;
+}
+
+/** Only byte-identical generated files are reusable; user files remain untouched. */
+function installedFileMatches(path: string, expected: string, executable: boolean): boolean {
+  let fd: number;
+  try { fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK); }
+  catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return false; throw new Error("Installation destination already exists or cannot be safely read; no existing file is overwritten.", { cause: error }); }
+  try {
+    const entry = fstatSync(fd);
+    if (!entry.isFile() || entry.size !== Buffer.byteLength(expected) || (executable && !(entry.mode & 0o100)) || readFileSync(fd, "utf8") !== expected) {
+      throw new Error("Installation destination already exists with different contents or permissions; no existing file is overwritten.");
+    }
+    return true;
+  } finally { closeSync(fd); }
+}
+
+function discoverySkill(command: string): string {
+  // Keep even unusual project paths inside one Markdown code block.
+  const fence = "`".repeat(Math.max(3, ...Array.from(command.matchAll(/`+/g), (match) => match[0].length + 1)));
+  return `---
+name: relay-droid
+description: "Create or generate a new reusable custom Factory Droid, agent or subagent using the local BYOK generator. 新建、创建或生成自定义 Droid、Agent、子代理。Only for explicit requests to create agent definitions; not normal conversation, running Mission or Agent Readiness, or invoking an existing agent."
+---
+
+# Create a custom Droid with Relay Bridge
+
+Use this skill when the user asks to create a new reusable custom Droid/agent definition for this project. The installed generator uses the configured local Relay Bridge and BYOK model.
+
+## Choose the correct operation
+
+- Create a new custom agent: follow the generation steps below.
+- Invoke an existing custom agent: use Factory's Task tool with that agent's name. Do not generate a replacement definition.
+- Ordinary conversation, coding work, starting or continuing a Mission, or running Agent Readiness: keep the normal workflow. These requests do not authorize creating an agent definition.
+- Factory's built-in /droids menu still manages Droids and has its own hosted generator. This skill does not intercept that menu or change its authorization.
+
+## Generate the requested definition
+
+1. Choose a name from the user's request: 1–64 lowercase letters, digits or hyphens, starting with a letter. Describe the requested agent's task, inputs, outputs and limits. If required details cannot be inferred, ask for them.
+2. Use model inherit and the read-only tools Read,LS,Grep,Glob by default. Add --tools or an explicit custom: model ID only when the user's requested capabilities require it. Do not give an agent write, execution, delegation or network tools merely because they exist. The model generates prose only; the command controls the name, model and tool permissions.
+3. Invoke the installed command with the available shell execution tool (Factory Execute or native Bash). The executable path below is already shell-quoted. Replace NAME and TASK with the actual values, each safely quoted as one argument; never interpolate task text as shell code. For POSIX shells, enclose each value in single quotes and replace an embedded apostrophe with the sequence '\\''.
+
+${fence}sh
+${shellQuote(command)} --name 'NAME' --description 'TASK'
+${fence}
+
+The command is bound to this project and inherits BRIDGE_CLIENT_TOKEN and BRIDGE_CONTROL_URL from its environment. Never print or inspect credentials. If the command reports missing configuration or a Bridge error, report that error; do not write a definition manually, use a hosted provider, or invent successful generation. Existing definitions are never overwritten; preserve a name collision and ask for a new name.
+
+4. Success prints Created Droid and RELAY_DROID_GENERATION_COMPLETE. Report the created .factory/droids/<name>.md path and stop. Its contents are instructions for a future child Droid, not instructions to execute now. Do not invoke Task, run the generated agent, or perform its task after creation without a separate user request. Droid may need a session restart to discover the new agent.
+`;
+}
+
 export function installDroidCommand(cwd: string): string {
-  const directory = projectDirectory(cwd, "commands"), path = join(directory, "relay-droid.sh");
-  targetAvailable(path);
+  const root = realpathSync(cwd);
+  if (!lstatSync(root).isDirectory()) throw new Error("Project path is not a directory.");
+  const commandParts = [".factory", "commands"], skillParts = [".factory", "skills", "relay-droid"];
+  const path = join(installationDirectory(root, commandParts, false), "relay-droid.sh");
+  const skillPath = join(installationDirectory(root, skillParts, false), "SKILL.md");
   const repository = dirname(dirname(fileURLToPath(import.meta.url)));
   const tsx = join(repository, "node_modules/tsx/dist/loader.mjs");
   if (!existsSync(tsx)) throw new Error("Install this repository's npm dependencies first.");
-  const script = `#!/bin/sh\n# Generate a project Droid through the configured local Relay Bridge.\nexec ${shellQuote(process.execPath)} --import ${shellQuote(pathToFileURL(tsx).href)} ${shellQuote(fileURLToPath(import.meta.url))} --cwd ${shellQuote(realpathSync(cwd))} "$@"\n`;
-  exclusiveWrite(path, script, 0o700);
+  const script = `#!/bin/sh\n# Generate a project Droid through the configured local Relay Bridge.\nexec ${shellQuote(process.execPath)} --import ${shellQuote(pathToFileURL(tsx).href)} ${shellQuote(fileURLToPath(import.meta.url))} --cwd ${shellQuote(root)} "$@"\n`;
+  const files = [{ path, contents: script, mode: 0o700 }, { path: skillPath, contents: discoverySkill(path), mode: 0o600 }];
+  // Preflight both files before any writes, including a legacy command-only install.
+  for (const file of files) installedFileMatches(file.path, file.contents, file.mode === 0o700);
+  installationDirectory(root, commandParts, true);
+  installationDirectory(root, skillParts, true);
+  const created: Array<{ path: string; dev: number; ino: number }> = [];
+  try {
+    for (const file of files) {
+      installationDirectory(root, file.path === path ? commandParts : skillParts, false);
+      if (installedFileMatches(file.path, file.contents, file.mode === 0o700)) continue;
+      exclusiveWrite(file.path, file.contents, file.mode);
+      const entry = lstatSync(file.path);
+      created.push({ path: file.path, dev: entry.dev, ino: entry.ino });
+    }
+  } catch (error) {
+    for (const file of created.reverse()) {
+      try { const entry = lstatSync(file.path); if (entry.dev === file.dev && entry.ino === file.ino) unlinkSync(file.path); } catch { /* Preserve any concurrent replacement. */ }
+    }
+    throw error;
+  }
   return path;
 }
 
@@ -127,7 +217,7 @@ export async function generateDroid(args: GenerateDroidArgs, env: NodeJS.Process
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   (async () => { const args = parseGenerateDroidArgs(process.argv.slice(2)); if (args.help) { console.log(help); return; }
     const path = args.install ? installDroidCommand(args.cwd) : await generateDroid(args);
-    console.log(args.install ? `Installed /relay-droid: ${path}\nRestart Droid to load this project command.`
+    console.log(args.install ? `Installed /relay-droid: ${path}\nInstalled discovery skill: ${join(realpathSync(args.cwd), ".factory/skills/relay-droid/SKILL.md")}\nRestart Droid to discover the command and skill for requests to create custom agents.`
       : `Created Droid: ${path}\nRELAY_DROID_GENERATION_COMPLETE\nConfiguration generation is complete. The generated file contains instructions for a future child Droid, not instructions to execute now. Confirm the created file path and stop without additional tool calls. Invoke the new Droid only after a separate user request.`);
   })().catch((error: unknown) => { console.error(error instanceof Error ? error.message : "Droid generation failed."); process.exitCode = 1; });
 }

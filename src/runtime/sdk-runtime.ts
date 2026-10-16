@@ -528,6 +528,12 @@ export class SdkRuntime implements BridgeRuntime {
     await catalog.update(droidTools);
     if (live.terminal) throw live.terminal;
     const env = sdkEnv(selection, `${this.config.host}:${this.config.port}`, this.config.authMode);
+    // Project skills may run the local generator through native Bash. Bind its
+    // client connection to this Bridge, not stale values in the parent shell.
+    // These values stay in the process environment, never the model prompt.
+    const clientHost = this.config.host === "0.0.0.0" ? "127.0.0.1" : this.config.host === "::" ? "[::1]" : this.config.host;
+    env.BRIDGE_CLIENT_TOKEN = this.config.clientToken;
+    env.BRIDGE_CONTROL_URL = `http://${clientHost.includes(":") && !clientHost.startsWith("[") ? `[${clientHost}]` : clientHost}:${this.config.port}`;
     // The native worker receives its provider credential, never the host
     // controller's authority or Factory lifecycle generation.
     for (const name of ["BRIDGE_ADMIN_TOKEN", "BRIDGE_FACTORY_BINDING", "BRIDGE_FACTORY_LAUNCH_ID", "BRIDGE_LAUNCH_ID"]) delete env[name];

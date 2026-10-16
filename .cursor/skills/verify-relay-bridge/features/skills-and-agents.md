@@ -37,7 +37,13 @@ npm run generate-droid -- --cwd /absolute/project --name json-auditor \
 npm run generate-droid -- --cwd /absolute/project --install-command
 ```
 
-Restart Droid after command installation, then run `/relay-droid --name another-auditor --description "Read JSON fixtures and check arithmetic"`. It creates configuration and reports its path; ask separately to invoke the new child. Names, model selection and tools come from explicit caller options; existing files are never overwritten. The default model is `inherit` and default tools are `Read,LS,Grep,Glob`.
+Restart Droid after command and skill installation, then ask naturally to create a custom agent, or run `/relay-droid --name another-auditor --description "Read JSON fixtures and check arithmetic"`. It creates configuration and reports its path; ask separately to invoke the new child. Names, model selection and tools come from explicit caller options; existing files are never overwritten. The default model is `inherit` and default tools are `Read,LS,Grep,Glob`.
+
+- **Natural-language discovery.** `node --import tsx scripts/verify-interactive.ts --natural-generation-only evidence/new-natural-generation.json` starts a real PTY with the installed companion Factory skill. The initial Chinese request must not mention the skill name, slash command, command path or tool selection. Require actual Factory Skill activation with the full installed body, then successful execution of the installed generator through native Bash, authenticated generator traffic and an independently read definition. Creation must not invoke the new agent or read its input fixture. A separate request must use Factory Task and the child proof above; an ordinary chat turn must not generate another agent. Do not inject extra native credentials in the test: the production Bridge must supply its own local client connection.
+
+Installation adds both the executable command and `.factory/skills/relay-droid/SKILL.md`. Restart Droid for discovery; repeat installation safely to upgrade an unchanged command-only setup. Conflicting files are preserved. Skill selection depends on the model; manually selecting Factory's hosted menu still follows that hosted path.
+
+Require a clean terminal lifecycle as well as zero runtime errors. Factory can emit a client-owned `SessionEnd` without the agent's environment-file binding, then emit an agent-owned event with it. The production wrapper's exact launch/session identity permits only that missing-binding exit case; stale explicit bindings and ambiguous generations remain rejected. `--exit-only` drives two ordinary chat turns and real `/exit` for a focused check. Never treat CLI exit code 0 and eventual cleanup alone as proof that every hook succeeded.
 
 ## Gotchas
 
