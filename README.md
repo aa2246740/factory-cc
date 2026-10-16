@@ -6,7 +6,26 @@
 
 这是借鉴 T3 的 SDK 集成方式，不是官方支持、授权或账号状态保证。GLM 等第三方兼容端点的结果不能代表 Claude 模型。见 [接入说明](docs/T3-ALIGNMENT.md) 和 [限制](docs/LIMITATIONS.md)。
 
-## 运行
+## 已有 Claude Code 和 Droid：直接启动
+
+需要 Node.js 22+。两个 CLI 不用重装；在本仓库运行：
+
+```bash
+npm ci
+npm run local -- /你的项目路径
+```
+
+按提示选择 Anthropic 兼容接口地址、模型和输入自己的 API Key，随后自动打开 Droid。国际 Z.AI 默认地址是 `https://api.z.ai/api/anthropic`，默认模型 `glm-5.2`；中国区智谱使用 `https://open.bigmodel.cn/api/anthropic`。Key 必须属于所选服务。Key 输入不回显、不保存在配置文件里，下次启动重新输入。
+
+这一个命令会启动 Bridge，配置独立的 Droid 数据目录、聊天和 Mission 各角色模型，安装生命周期 hooks 和 `relay-droid` skill。以后继续运行 `npm run local -- /你的项目路径` 即可。退出 Droid 时会停止本次服务并移除自己的 hooks，保留项目原有 hooks。
+
+需要允许原生工具操作时，打开启动时显示的控制页；管理员令牌保存在同时显示的私有文件中。默认仍逐次审批。接口地址和模型可记住，上游 Key 不落盘；不会使用你的 Claude 订阅登录。
+
+更多参数见 `npm run local -- --help`。首次不需要手工修改下面的环境变量或 settings。
+
+[入口实测记录](evidence/local-entry-validation-2026-10-16-r2.json)：真实 Linux PTY 从该命令启动、自动选择 Relay Chat、GLM BYOK 对话和正常退出均通过；本轮只核对 Mission 角色配置，没有重新运行完整 Mission。
+
+## 手工运行与诊断
 
 需要 Node.js 22+；真实模式还需要已安装的官方 `claude` 和 `droid`。
 

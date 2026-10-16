@@ -1,0 +1,31 @@
+{
+  "status": "PASS_SCOPED_CANCEL_PTY",
+  "scope": "Real npm local initial setup in a PTY; defaults accepted; synthetic API key typed but never submitted; Ctrl-C only. No provider/model requests.",
+  "commandShape": "npm run local -- <owned-project>",
+  "modelCalls": 0,
+  "startedAt": "2026-10-16T03:18:07Z",
+  "sourceSha256": "30160c5472172361ed59c7fc3e865ccbbcf0f7430a757711ed897dead7dc23c3",
+  "tty": {
+    "code": 130,
+    "echoBefore": true,
+    "echoAfter": true,
+    "canonicalBefore": true,
+    "canonicalAfter": true,
+    "flagsRestored": true
+  },
+  "checks": {
+    "exit130": true,
+    "keyNotEchoed": true,
+    "ttyFlagsRestored": true,
+    "echoRestored": true,
+    "canonicalRestored": true,
+    "launcherStateNeverCreated": true,
+    "projectUntouched": true,
+    "isolatedHomeUntouched": true,
+    "adapterExitClean": true,
+    "sourceUnchanged": true
+  },
+  "terminalSha256": "ea3577e2b99abca77d90f6fb9cbd73e0fb510e4a6320b9eeb42a3468be87cd3f",
+  "ownedScratchRemoved": true,
+  "finishedAt": "2026-10-16T03:18:08Z"
+}

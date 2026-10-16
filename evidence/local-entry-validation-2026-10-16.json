@@ -1,0 +1,278 @@
+{
+  "suite": "real-single-local-entry",
+  "status": "FAIL",
+  "evidence": "/workspace/work/factory-cc-prep/repo/evidence/local/local-entry-2026-10-16T03-16-32-459Z-d38d9d",
+  "startedAt": "2026-10-16T03:16:32.464Z",
+  "authentication": {
+    "endpoint": "https://open.bigmodel.cn/api/anthropic",
+    "model": "glm-5.2",
+    "keyVariable": "READINESS_MODEL_API_KEY",
+    "readiness": "current and ready",
+    "subscriptionCredentialsRead": false
+  },
+  "sourceHashesAtStart": {
+    "scripts/local.ts": "342bb62e033f05f7405bc347d6269f868b80c06bf2c10b9d96a50849a74ca09f",
+    "scripts/run-droid.ts": "3e93f7d95d74d3e8dd160a4ba1008f5b1e40b7320acff9191f531bc624d348f5",
+    "scripts/configure-droid.ts": "832af1a8c1fb453fa1029c46ad062109247113bf6839583c68af6314056ca336",
+    "scripts/generate-droid.ts": "ffb141601f5220819bd39ab158322cb2b9460fdf981d3e1f2e39b0b021c4c5d1",
+    "src/control/factory-hooks.ts": "0581a23488cf28615a8a124993784ff90914023ed0fd9b14f11b99d832a4f903",
+    "src/control/broker.ts": "6ffdcb56a44408efdd136b0351ac32e3e7cba627fb9ae2fc5e28f0a8f639296c",
+    "src/http/app.ts": "ddaa45796f4c1a34f828649f29010e86bb90cd8889c97d4356cee1ac2017a1af",
+    "src/runtime/sdk-runtime.ts": "c7cd71b704c15d3b6316cd1aa4168cb6abc310afbe22a4702773dbd79d8554ac"
+  },
+  "scope": "Official CLI PTY, one plain chat without /model, automatic setup, production hooks and exit. No Mission execution.",
+  "command": [
+    "npm",
+    "run",
+    "local",
+    "--",
+    "/tmp/relay-local-entry-8gZi49/project",
+    "--base-url",
+    "https://open.bigmodel.cn/api/anthropic",
+    "--model",
+    "glm-5.2",
+    "--key-env",
+    "READINESS_MODEL_API_KEY"
+  ],
+  "startup": {
+    "missionOrchestratorModel": "custom:Relay-Orchestrator-0",
+    "missionModelSettings": {
+      "workerModel": "custom:Relay-Worker-0",
+      "validationWorkerModel": "custom:Relay-Validator-0",
+      "skipScrutiny": false,
+      "skipUserTesting": false
+    },
+    "automaticallyInstalledCommand": true,
+    "automaticallyInstalledSkill": true,
+    "hooksPresent": true,
+    "adminTokenPermissions": "600",
+    "settingsPermissions": "600",
+    "runtime": {
+      "kind": "sdk",
+      "authMode": "byok",
+      "permissionMode": "ask",
+      "prompt": {
+        "systemPrompt": "preset:claude_code + stable append",
+        "dynamicPlacement": "user input on initial turn or context change",
+        "tools": "preset:claude_code built-ins + Droid-exclusive MCP"
+      },
+      "tools": "preset:claude_code + droid-exclusive MCP",
+      "input": "persistent SDK streaming input",
+      "includePartialMessages": true,
+      "approvalChannel": "external controller",
+      "activeNativeSessions": 0,
+      "activeNativeTurns": 0,
+      "pendingHostCalls": 0,
+      "pendingApprovals": 0,
+      "fatalErrors": [],
+      "overridesAnthropicEnv": true,
+      "upstream": {
+        "selected": false,
+        "authMode": "byok"
+      },
+      "control": {
+        "pendingApprovals": 0,
+        "failures": [],
+        "activeHostSessions": 0,
+        "boundNativeSessions": 0
+      }
+    }
+  },
+  "chat": {
+    "prompt": "法国的首都是哪里？只回答城市中文名，不要调用工具。",
+    "status": "PASS",
+    "checks": {
+      "finalAnswerCorrect": true,
+      "noToolsInvoked": true,
+      "finalResponsePresent": true
+    },
+    "parentSdkSessionId": "509cb335-8088-4504-866a-e018f659e3fe",
+    "finalText": "巴黎",
+    "toolCalls": []
+  },
+  "runtimeAfterChat": {
+    "kind": "sdk",
+    "authMode": "byok",
+    "permissionMode": "ask",
+    "prompt": {
+      "systemPrompt": "preset:claude_code + stable append",
+      "dynamicPlacement": "user input on initial turn or context change",
+      "tools": "preset:claude_code built-ins + Droid-exclusive MCP"
+    },
+    "tools": "preset:claude_code + droid-exclusive MCP",
+    "input": "persistent SDK streaming input",
+    "includePartialMessages": true,
+    "approvalChannel": "external controller",
+    "activeNativeSessions": 2,
+    "activeNativeTurns": 0,
+    "pendingHostCalls": 0,
+    "pendingApprovals": 0,
+    "fatalErrors": [],
+    "overridesAnthropicEnv": true,
+    "upstream": {
+      "provider": "glm",
+      "label": "https://open.bigmodel.cn/api/anthropic",
+      "baseUrl": "https://open.bigmodel.cn/api/anthropic",
+      "model": "glm-5.2",
+      "tokenEnv": "RELAY_LOCAL_PROVIDER_KEY_407E42E423EA28BA",
+      "authHeader": "x-api-key"
+    },
+    "control": {
+      "pendingApprovals": 0,
+      "failures": [],
+      "activeHostSessions": 1,
+      "boundNativeSessions": 1
+    }
+  },
+  "driver": {
+    "code": 0,
+    "stdout": "",
+    "stderr": "",
+    "timedOut": false,
+    "signal": null,
+    "processCleanup": {
+      "supported": true,
+      "observedProcessCount": 0,
+      "terminatedProcessCount": 0,
+      "remainingProcessIds": [],
+      "complete": true
+    }
+  },
+  "ptyExit": {
+    "exitStatus": 0,
+    "signalStatus": null
+  },
+  "nativeProof": {
+    "parentSdkSessionId": "509cb335-8088-4504-866a-e018f659e3fe",
+    "finalText": "巴黎"
+  },
+  "requests": [
+    {
+      "at": "2026-10-16T03:16:37.246Z",
+      "method": "POST",
+      "path": "/v1/messages",
+      "role": "chat",
+      "authOk": true,
+      "sessionHint": "sess_f8344e01-3849-4631-9ddc-3315892a3fcd",
+      "model": "relay-probe",
+      "stream": true,
+      "toolNames": [],
+      "messageCount": 1,
+      "notes": [
+        "new-session"
+      ]
+    },
+    {
+      "at": "2026-10-16T03:16:37.454Z",
+      "method": "POST",
+      "path": "/v1/messages",
+      "role": "chat",
+      "authOk": true,
+      "sessionHint": "sess_4a937e0f-3393-4531-93cf-4111a5f83423",
+      "model": "relay-probe",
+      "stream": true,
+      "toolNames": [
+        "Read",
+        "LS",
+        "Execute",
+        "Edit",
+        "Grep",
+        "Glob",
+        "Create",
+        "ExitSpecMode",
+        "AskUser",
+        "TodoWrite",
+        "TaskOutput",
+        "TaskStop",
+        "ToolSearch",
+        "Skill",
+        "Task"
+      ],
+      "messageCount": 2,
+      "notes": [
+        "new-session"
+      ]
+    }
+  ],
+  "hostEvents": [
+    {
+      "at": "2026-10-16T03:16:36.951Z",
+      "eventId": "a1bacb70-445e-471f-9d3e-dfa6536ac38f",
+      "hook": "SessionStart",
+      "hostSessionId": "56e69593-59a8-4927-9705-370c1dd1b2d5"
+    },
+    {
+      "at": "2026-10-16T03:16:37.160Z",
+      "eventId": "d58563d4-e537-4676-9dc0-b24ecd29625f",
+      "hook": "UserPromptSubmit",
+      "hostSessionId": "56e69593-59a8-4927-9705-370c1dd1b2d5"
+    },
+    {
+      "at": "2026-10-16T03:16:49.832Z",
+      "eventId": "b637803f-c6fd-41d0-9fa4-dae388619dfa",
+      "hook": "Stop",
+      "hostSessionId": "56e69593-59a8-4927-9705-370c1dd1b2d5"
+    },
+    {
+      "at": "2026-10-16T03:16:53.596Z",
+      "eventId": "a63689e6-d757-4398-bc7f-2dc503750120",
+      "hook": "SessionEnd",
+      "hostSessionId": "56e69593-59a8-4927-9705-370c1dd1b2d5",
+      "ended": true,
+      "sessions": 1
+    },
+    {
+      "at": "2026-10-16T03:16:53.873Z",
+      "eventId": "e9f269e7-06c6-48d3-83a6-da77c18d8b51",
+      "hook": "SessionEnd",
+      "hostSessionId": "56e69593-59a8-4927-9705-370c1dd1b2d5"
+    }
+  ],
+  "terminalLifecycle": {
+    "status": "PASS",
+    "failures": [],
+    "reservedFailureMessages": []
+  },
+  "launcherCleanup": {
+    "adminTokenRemoved": true,
+    "hookConfigRemoved": true,
+    "lockRemoved": true,
+    "projectHooksRemoved": true
+  },
+  "sourceHashesAtCompletion": {
+    "scripts/local.ts": "342bb62e033f05f7405bc347d6269f868b80c06bf2c10b9d96a50849a74ca09f",
+    "scripts/run-droid.ts": "3e93f7d95d74d3e8dd160a4ba1008f5b1e40b7320acff9191f531bc624d348f5",
+    "scripts/configure-droid.ts": "832af1a8c1fb453fa1029c46ad062109247113bf6839583c68af6314056ca336",
+    "scripts/generate-droid.ts": "ffb141601f5220819bd39ab158322cb2b9460fdf981d3e1f2e39b0b021c4c5d1",
+    "src/control/factory-hooks.ts": "0581a23488cf28615a8a124993784ff90914023ed0fd9b14f11b99d832a4f903",
+    "src/control/broker.ts": "6ffdcb56a44408efdd136b0351ac32e3e7cba627fb9ae2fc5e28f0a8f639296c",
+    "src/http/app.ts": "ddaa45796f4c1a34f828649f29010e86bb90cd8889c97d4356cee1ac2017a1af",
+    "src/runtime/sdk-runtime.ts": "c7cd71b704c15d3b6316cd1aa4168cb6abc310afbe22a4702773dbd79d8554ac"
+  },
+  "checks": {
+    "noManualModelSelection": true,
+    "defaultChatUsesBridge": false,
+    "toolsNotInvoked": true,
+    "startupFullyConfigured": true,
+    "privateStatePermissions": true,
+    "nativeBYOK": true,
+    "nativeHealthy": true,
+    "hostEndAccepted": true,
+    "noLifecycleError": true,
+    "normalPtyExit": true,
+    "bridgeListenerClosed": true,
+    "sourceUnchangedDuringRun": true,
+    "ownTransientFilesRemoved": true
+  },
+  "error": "One or more actual local-entry acceptance gates failed.",
+  "processCleanup": {
+    "supported": true,
+    "observedProcessCount": 22,
+    "terminatedProcessCount": 0,
+    "remainingProcessIds": [],
+    "complete": true
+  },
+  "removedOwnedState": true,
+  "removedOwnedProject": true,
+  "finishedAt": "2026-10-16T03:16:54.246Z"
+}
