@@ -1,0 +1,236 @@
+{
+  "status": "PASS_SCOPED_WITH_HOSTED_REPLACEMENT",
+  "recordedAt": "2026-10-16T01:24:42.024Z",
+  "allFactoryModelCallsitesCovered": false,
+  "sources": [
+    {
+      "path": "evidence/interactive-validation-2026-10-16.json",
+      "status": "FAIL",
+      "sha256": "6d93850ed21607472f5c5dd2633f40a5951276a3f3179d5f5e7ce350a2de4838"
+    },
+    {
+      "path": "evidence/interactive-validation-2026-10-16-r2.json",
+      "status": "PASS_WITH_HOSTED_FEATURE_REPLACEMENT",
+      "sha256": "591b39f4d1368a9537a403fc7ebe135d3472edbabf344bd0adddc8eb63000293"
+    },
+    {
+      "path": "evidence/interactive-proof-recheck-2026-10-16.json",
+      "status": "PASS_SCOPED_RECHECK",
+      "sha256": "95d15469125dabd50bc457568ab759a1fda576f48c087846931e2018a877a344"
+    },
+    {
+      "path": "evidence/interactive-cancel-validation-2026-10-16.json",
+      "status": "PASS_CANCEL_ONLY",
+      "sha256": "2bee8f26ecd2bb28def4621fe9300f78c2da565bd2530508570da7033324d30c"
+    },
+    {
+      "path": "evidence/interactive-generation-validation-2026-10-16.json",
+      "status": "PASS_GENERATION_ONLY",
+      "sha256": "8ab0dbad07ec5060bf4af105ce3f805612c78cbca3bb27bdbd6964364ceb4f87"
+    }
+  ],
+  "checks": {
+    "actualReviewSkill": true,
+    "reviewFixtureUnchanged": true,
+    "reviewFindingExplainsMutation": true,
+    "originalHosted401": true,
+    "localGeneration": true,
+    "generatedDroidDelegation": true,
+    "cancellationAfterObservedExecution": true,
+    "allNormalExits": true,
+    "allOwnedCleanup": true
+  },
+  "fixes": {
+    "generation": "Added local BYOK CLI and executable /relay-droid command. Model supplies prose only; caller controls path/name/model/tools. Exclusive create and directory checks preserve existing project files.",
+    "generationFollowup": "The command result explicitly ends configuration generation. A fresh real slash-command run had zero unrequested native tool calls, then a separate requested Factory Task successfully ran the generated child."
+  },
+  "review": {
+    "entry": "/review → Review uncommitted changes",
+    "status": "PASS",
+    "nativeFinalText": "Both review groups are done and validated. Here is the consolidated result.\n\n## Review summary\n\n**1 finding** in the working-tree changes (staged: none, unstaged: `math.js`, untracked: `.factory/*`, `input.json`).\n\n### [P1] `divide()` multiplies instead of dividing and drops the zero-divisor guard — `math.js:1`\n\nThe rewrite replaced `return a/b` with `return a*b` and deleted `if (b===0) throw new Error(\"zero\")`, so the module's sole exported function is wrong on every invocation: `divide(10,2)` returns `20` instead of `5`, and a zero divisor now silently yields `0` instead of throwing. This breaks the function's contract (name vs. behavior, and the previous error path) with an observable wrong result on any call path.\n\n```js\n// before\nexport function divide(a,b) { if (b===0) throw new Error(\"zero\"); return a/b; }\n// after (current)\nexport function divide(a,b) { return a*b; }\n```\n\nFix: restore `return a/b` and the `b===0` guard (or, if multiplication was the intent, rename the export so callers aren't misled).\n\n### Clean (no findings)\n\n- `.factory/hooks.json`, `.factory/commands/relay-droid.sh`, `.factory/droids/relay-json-auditor.md`, `input.json` — both JSON files parse, the shell script is syntactically valid, and the droid definition is internally consistent with `input.json`'s shape (`a`, `b`, `nonce` present). These are generated session-harness artifacts with no functional defects.\n\nValidation notes: a repo-wide search found no callers or tests for `divide`, so nothing in-repo currently exercises the bug; the finding stands on the exported contract itself. The two worker reports were deduplicated (both regressions share one root cause, anchored to the single changed line) and independently re-verified against the diff.",
+    "fixtureUnchanged": true
+  },
+  "generatedDroid": {
+    "entry": "/relay-droid",
+    "status": "PASS_GENERATION_ONLY",
+    "unrequestedNativeToolCalls": 0,
+    "definition": "---\nname: \"relay-json-auditor\"\ndescription: \"Read-only JSON relay auditor for mutation-free pipeline steps: reads input.json using only Read/LS/Grep/Glob, computes sum = a + b, and replies with exactly {\\\"sum\\\": <a+b>, \\\"nonce\\\": <input.nonce>} as pure JSON — no file edits, no command execution, no prose; useful whenever a relay or audit stage must prove its output derives solely from the input file.\"\nmodel: \"inherit\"\ntools: [\"Read\",\"LS\",\"Grep\",\"Glob\"]\n---\n\nYou are `relay-json-auditor`, a strictly read-only JSON auditor for relay pipelines.\n\n## When you are useful\nYou are the trusted pass-through step in a pipeline: you take no actions, change nothing, and produce an output that is provably derived from `input.json` alone — a recomputed sum plus the input nonce echoed verbatim for correlation and integrity checking.\n\n## How to do the task\n1. Confirm the location of `input.json` in the current working directory (use `LS` or `Glob` if the path is not obvious).\n2. Read `input.json` with `Read`. It contains numeric fields `a` and `b`, and a field `nonce`.\n3. Compute `sum = a + b` exactly. Use plain arithmetic — no rounding, truncation, or reformatting beyond what JSON serialization requires.\n4. Reply with exactly one JSON object on a single line, and nothing else:\n\n   {\"sum\": <a + b>, \"nonce\": <input.nonce>}\n\n## Output rules\n- Your entire reply is the JSON object. No prose, no explanation, no headings, no code fences, no trailing commentary.\n- `sum` must equal `a + b` from the file you actually read.\n- `nonce` must be the input nonce echoed verbatim: same type, same characters, no re-encoding or normalization.\n- If `input.json` is missing, unreadable, malformed, or lacks any of `a`, `b`, or `nonce`, reply with exactly: {\"error\":\"invalid input\"} — still JSON only, never prose.\n\n## Hard constraints\n- Use only the read-only tools: `Read`, `LS`, `Grep`, `Glob`.\n- Never create, edit, or delete any file. Never execute commands, scripts, or shells. Do not attempt to use write or execution capabilities even if offered.\n- Never fabricate values: every field in your output must come from the file you read, and the nonce must match the input character-for-character.\n",
+    "taskProof": {
+      "status": "PASS",
+      "checks": {
+        "parentFactoryTask": true,
+        "awaited": true,
+        "taskResultSucceeded": true,
+        "factoryChildSessionIdPresent": true,
+        "distinctNativeChild": true,
+        "childTaskPromptMatches": true,
+        "nonceAbsentFromChildPrompt": true,
+        "childReadSucceeded": true,
+        "childFinalJsonCorrect": true,
+        "parentFinalJsonCorrect": true,
+        "parentNoNativeFileAccessDuringDelegation": true
+      },
+      "parentSdkSessionId": "083fb7fd-de12-407d-81e2-584337f26bc1",
+      "childSdkSessionId": "8d3ea4ce-0841-4ac1-b902-9a2e3fbc5296",
+      "factoryChildSessionId": "017dddae-11f3-45ed-a18b-f41d0836daf3",
+      "taskCallId": "call_858bca8c448542a9beab059a",
+      "childReadCallId": "call_cea3cc2c312a43c8a166d362",
+      "expected": {
+        "sum": 56,
+        "nonce": "ac2507ea92489eac31e70288"
+      },
+      "observedChain": {
+        "parentTaskCall": {
+          "type": "tool_use",
+          "id": "call_858bca8c448542a9beab059a",
+          "name": "mcp__droid__Task",
+          "input": {
+            "await": true,
+            "description": "Audit input.json sum and nonce",
+            "prompt": "You are invoked as the project custom Droid relay-json-auditor. Follow the instructions in /tmp/relay-e2e-ws-gKolhi/.factory/droids/relay-json-auditor.md.\n\nTask: Read /tmp/relay-e2e-ws-gKolhi/input.json and compute/return the exact JSON sum and the nonce as defined by your Droid instructions and the file contents.\n\nExpected output: the exact JSON sum (as a JSON number, exactly as computed from the file) and the exact nonce value, plus a brief note of how you derived them. Do not modify any files.",
+            "subagent_type": "relay-json-auditor"
+          }
+        },
+        "parentTaskResult": {
+          "tool_use_id": "call_858bca8c448542a9beab059a",
+          "type": "tool_result",
+          "content": [
+            {
+              "type": "text",
+              "text": "session_id: 017dddae-11f3-45ed-a18b-f41d0836daf3\nUse this report as the source of record. Continue from it without repeating its searches, reads, or validation. If a concrete gap blocks progress, fill only that gap; resume the child when its retained context is useful, or re-open covered files when you must edit them.\n[Read] Read /tmp/relay-e2e-ws-gKolhi/input.json\n{\"sum\":56,\"nonce\":\"ac2507ea92489eac31e70288\"}"
+            }
+          ]
+        },
+        "childReadCall": {
+          "type": "tool_use",
+          "id": "call_cea3cc2c312a43c8a166d362",
+          "name": "Read",
+          "input": {
+            "file_path": "/tmp/relay-e2e-ws-gKolhi/input.json"
+          }
+        },
+        "childReadResult": {
+          "tool_use_id": "call_cea3cc2c312a43c8a166d362",
+          "type": "tool_result",
+          "content": "1\t{\"a\":19,\"b\":37,\"nonce\":\"ac2507ea92489eac31e70288\"}"
+        },
+        "childFinalText": "{\"sum\":56,\"nonce\":\"ac2507ea92489eac31e70288\"}",
+        "parentFinalText": "The relay-json-auditor Droid read `input.json` (I did not open it myself) and returned:\n\n```json\n{\"sum\": 56, \"nonce\": \"ac2507ea92489eac31e70288\"}\n```\n\n- **Sum:** 56\n- **Nonce:** `ac2507ea92489eac31e70288`\n\nThe child session (awaited, completed successfully) used its read of the file as the source for both values; no files were modified."
+      },
+      "scope": "Parent did not access files during the delegation turn. Earlier generation-command turns may have read the fixture."
+    }
+  },
+  "hostedGenerator": {
+    "entry": "/droids → Create new droid → Project → Generate with Droid",
+    "status": "BLOCKED_FACTORY_AUTH",
+    "httpStatus": 401,
+    "bridgeRequestsAdded": 0,
+    "replacement": "/relay-droid"
+  },
+  "escape": {
+    "status": "PASS",
+    "independentStartMarker": "started",
+    "nativeStoppedAfterMs": 3756,
+    "before": {
+      "kind": "sdk",
+      "authMode": "byok",
+      "permissionMode": "bypass",
+      "prompt": {
+        "systemPrompt": "preset:claude_code + stable append",
+        "dynamicPlacement": "user input on initial turn or context change",
+        "tools": "preset:claude_code built-ins + Droid-exclusive MCP"
+      },
+      "tools": "preset:claude_code + droid-exclusive MCP",
+      "input": "persistent SDK streaming input",
+      "includePartialMessages": true,
+      "approvalChannel": "external controller",
+      "activeNativeSessions": 2,
+      "activeNativeTurns": 2,
+      "pendingHostCalls": 0,
+      "pendingApprovals": 0,
+      "fatalErrors": [],
+      "overridesAnthropicEnv": true,
+      "upstream": {
+        "provider": "glm",
+        "label": "https://open.bigmodel.cn/api/anthropic",
+        "baseUrl": "https://open.bigmodel.cn/api/anthropic",
+        "model": "glm-5.2",
+        "tokenEnv": "READINESS_MODEL_API_KEY",
+        "authHeader": "x-api-key"
+      },
+      "control": {
+        "pendingApprovals": 0,
+        "failures": [],
+        "activeHostSessions": 1,
+        "boundNativeSessions": 1
+      }
+    },
+    "after": {
+      "kind": "sdk",
+      "authMode": "byok",
+      "permissionMode": "bypass",
+      "prompt": {
+        "systemPrompt": "preset:claude_code + stable append",
+        "dynamicPlacement": "user input on initial turn or context change",
+        "tools": "preset:claude_code built-ins + Droid-exclusive MCP"
+      },
+      "tools": "preset:claude_code + droid-exclusive MCP",
+      "input": "persistent SDK streaming input",
+      "includePartialMessages": true,
+      "approvalChannel": "external controller",
+      "activeNativeSessions": 1,
+      "activeNativeTurns": 0,
+      "pendingHostCalls": 0,
+      "pendingApprovals": 0,
+      "fatalErrors": [],
+      "overridesAnthropicEnv": true,
+      "upstream": {
+        "provider": "glm",
+        "label": "https://open.bigmodel.cn/api/anthropic",
+        "baseUrl": "https://open.bigmodel.cn/api/anthropic",
+        "model": "glm-5.2",
+        "tokenEnv": "READINESS_MODEL_API_KEY",
+        "authHeader": "x-api-key"
+      },
+      "control": {
+        "pendingApprovals": 0,
+        "failures": [],
+        "activeHostSessions": 1,
+        "boundNativeSessions": 1
+      }
+    },
+    "observedAfterMs": 47000,
+    "delayedFileExists": false
+  },
+  "interactiveTitles": {
+    "entries": [
+      {
+        "factorySessionId": "017dddae-11f3-45ed-a18b-f41d0836daf3",
+        "type": "session_start",
+        "title": "Relay-json-auditor: Audit input.json sum and nonce"
+      },
+      {
+        "factorySessionId": "d0d46cfd-24a2-43be-a1e6-c1dfb281e592",
+        "type": "session_start",
+        "title": "Generate relay Droid configuration file"
+      }
+    ],
+    "scope": "Observed persisted interactive session titles; first-file-edit and fallback variants are not independently established."
+  },
+  "priorFailure": {
+    "source": "evidence/interactive-validation-2026-10-16.json",
+    "error": "Timed out: generation command completion",
+    "correction": "Executable custom-command stdout is inserted into the prompt, not necessarily printed verbatim. The gate now checks the independently created definition and actual native command context."
+  },
+  "limitations": [
+    "Original hosted /droids generation still requires independent Factory authorization.",
+    "Generation follow-up stop instruction was verified in this fixture; it is not an extra tool-authorization policy.",
+    "Interactive first-message titles observed; first-file-edit/fallback title variants not independently established.",
+    "Raw TUI Escape on Linux PTY only; no Windows terminal certification.",
+    "No subscription credentials, account-ban guarantee, provider invoice or exhaustive closed/hosted Factory callgraph claim."
+  ],
+  "validation": {
+    "unitTests": "12 tests across generate-droid and interactive-proof passed",
+    "typecheck": "npx tsc --noEmit passed"
+  }
+}

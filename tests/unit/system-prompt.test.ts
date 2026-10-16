@@ -60,7 +60,7 @@ describe("T3-style system prompt", () => {
     const input = request({ role });
     const host = "You are a general-purpose worker.\nSubagent contract: Complete only the assigned readiness check, then return findings to the parent.";
     input.request.system = host;
-    expect(buildHostContext(input)).toBe(`Host context (dynamic):\n${host}`);
+    expect(buildHostContext(input).split("\n\nAllowed native tool equivalents")[0]).toBe(`Host context (dynamic):\n${host}`);
     expect(input.role).toBe(role);
   });
 
@@ -91,11 +91,14 @@ describe("T3-style system prompt", () => {
     input.session.model = input.request.model;
     input.session.toolNames = [];
 
-    expect(buildHostContext(input)).toBe(`Host context (dynamic):\n${host}`);
+    expect(buildHostContext(input).split("\n\nAllowed native tool equivalents")[0]).toBe(`Host context (dynamic):\n${host}`);
     expect(buildDynamicUserContent(input, "/work")).toEqual([
       { type: "text", text: subject },
-      { type: "text", text: `Host context (dynamic):\n${host}\n\nWorking directory (Claude Code cwd): /work` },
+      { type: "text", text: buildHostContext(input, "/work") },
     ]);
+    expect(buildHostContext(input, "/work")).not.toContain("Droid role:");
+    expect(buildHostContext(input, "/work")).toContain("Allowed native tool equivalents for this host request: none.");
+    expect(buildHostContext(input, "/work")).toContain("Working directory (Claude Code cwd): /work");
     expect(input.request.tools).toEqual([]);
   });
 
@@ -113,7 +116,7 @@ describe("T3-style system prompt", () => {
     const input = request();
     input.request.system = undefined;
     input.request.tools = [{ name: "Task", input_schema: { type: "object", properties: {} } }];
-    expect(buildHostContext(input)).toBe("Droid role: orchestrator.");
+    expect(buildHostContext(input).split("\n\nAllowed native tool equivalents")[0]).toBe("Droid role: orchestrator.");
     input.request.tools.push({ name: "ProposeMission", input_schema: { type: "object", properties: {} } });
     expect(buildHostContext(input)).toContain("You are the Droid Mission orchestrator");
     expect(buildHostContext(input)).not.toContain("StartMissionRun");

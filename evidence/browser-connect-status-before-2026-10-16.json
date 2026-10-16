@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-10-16T01:33:34.469Z",
+  "scope": "Real Chromium /control DOM connect, refresh and disconnect. No model request is made.",
+  "connectOnly": true,
+  "driver": "Playwright locator.fill/click; passive browser response listeners; frozen polling in one stale tab only for cancellation race",
+  "directory": "/workspace/work/factory-cc-prep/repo/evidence/local/verify-control-2026-10-16T01-33-34-463Z",
+  "upstream": {
+    "baseUrl": "https://open.bigmodel.cn/api/anthropic",
+    "model": "glm-5.2"
+  },
+  "actions": [],
+  "screenshots": [
+    {
+      "name": "01-login",
+      "path": "evidence/control-browser-2026-10-16T01-33-34-463Z/01-login.png",
+      "sha256": "b59bf5e0206c526e2b74e42424f833d440626b8333c99f293a4fd548820820d9"
+    },
+    {
+      "name": "02-connected",
+      "path": "evidence/control-browser-2026-10-16T01-33-34-463Z/02-connected.png",
+      "sha256": "3a35177b3feb8b9133035e17e78e0bc4c298741771a017df401e54bc24f855a2"
+    }
+  ],
+  "browserRequests": [
+    {
+      "method": "GET",
+      "path": "/internal/approvals",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/internal/sessions",
+      "status": 200
+    }
+  ],
+  "browserVersion": "154.0.8037.57",
+  "connectionStatus": "正在连接…",
+  "error": "Connected workspace still displays an unresolved connection status",
+  "processCleanup": {
+    "supported": true,
+    "observedProcessCount": 9,
+    "terminatedProcessCount": 0,
+    "remainingProcessIds": [],
+    "complete": true
+  },
+  "workspaceRemoved": true,
+  "checks": {
+    "actualBrowserConnected": true,
+    "connectedStatusResolved": false,
+    "disconnectClearsInputAndCards": false,
+    "processCleanupComplete": true,
+    "workspaceRemoved": true
+  },
+  "status": "FAIL",
+  "expectedFailure": "Regression reproduction before UI patch: successful authenticated workspace remains at 正在连接…. This failure does not invalidate the separately recorded approval/cancellation gates.",
+  "modelRequestsStarted": 0
+}

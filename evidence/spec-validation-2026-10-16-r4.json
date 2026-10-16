@@ -1,0 +1,283 @@
+{
+  "feature": "spec",
+  "status": "PASS",
+  "startedAt": "2026-10-16T00:59:46.315Z",
+  "authentication": {
+    "provider": "glm",
+    "label": "https://open.bigmodel.cn/api/anthropic",
+    "baseUrl": "https://open.bigmodel.cn/api/anthropic",
+    "model": "glm-5.2",
+    "tokenEnv": "READINESS_MODEL_API_KEY",
+    "authHeader": "x-api-key",
+    "subscriptionCredentialsRead": false
+  },
+  "exclusions": [
+    "Anthropic subscription billing or account-safety guarantees",
+    "different underlying models for Factory aliases",
+    "all possible custom droids"
+  ],
+  "exitCode": 0,
+  "checks": {
+    "droidSucceeded": true,
+    "independentFileResult": true,
+    "inputUnchanged": true,
+    "authenticatedBridgeTraffic": true,
+    "nativeReadCompleted": true,
+    "nativeWriteCompleted": true,
+    "runtimeDrained": true,
+    "nativeSessionsPresent": true,
+    "realFactoryExitSpecMode": true,
+    "factoryApprovalObserved": true,
+    "finalCompletionMarker": true
+  },
+  "observations": {
+    "result": {
+      "type": "result",
+      "subtype": "success",
+      "is_error": false,
+      "duration_ms": 34404,
+      "num_turns": 2,
+      "result": "[Write] Write /tmp/relay-e2e-ws-aeYn3n/spec-result.json\n\n[Read] Read /tmp/relay-e2e-ws-aeYn3n/spec-result.json\nSPEC_IMPLEMENTED_OK\n\nSpec approved via ExitSpecMode and implemented: `spec-result.json` written with `{\"nonce\":\"edea2d50dd119943e9c1b35c\",\"sum\":46}` (17 + 29 = 46), verified by re-reading the file. `input.json` was not modified.",
+      "session_id": "0d0f9575-d754-429c-9585-8168d661dc2b",
+      "usage": {
+        "input_tokens": 7041,
+        "output_tokens": 677,
+        "cache_read_input_tokens": 112000,
+        "cache_creation_input_tokens": 0,
+        "factory_credits": 0,
+        "ttft_ms": 6337.5
+      }
+    },
+    "independentFileResult": {
+      "nonce": "edea2d50dd119943e9c1b35c",
+      "sum": 46
+    },
+    "tools": [
+      {
+        "name": "Read",
+        "id": "call_fb7f2709d3464c37ae695e5e",
+        "input": {
+          "file_path": "/tmp/relay-e2e-ws-aeYn3n/input.json"
+        },
+        "sessionId": "9fd65a60-e525-4e30-b1a7-c0a10f54791b",
+        "resultSeen": true,
+        "isError": false
+      },
+      {
+        "name": "mcp__droid__ExitSpecMode",
+        "id": "call_70674c2ad59546b1b2effc3a",
+        "input": {
+          "plan": "Write `/tmp/relay-e2e-ws-aeYn3n/spec-result.json` containing exactly:\n\n```json\n{\"nonce\":\"edea2d50dd119943e9c1b35c\",\"sum\":46}\n```\n\nSteps:\n1. Read values from `input.json` (done: nonce `edea2d50dd119943e9c1b35c`, a=17, b=29).\n2. Create `spec-result.json` with `{\"nonce\": <nonce>, \"sum\": <a+b>}` = `{\"nonce\":\"edea2d50dd119943e9c1b35c\",\"sum\":46}`.\n3. Leave `input.json` untouched; no other files or state change.\n\nVerification: re-read `spec-result.json` to confirm exact content.",
+          "title": "Write spec-result.json from input.json"
+        },
+        "sessionId": "9fd65a60-e525-4e30-b1a7-c0a10f54791b",
+        "resultSeen": true,
+        "isError": false
+      },
+      {
+        "name": "Write",
+        "id": "call_cb3fbf1827ca438baaf92594",
+        "input": {
+          "file_path": "/tmp/relay-e2e-ws-aeYn3n/spec-result.json",
+          "content": "{\"nonce\":\"edea2d50dd119943e9c1b35c\",\"sum\":46}\n"
+        },
+        "sessionId": "9fd65a60-e525-4e30-b1a7-c0a10f54791b",
+        "resultSeen": true,
+        "isError": false
+      },
+      {
+        "name": "Read",
+        "id": "call_abec0deac6c4484f8cab7e52",
+        "input": {
+          "file_path": "/tmp/relay-e2e-ws-aeYn3n/spec-result.json"
+        },
+        "sessionId": "9fd65a60-e525-4e30-b1a7-c0a10f54791b",
+        "resultSeen": true,
+        "isError": false
+      }
+    ],
+    "hookModes": [
+      {
+        "at": "2026-10-16T00:59:46.656Z",
+        "hook": "SessionStart",
+        "sessionId": "0d0f9575-d754-429c-9585-8168d661dc2b",
+        "permissionMode": "spec"
+      },
+      {
+        "at": "2026-10-16T01:00:03.714Z",
+        "hook": "PreToolUse",
+        "sessionId": "0d0f9575-d754-429c-9585-8168d661dc2b",
+        "permissionMode": "auto-high",
+        "toolName": "ExitSpecMode"
+      },
+      {
+        "at": "2026-10-16T01:00:03.777Z",
+        "hook": "PostToolUse",
+        "sessionId": "0d0f9575-d754-429c-9585-8168d661dc2b",
+        "permissionMode": "auto-high",
+        "toolName": "ExitSpecMode"
+      },
+      {
+        "at": "2026-10-16T01:00:21.208Z",
+        "hook": "SessionEnd",
+        "sessionId": "0d0f9575-d754-429c-9585-8168d661dc2b",
+        "permissionMode": "auto-high"
+      }
+    ],
+    "requests": [
+      {
+        "at": "2026-10-16T00:59:46.979Z",
+        "session": "sess_6c585821-2fb7-4f5b-ae99-55728bc24439",
+        "model": "relay-chat"
+      },
+      {
+        "at": "2026-10-16T01:00:03.900Z",
+        "session": "sess_6c585821-2fb7-4f5b-ae99-55728bc24439",
+        "model": "relay-chat"
+      }
+    ],
+    "sessions": [
+      {
+        "bridgeSessionId": "sess_6c585821-2fb7-4f5b-ae99-55728bc24439",
+        "role": "chat",
+        "state": "IDLE",
+        "model": "relay-chat",
+        "historyHash": "f7d1edb7c4b4d845245c058d124161abbb77dfa94f78c1a176aa95a482974f0a",
+        "contextHash": "6e2ae66cd6ef4c3b6076cd61b08884dc81ab8d9591255b2138aeda835fd45997",
+        "requestMessageHashes": [
+          "b02bdeb7b434668af7a3738f5635d9cbefc8d2ea768528efd7095caba3bd8bff",
+          "c3db183e6b9dde94e662fd21e2aaa83c77aab413ea86e666d04b04481f955f5a",
+          "319c1c52d8736168f96e981d0f0b09cfccdb23ef746a4ef20126ac4e2b1ddb86",
+          "835ade5543387409dc6e0f35b4e2f92a9be99c6003c74ef2b61e6c8863ba6b3b",
+          "656a4cd3af82a87a700c2625a512fb2c6a34fbb21e8f9f00bb2205b38e5e4fdd",
+          "03b8db703c21680a50db0fa873135d0e0d82fe860515820e0c3ce95ac23f2375"
+        ],
+        "historyMessageHashes": [
+          "b02bdeb7b434668af7a3738f5635d9cbefc8d2ea768528efd7095caba3bd8bff",
+          "c3db183e6b9dde94e662fd21e2aaa83c77aab413ea86e666d04b04481f955f5a",
+          "319c1c52d8736168f96e981d0f0b09cfccdb23ef746a4ef20126ac4e2b1ddb86",
+          "835ade5543387409dc6e0f35b4e2f92a9be99c6003c74ef2b61e6c8863ba6b3b",
+          "656a4cd3af82a87a700c2625a512fb2c6a34fbb21e8f9f00bb2205b38e5e4fdd",
+          "03b8db703c21680a50db0fa873135d0e0d82fe860515820e0c3ce95ac23f2375",
+          "3c0c0cb79b4e200bdfa838f73099795a9acb9edf2eb3318e58cad0376b853cdf"
+        ],
+        "toolNames": [
+          "Read",
+          "LS",
+          "Execute",
+          "Edit",
+          "Grep",
+          "Glob",
+          "Create",
+          "ExitSpecMode",
+          "TaskOutput",
+          "TaskStop",
+          "ToolSearch",
+          "Skill",
+          "Task"
+        ],
+        "createdAt": "2026-10-16T00:59:46.976Z",
+        "updatedAt": "2026-10-16T01:00:21.271Z",
+        "pendingToolIds": [],
+        "cancelRequested": false,
+        "notes": [
+          "factory-session-ended"
+        ],
+        "usage": {
+          "input_tokens": 827,
+          "output_tokens": 199,
+          "cache_creation_input_tokens": 0,
+          "cache_read_input_tokens": 71424,
+          "status": "reported",
+          "coverage": "partial",
+          "knownFields": [
+            "input_tokens",
+            "output_tokens",
+            "cache_read_input_tokens"
+          ],
+          "scope": "provider_messages",
+          "estimated": true,
+          "modelRequests": 3
+        },
+        "factorySessionId": "0d0f9575-d754-429c-9585-8168d661dc2b",
+        "factoryCwd": "/tmp/relay-e2e-ws-aeYn3n",
+        "hostEnded": "resumable",
+        "sdkSessionId": "9fd65a60-e525-4e30-b1a7-c0a10f54791b"
+      }
+    ],
+    "runtime": {
+      "kind": "sdk",
+      "authMode": "byok",
+      "permissionMode": "bypass",
+      "prompt": {
+        "systemPrompt": "preset:claude_code + stable append",
+        "dynamicPlacement": "user input on initial turn or context change",
+        "tools": "preset:claude_code built-ins + Droid-exclusive MCP"
+      },
+      "tools": "preset:claude_code + droid-exclusive MCP",
+      "input": "persistent SDK streaming input",
+      "includePartialMessages": true,
+      "approvalChannel": "external controller",
+      "activeNativeSessions": 0,
+      "activeNativeTurns": 0,
+      "pendingHostCalls": 0,
+      "pendingApprovals": 0,
+      "fatalErrors": [],
+      "overridesAnthropicEnv": true,
+      "upstream": {
+        "provider": "glm",
+        "label": "https://open.bigmodel.cn/api/anthropic",
+        "baseUrl": "https://open.bigmodel.cn/api/anthropic",
+        "model": "glm-5.2",
+        "tokenEnv": "READINESS_MODEL_API_KEY",
+        "authHeader": "x-api-key"
+      },
+      "control": {
+        "pendingApprovals": 0,
+        "failures": [],
+        "activeHostSessions": 0,
+        "boundNativeSessions": 0
+      }
+    }
+  },
+  "cleanup": {
+    "processes": {
+      "supported": true,
+      "observedProcessCount": 15,
+      "terminatedProcessCount": 0,
+      "remainingProcessIds": [],
+      "complete": true
+    },
+    "removed": [
+      true,
+      true,
+      true
+    ],
+    "errors": [],
+    "retained": [
+      {
+        "name": "action.json",
+        "sha256": "c6a26f15928c8fb92fd3ebbaa3ebc07caa1b4c0c1d7d5c4522959cf039708b64",
+        "unchanged": true
+      },
+      {
+        "name": "requests.json",
+        "sha256": "21eaba551039e1d3fe10d0ec2d8252a267bf2344c3ac3253e34b1486febf846e",
+        "unchanged": true
+      },
+      {
+        "name": "native-transcript.json",
+        "sha256": "f246969e3f32f0482a3d4d179fbb935892ec614832f7c15169089a746a6e2687",
+        "unchanged": true
+      },
+      {
+        "name": "snapshot.json",
+        "sha256": "c9aef1d85ce36802ef0d807812409c0840496b14e971f7c1a7870bef444c74da",
+        "unchanged": true
+      }
+    ],
+    "complete": true
+  },
+  "finishedAt": "2026-10-16T01:00:21.337Z",
+  "evidenceDirectory": "/workspace/work/factory-cc-prep/repo/evidence/local/verify-spec-2026-10-16T00-59-46-314Z-238b03"
+}

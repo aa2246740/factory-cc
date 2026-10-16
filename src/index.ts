@@ -4,7 +4,7 @@ import { pathToFileURL } from "node:url";
 import { loadConfig } from "./config.js";
 import { createBridgeApp, listen, type BridgeApp } from "./http/app.js";
 import { createLogger, type Logger } from "./logging.js";
-import { publicSelection, selectUpstream, selectionFromConfig } from "./upstream/providers.js";
+import { publicSelection, selectionFromConfig } from "./upstream/providers.js";
 
 export function installShutdownHandlers(
   app: Pick<BridgeApp, "close" | "server">,
@@ -60,14 +60,13 @@ async function main(): Promise<void> {
     );
     logger.info("upstream", { authMode: "subscription", overridesAnthropicEnv: false });
   } else if (config.mode === "sdk") {
-    const preset = selectionFromConfig({
+    const selected = selectionFromConfig({
       baseUrl: config.upstreamBaseUrl,
       model: config.upstreamModel,
       tokenEnv: config.upstreamTokenEnv,
     });
-    const selected = preset ?? (await selectUpstream()).selection;
     if (!selected) {
-      throw new Error("BRIDGE_MODE=sdk needs a working MiniMax/GLM/OpenRouter BYOK probe");
+      throw new Error("BYOK requires explicit BRIDGE_UPSTREAM_BASE_URL, BRIDGE_UPSTREAM_MODEL and BRIDGE_UPSTREAM_TOKEN_ENV; automatic credential discovery is disabled.");
     }
     config.upstreamBaseUrl = selected.provider.baseUrl;
     config.upstreamModel = selected.provider.model;

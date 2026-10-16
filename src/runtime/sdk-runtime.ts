@@ -11,10 +11,11 @@ import { BridgeError } from "../types.js";
 import type { Logger } from "../logging.js";
 import { claudeToolTraceDetail, isDroidMcpName, selectDroidMcpTools } from "./droid-tools.js";
 import { DroidMcpCatalog, StableDroidToolNames } from "./droid-mcp-catalog.js";
+import { hostAllowsAnyTools, nativeToolAllowed } from "./native-tool-policy.js";
 import { buildDynamicUserContent, buildHostContext, buildInitialUserContent, buildPresetSystemPrompt, describePromptLayout } from "./system-prompt.js";
 import { UsageLedger } from "./usage.js";
 import type { BridgeRuntime, RuntimeApprovalRequest, RuntimeControl, RuntimeEvent, RuntimeHostCall, RuntimeHostCompletion, RuntimeHostEnd, RuntimePermissionDecision, RuntimeRequest, RuntimeTurn, StreamSink } from "./types.js";
-import { publicSelection, sdkEnv, selectUpstream, selectionFromConfig, type UpstreamSelection } from "../upstream/providers.js";
+import { publicSelection, sdkEnv, selectionFromConfig, type UpstreamSelection } from "../upstream/providers.js";
 
 /** Kept narrow so tests can inject a deterministic SDK without starting a CLI. */
 export interface SdkHandle {
@@ -72,9 +73,10 @@ interface PendingTurn {
   resolve(turn: RuntimeTurn): void;
   reject(error: Error): void;
 }
-interface DroidCall { id: string; name: string; input: unknown }
+interface DroidCall { id: string; name: string; input: unknown; mcpName?: string }
 interface HandlerArrival {
   name: string;
+  mcpName?: string;
   input: Record<string, unknown>;
   callId?: string;
   resolve(call: DroidCall): void;
@@ -242,10 +244,7 @@ export class SdkRuntime implements BridgeRuntime {
     this.selectionPromise = (async () => {
       const configured = selectionFromConfig({ baseUrl: this.config.upstreamBaseUrl, model: this.config.upstreamModel, tokenEnv: this.config.upstreamTokenEnv });
       if (configured) return (this.selection = configured);
-      const { selection, attempts } = await selectUpstream();
-      this.logger.info("upstream-select", { attempts: attempts.map(({ provider, model, ok, status }) => ({ provider, model, ok, status })) });
-      if (!selection) throw new BridgeError(401, "blocked_auth", "no usable BYOK upstream");
-      return (this.selection = selection);
+      throw new BridgeError(401, "blocked_auth", "BYOK requires explicit BRIDGE_UPSTREAM_BASE_URL, BRIDGE_UPSTREAM_MODEL and BRIDGE_UPSTREAM_TOKEN_ENV; automatic credential discovery is disabled.");
     })();
     try { return await this.selectionPromise; }
     finally { this.selectionPromise = undefined; }
@@ -434,7 +433,7 @@ export class SdkRuntime implements BridgeRuntime {
     if (await live.catalog.update(selectDroidMcpTools(input.request.tools))) {
       await this.waitForCatalogVisibility(live);
       live.events.push({ at: now(), type: "droid_catalog_updated", data: {
-        tools: live.catalog.definitions().map((tool) => tool.name), visibility: "cli_tool_names_confirmed", schemaVisibility: "server_validated_cli_version_unavailable",
+        tools: live.catalog.definitions().map((tool) => tool.name), visibility: "cli_tool_names_confirmed", schemaVisibility: "revision_name_confirmed",
       } });
     }
   }
@@ -498,18 +497,18 @@ export class SdkRuntime implements BridgeRuntime {
     live.names = names;
     live.policyKey = queryPolicy(input, this.config);
     const server = sdk.createSdkMcpServer({ name: "droid", version: "0.1.0", tools: [], alwaysLoad: true });
-    const catalog = new DroidMcpCatalog(server, async (original, args, extra) => {
+    const catalog = new DroidMcpCatalog(server, async (original, args, extra, mcpName) => {
         if (live.terminal) throw live.terminal;
         if (live.hostEnding) throw new BridgeError(409, "host_session_ended", live.hostEnding);
         if (!live.catalog?.has(original)) throw new BridgeError(409, "tool_not_advertised", `Droid no longer advertises ${original}`);
         try {
           // Only this handler proves the native CLI and MCP server accepted the
           // invocation. Assistant tool_use output alone is merely a proposal.
-          const call = await this.claimCall(live, original, args, extractCallId(extra));
+          const call = await this.claimCall(live, original, args, extractCallId(extra), mcpName);
           if (live.terminal) throw live.terminal;
           if (live.retiredCandidates.has(call.id)) throw new BridgeError(409, "sdk_tool_rejected", "The native SDK already completed this tool invocation");
           if (!live.catalog?.has(original)) throw new BridgeError(409, "tool_not_advertised", `Droid no longer advertises ${original}`);
-          live.mailbox.registerCall({ callId: call.id, originalName: original, mcpName: names.toMcp(original), input: call.input });
+          live.mailbox.registerCall({ callId: call.id, originalName: original, mcpName: mcpName ?? names.toMcp(original), input: call.input });
           live.pending.set(call.id, call);
           let consumed!: () => void;
           live.hostResultConsumptions.set(call.id, { promise: new Promise<void>((resolve) => { consumed = resolve; }), resolve: () => consumed() });
@@ -555,11 +554,12 @@ export class SdkRuntime implements BridgeRuntime {
     // native history. Check at invocation, including under native bypass mode.
     options.hooks = { PreToolUse: [{ hooks: [async (hook: { tool_name?: string; tool_use_id?: string }) => {
         if (live.terminal) return { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: "The host session has ended." } };
-        if (!hostDisablesTools(live.current)) return {};
-        const data = { sessionId: input.session.bridgeSessionId, sdkSessionId: live.sdkSessionId, toolName: hook.tool_name, toolUseId: hook.tool_use_id };
+        const denial = toolAccessDenial(live, hook.tool_name, this.control?.factoryPermissionMode?.(input.session.bridgeSessionId));
+        if (!denial) return {};
+        const data = { sessionId: input.session.bridgeSessionId, sdkSessionId: live.sdkSessionId, toolName: hook.tool_name, toolUseId: hook.tool_use_id, reason: denial };
         live.events.push({ at: now(), type: "host_tool_access_denied", data });
         this.logger.info("host_tool_access_denied", data);
-        return { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: "BRIDGE_HOST_TOOL_ACCESS_NONE: This host request explicitly permits no tools. Answer using the supplied conversation only." } };
+        return { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: denial } };
       }] }] };
     if (selection) options.model = selection.provider.model;
     else if (process.env.ANTHROPIC_MODEL) options.model = process.env.ANTHROPIC_MODEL;
@@ -578,7 +578,8 @@ export class SdkRuntime implements BridgeRuntime {
 
   private async canUseTool(live: LiveSdk, name: string, input: Record<string, unknown>, context: NativePermissionContext = {}): Promise<RuntimePermissionDecision> {
     if (live.terminal) return { behavior: "deny", message: "Session is closed" };
-    if (hostDisablesTools(live.current)) return { behavior: "deny", message: "This host request explicitly permits no tools" };
+    const denial = toolAccessDenial(live, name, live.current && this.control?.factoryPermissionMode?.(live.current.session.bridgeSessionId));
+    if (denial) return { behavior: "deny", message: denial };
     const control = this.control;
     if (!control || !live.current) {
       live.events.push({ at: now(), type: "permission_denied", data: { toolName: name, reason: "approval_channel_unavailable" } });
@@ -612,6 +613,8 @@ export class SdkRuntime implements BridgeRuntime {
       if (live.terminal || live.queryEpoch !== epoch || approval.signal.aborted || this.control !== control) {
         return { behavior: "deny", message: "Native approval is no longer live" };
       }
+      const currentDenial = toolAccessDenial(live, name, live.current && this.control?.factoryPermissionMode?.(live.current.session.bridgeSessionId));
+      if (currentDenial) return { behavior: "deny", message: currentDenial };
       if (!decision || (decision.behavior !== "allow" && decision.behavior !== "deny")) {
         return { behavior: "deny", message: "The approval controller returned an invalid decision" };
       }
@@ -632,7 +635,7 @@ export class SdkRuntime implements BridgeRuntime {
     }
   }
 
-  private claimCall(live: LiveSdk, name: string, input: Record<string, unknown>, callId?: string): Promise<DroidCall> {
+  private claimCall(live: LiveSdk, name: string, input: Record<string, unknown>, callId?: string, mcpName?: string): Promise<DroidCall> {
     if (live.terminal) return Promise.reject(live.terminal);
     if (callId && (live.claimedHandlers.has(callId) || live.retiredCandidates.has(callId))) {
       return Promise.reject(new BridgeError(409, "duplicate_tool_handler", "The SDK tool invocation was already handled or rejected"));
@@ -640,7 +643,7 @@ export class SdkRuntime implements BridgeRuntime {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => arrival.reject(new BridgeError(504, "sdk_tool_handoff_timeout", `No matching SDK tool_use arrived for ${name}`)), Math.min(this.config.requestTimeoutMs, this.config.toolWaitMs));
       const arrival: HandlerArrival = {
-        name, input, callId,
+        name, input, callId, mcpName,
         resolve: (call) => { clearTimeout(timer); live.handlerArrivals.delete(arrival); resolve(call); },
         reject: (error) => { clearTimeout(timer); live.handlerArrivals.delete(arrival); reject(error); },
       };
@@ -654,9 +657,10 @@ export class SdkRuntime implements BridgeRuntime {
       const candidates = [...live.candidates.values()].filter((call) =>
         !live.claimedHandlers.has(call.id) && call.name === arrival.name
         && (!arrival.callId || call.id === arrival.callId)
+        && (!arrival.mcpName || call.mcpName === arrival.mcpName)
         && canonicalJson(call.input) === canonicalJson(arrival.input));
       const rivals = [...live.handlerArrivals].filter((other) => other !== arrival && !other.callId && !arrival.callId
-        && other.name === arrival.name && canonicalJson(other.input) === canonicalJson(arrival.input));
+        && other.name === arrival.name && other.mcpName === arrival.mcpName && canonicalJson(other.input) === canonicalJson(arrival.input));
       if (candidates.length > 1 || (candidates.length && rivals.length)) {
         const error = new BridgeError(409, "ambiguous_tool_call", `Cannot safely associate the SDK callback for ${arrival.name} with one tool call`);
         this.stop(live, error);
@@ -717,15 +721,21 @@ export class SdkRuntime implements BridgeRuntime {
           const uses = extractToolUses(message);
           for (const use of uses) {
             if (isDroidMcpName(use.name)) {
+              // The official MCP CallToolRequest parser drops this root key.
+              // Reject the original proposal before joining its mutated handler
+              // arguments; never wait for a match or forward altered parameters.
+              if (use.input && typeof use.input === "object" && Object.hasOwn(use.input, "__proto__")) {
+                throw new BridgeError(422, "unsupported_tool_argument", "The official MCP transport cannot preserve a root __proto__ argument");
+              }
               const bare = use.name.replace(/^mcp__droid__/, "");
               const original = live.names?.toOriginal(bare);
               // A stale/unknown proposal can still be rejected by the native
               // tool runner and corrected by the model. It grants no authority.
-              if (!original || (!live.catalog?.has(original) && !live.mailbox.hasCall(use.id))) continue;
+              if (!original || (!live.catalog?.hasVersion(original, bare) && !live.mailbox.hasCall(use.id))) continue;
               const published = live.mailbox.getCall(use.id);
               if (published && (published.originalName !== original || canonicalJson(published.input) !== canonicalJson(use.input))) throw new BridgeError(409, "conflicting_sdk_tool", "SDK reused a published tool id for different arguments");
               if (!live.claimedHandlers.has(use.id) && !live.retiredCandidates.has(use.id)) {
-                const call = { ...use, name: original };
+                const call = { ...use, name: original, mcpName: bare };
                 const previous = live.candidates.get(use.id);
                 if (previous && (previous.name !== call.name || canonicalJson(previous.input) !== canonicalJson(call.input))) throw new BridgeError(409, "conflicting_sdk_tool", "SDK reused a tool id for different arguments");
                 live.candidates.set(use.id, call);
@@ -897,9 +907,20 @@ function mcpContent(content: string | ContentBlock[]): Record<string, unknown>[]
 function queryPolicy(input: RuntimeRequest, config: BridgeConfig): string {
   return JSON.stringify({ model: input.request.model, role: input.role, cwd: resolveCwd(input, config), permission: config.permissionMode });
 }
-function hostDisablesTools(input?: RuntimeRequest): boolean {
-  const choice = input?.request.tool_choice;
-  return input?.request.tools?.length === 0 || Boolean(choice && typeof choice === "object" && !Array.isArray(choice) && choice.type === "none");
+function toolAccessDenial(live: LiveSdk, name: string | undefined, factoryPermissionMode?: string): string | undefined {
+  const request = live.current?.request;
+  if (!hostAllowsAnyTools(request)) return "BRIDGE_HOST_TOOL_ACCESS_NONE: This host request permits no tools. Answer using the supplied conversation only.";
+  if (name?.startsWith("mcp__droid__")) {
+    const mcpName = name.slice("mcp__droid__".length);
+    const original = live.names?.toOriginal(mcpName);
+    if (original && request?.tools?.some((tool) => tool.name === original) && live.catalog?.hasVersion(original, mcpName)) return;
+  } else if (nativeToolAllowed(name, request)) {
+    if ((factoryPermissionMode ?? live.current?.factoryPermissionMode) === "spec" && !["Read", "Glob", "Grep", "LS"].includes(name!)) {
+      return "BRIDGE_FACTORY_SPEC_READ_ONLY: Factory spec mode permits native read tools only. Propose the plan through Factory and wait for its permission transition before executing changes.";
+    }
+    return;
+  }
+  return `BRIDGE_HOST_TOOL_NOT_ADVERTISED: ${name ?? "Unknown tool"} is not authorized by the current host tool set. Use only its advertised native equivalents or Factory MCP tools; do not work around this restriction.`;
 }
 function resolveCwd(input: RuntimeRequest, config: BridgeConfig): string {
   const raw = input.headers["x-bridge-cwd"];

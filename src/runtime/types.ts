@@ -6,6 +6,8 @@ export interface RuntimeRequest {
   role: RoleTag;
   session: SessionRecord;
   headers: Record<string, string | string[] | undefined>;
+  /** Trusted host policy supplied by the controller, never raw Messages metadata. */
+  factoryPermissionMode?: string;
 }
 
 export interface RuntimeTurn {
@@ -55,6 +57,7 @@ export interface RuntimeApprovalRequest {
 
 export interface RuntimeControl {
   requestApproval(request: RuntimeApprovalRequest): Promise<RuntimePermissionDecision>;
+  factoryPermissionMode?(bridgeSessionId: string): string | undefined;
 }
 
 export interface RuntimeHostCall {

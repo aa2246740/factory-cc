@@ -31,11 +31,22 @@
     "test:g0": "tsx scripts/g0-airgap.ts",
     "evidence:pack": "tsx scripts/collect-evidence.ts",
     "tiny-tasks:dev": "npm --prefix fixtures/tiny-tasks run dev",
-    "tiny-tasks:test": "npm --prefix fixtures/tiny-tasks test"
+    "tiny-tasks:test": "npm --prefix fixtures/tiny-tasks test",
+    "generate-droid": "tsx scripts/generate-droid.ts",
+    "verify:spec": "tsx scripts/verify-spec-custom.ts --feature spec",
+    "verify:custom": "tsx scripts/verify-spec-custom.ts --feature custom",
+    "verify:context": "tsx scripts/verify-factory-context.ts",
+    "verify:native-schema": "tsx scripts/verify-native-schema.ts",
+    "verify:native-policy": "tsx scripts/verify-native-tool-policy.ts",
+    "verify:auxiliary": "tsx scripts/verify-auxiliary.ts",
+    "verify:mission": "tsx scripts/verify-mission-final.ts"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "0.3.300",
-    "zod": "^4.1.12"
+    "zod": "^4.1.12",
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1",
+    "@modelcontextprotocol/sdk": "^1.32.1"
   },
   "devDependencies": {
     "@types/node": "^22.13.10",

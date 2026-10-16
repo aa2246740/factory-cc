@@ -180,6 +180,9 @@ const script = String.raw`
         if (!sessionData.sessions.length) $('sessions').append(element('p', '当前没有会话。', 'muted'));
         sessionSnapshot = nextSessions;
       }
+      // Only the first successful refresh resolves the connection message.
+      // Later polls must preserve approval/cancellation success and errors.
+      if (!$('login').hidden) status('已连接。');
       $('login').hidden = true;
       $('workspace').hidden = false;
       $('updated').textContent = '更新于 ' + new Date().toLocaleTimeString();

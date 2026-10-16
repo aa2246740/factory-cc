@@ -39,12 +39,13 @@ describe("mutable official SDK MCP server", () => {
     await catalog.update([{ ...definition("FactoryFreshTool", "integer"), description: "Changed description" }]);
     const updated = (await client.listTools()).tools;
     expect(updated).toHaveLength(1);
-    expect(updated[0]).toMatchObject({ name: "FactoryFreshTool", description: "Changed description", inputSchema: { additionalProperties: false, properties: { value: { type: "integer" } } } });
-    const valid = await client.callTool({ name: "FactoryFreshTool", arguments: { value: 7 } });
+    expect(updated[0]).toMatchObject({ name: catalog.names.toMcp("FactoryFreshTool"), description: "Changed description", inputSchema: { additionalProperties: false, properties: { value: { type: "integer" } } } });
+    const valid = await client.callTool({ name: catalog.names.toMcp("FactoryFreshTool"), arguments: { value: 7 } });
     expect(valid.isError).not.toBe(true);
     expect(valid.content).toEqual([{ type: "text", text: '{"value":7}' }]);
-    const invalid = await client.callTool({ name: "FactoryFreshTool", arguments: { value: "old schema", extra: true } });
+    const invalid = await client.callTool({ name: catalog.names.toMcp("FactoryFreshTool"), arguments: { value: "old schema", extra: true } });
     expect(invalid.isError).toBe(true);
+    expect((await client.callTool({ name: "FactoryFreshTool", arguments: { value: 7 } })).isError).toBe(true);
     const removed = await client.callTool({ name: "ToolSearch", arguments: { value: "gone" } });
     expect(removed.isError).toBe(true);
   });
@@ -66,6 +67,25 @@ describe("mutable official SDK MCP server", () => {
     expect((await client.callTool({ name: "OldTool", arguments: { value: "new-call" } })).isError).toBe(true);
   });
 
+  it("keeps a live old-revision callback while preventing new invocations of its retired name", async () => {
+    let finish!: () => void;
+    const pending = new Promise<void>((resolve) => { finish = resolve; });
+    const entered = vi.fn();
+    const { catalog, client } = await connected([definition("ChangedTool")], async (_name, args) => {
+      entered(args);
+      if (args.value === "pending") await pending;
+      return { content: [{ type: "text", text: JSON.stringify(args) }] };
+    });
+    const oldCall = client.callTool({ name: "ChangedTool", arguments: { value: "pending" } });
+    await vi.waitFor(() => expect(entered).toHaveBeenCalledOnce());
+    await catalog.update([definition("ChangedTool", "integer")]);
+    expect((await client.callTool({ name: "ChangedTool", arguments: { value: "new stale call" } })).isError).toBe(true);
+    finish();
+    expect((await oldCall).content).toEqual([{ type: "text", text: '{"value":"pending"}' }]);
+    expect((await client.callTool({ name: catalog.names.toMcp("ChangedTool"), arguments: { value: 9 } })).content).toEqual([{ type: "text", text: '{"value":9}' }]);
+    expect(entered).toHaveBeenCalledTimes(2);
+  });
+
   it("can publish the first tool after connecting with an empty catalog", async () => {
     const { catalog, client } = await connected();
     await catalog.update([definition("FirstTool")]);
@@ -74,10 +94,64 @@ describe("mutable official SDK MCP server", () => {
 
   it("rejects an unsupported update before mutating the previous catalog", async () => {
     const { catalog, client } = await connected([definition("ExistingTool")]);
-    await expect(catalog.update([{ name: "Unsupported", input_schema: { type: "object", if: { required: ["x"] }, then: { required: ["y"] } } }])).rejects.toMatchObject({ code: "unsupported_tool_schema" });
+    await expect(catalog.update([{ name: "Unsupported", input_schema: { type: "object", unsupportedValidation: true } }])).rejects.toMatchObject({ code: "unsupported_tool_schema" });
     expect((await client.listTools()).tools.map((tool) => tool.name)).toEqual(["ExistingTool"]);
-    await expect(catalog.update([{ name: "RootUnion", input_schema: { oneOf: [{ type: "object", properties: { x: { type: "string" } } }, { type: "object", properties: { y: { type: "number" } } }] } }])).rejects.toMatchObject({ status: 422, code: "unsupported_tool_schema" });
+    await expect(catalog.update([{ name: "RootUnion", input_schema: { oneOf: [{ type: "string" }, { type: "number" }] } }])).rejects.toMatchObject({ status: 422, code: "unsupported_tool_schema" });
     expect((await client.listTools()).tools.map((tool) => tool.name)).toEqual(["ExistingTool"]);
+  });
+
+  it("advertises and enforces conditional and composed schemas through the real MCP transport", async () => {
+    const schema = { type: "object", properties: { mode: { enum: ["read", "write"] }, body: { type: "string" }, items: { type: "array", minItems: 2 } },
+      required: ["mode"], if: { properties: { mode: { const: "write" } } }, then: { required: ["body"] }, additionalProperties: false };
+    const { catalog, client } = await connected([{ name: "ConditionalTool", input_schema: schema }]);
+    expect((await client.listTools()).tools[0]?.inputSchema).toMatchObject(schema);
+    expect((await client.callTool({ name: "ConditionalTool", arguments: { mode: "write" } })).isError).toBe(true);
+    expect((await client.callTool({ name: "ConditionalTool", arguments: { mode: "read", items: [] } })).isError).toBe(true);
+    const args = { mode: "write", body: "unchanged" };
+    expect((await client.callTool({ name: "ConditionalTool", arguments: args })).content).toEqual([{ type: "text", text: JSON.stringify(args) }]);
+    expect(catalog.hasVersion("ConditionalTool", "ConditionalTool")).toBe(true);
+  });
+
+  it("preserves nested reserved JSON keys through official MCP validation", async () => {
+    const { client } = await connected([{ name: "OpenPayload", input_schema: { type: "object", properties: {} } }]);
+    const args = JSON.parse('{"payload":{"__proto__":{"marker":"keep"},"constructor":"ordinary data"},"constructor":"also data"}');
+    expect((await client.callTool({ name: "OpenPayload", arguments: args })).content).toEqual([{ type: "text", text: JSON.stringify(args) }]);
+  });
+
+  it("changes the visible revision for descriptions and schemas but ignores object-key order", async () => {
+    const initial = definition("VersionedTool");
+    const { catalog, client } = await connected([initial]);
+    const next = { ...initial, description: "A changed tool contract" };
+    await catalog.update([next]);
+    const revision = catalog.names.toMcp(initial.name);
+    expect(revision).not.toBe(initial.name);
+    expect(catalog.names.toOriginal(initial.name)).toBe(initial.name);
+    expect(catalog.names.toOriginal(revision)).toBe(initial.name);
+    expect(catalog.hasVersion(initial.name, initial.name)).toBe(false);
+    expect((await client.listTools()).tools.map(({ name }) => name)).toEqual([revision]);
+    expect(await catalog.update([{ input_schema: next.input_schema, description: next.description, name: next.name }])).toBe(false);
+    expect(catalog.names.toMcp(initial.name)).toBe(revision);
+  });
+
+  it("keeps the current revision when an idle native query recreates its MCP server", async () => {
+    const original = definition("ResumeTool");
+    const names = new StableDroidToolNames();
+    const create = async (tool: ToolDefinition) => {
+      const server = createSdkMcpServer({ name: "droid", version: "test", tools: [] });
+      const catalog = new DroidMcpCatalog(server, async () => ({ content: [] }), names);
+      await catalog.update([tool]);
+      return catalog;
+    };
+    await create(original);
+    expect(names.toMcp(original.name)).toBe(original.name);
+    await create(original);
+    expect(names.toMcp(original.name)).toBe(original.name);
+    const changed = definition("ResumeTool", "integer");
+    await create(changed);
+    const revision = names.toMcp(original.name);
+    expect(revision).not.toBe(original.name);
+    await create(changed);
+    expect(names.toMcp(original.name)).toBe(revision);
   });
 
   it("keeps encoded names deterministic and collision-safe across reordering and removal", () => {

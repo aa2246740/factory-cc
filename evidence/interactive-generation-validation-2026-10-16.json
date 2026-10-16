@@ -1,0 +1,476 @@
+{
+  "suite": "real-interactive-surfaces",
+  "status": "PASS_GENERATION_ONLY",
+  "startedAt": "2026-10-16T01:20:29.417Z",
+  "evidence": "/workspace/work/factory-cc-prep/repo/evidence/local/interactive-2026-10-16T01-20-29-415Z-15aec1",
+  "authentication": "isolated explicit BYOK; no subscription credential access",
+  "allFactoryModelCallsitesCovered": false,
+  "generator": {
+    "status": "PASS",
+    "unrequestedNativeToolCalls": 0,
+    "entryPoint": "/relay-droid",
+    "definition": "---\nname: \"relay-json-auditor\"\ndescription: \"Read-only JSON relay auditor for mutation-free pipeline steps: reads input.json using only Read/LS/Grep/Glob, computes sum = a + b, and replies with exactly {\\\"sum\\\": <a+b>, \\\"nonce\\\": <input.nonce>} as pure JSON — no file edits, no command execution, no prose; useful whenever a relay or audit stage must prove its output derives solely from the input file.\"\nmodel: \"inherit\"\ntools: [\"Read\",\"LS\",\"Grep\",\"Glob\"]\n---\n\nYou are `relay-json-auditor`, a strictly read-only JSON auditor for relay pipelines.\n\n## When you are useful\nYou are the trusted pass-through step in a pipeline: you take no actions, change nothing, and produce an output that is provably derived from `input.json` alone — a recomputed sum plus the input nonce echoed verbatim for correlation and integrity checking.\n\n## How to do the task\n1. Confirm the location of `input.json` in the current working directory (use `LS` or `Glob` if the path is not obvious).\n2. Read `input.json` with `Read`. It contains numeric fields `a` and `b`, and a field `nonce`.\n3. Compute `sum = a + b` exactly. Use plain arithmetic — no rounding, truncation, or reformatting beyond what JSON serialization requires.\n4. Reply with exactly one JSON object on a single line, and nothing else:\n\n   {\"sum\": <a + b>, \"nonce\": <input.nonce>}\n\n## Output rules\n- Your entire reply is the JSON object. No prose, no explanation, no headings, no code fences, no trailing commentary.\n- `sum` must equal `a + b` from the file you actually read.\n- `nonce` must be the input nonce echoed verbatim: same type, same characters, no re-encoding or normalization.\n- If `input.json` is missing, unreadable, malformed, or lacks any of `a`, `b`, or `nonce`, reply with exactly: {\"error\":\"invalid input\"} — still JSON only, never prose.\n\n## Hard constraints\n- Use only the read-only tools: `Read`, `LS`, `Grep`, `Glob`.\n- Never create, edit, or delete any file. Never execute commands, scripts, or shells. Do not attempt to use write or execution capabilities even if offered.\n- Never fabricate values: every field in your output must come from the file you read, and the nonce must match the input character-for-character.\n",
+    "immutableCapabilities": "model inherit; tools Read,LS,Grep,Glob"
+  },
+  "generatedDroidExecution": {
+    "status": "PASS",
+    "checks": {
+      "parentFactoryTask": true,
+      "awaited": true,
+      "taskResultSucceeded": true,
+      "factoryChildSessionIdPresent": true,
+      "distinctNativeChild": true,
+      "childTaskPromptMatches": true,
+      "nonceAbsentFromChildPrompt": true,
+      "childReadSucceeded": true,
+      "childFinalJsonCorrect": true,
+      "parentFinalJsonCorrect": true,
+      "parentNoNativeFileAccessDuringDelegation": true
+    },
+    "parentSdkSessionId": "083fb7fd-de12-407d-81e2-584337f26bc1",
+    "childSdkSessionId": "8d3ea4ce-0841-4ac1-b902-9a2e3fbc5296",
+    "factoryChildSessionId": "017dddae-11f3-45ed-a18b-f41d0836daf3",
+    "taskCallId": "call_858bca8c448542a9beab059a",
+    "childReadCallId": "call_cea3cc2c312a43c8a166d362",
+    "expected": {
+      "sum": 56,
+      "nonce": "ac2507ea92489eac31e70288"
+    },
+    "scope": "Parent did not access files during the delegation turn. Earlier generation-command turns may have read the fixture."
+  },
+  "command": {
+    "code": 0,
+    "stdout": "",
+    "stderr": "",
+    "timedOut": false,
+    "signal": null,
+    "processCleanup": {
+      "supported": true,
+      "observedProcessCount": 0,
+      "terminatedProcessCount": 0,
+      "remainingProcessIds": [],
+      "complete": true
+    }
+  },
+  "ptyExit": {
+    "exitStatus": 0,
+    "signalStatus": null
+  },
+  "requests": [
+    {
+      "at": "2026-10-16T01:20:34.006Z",
+      "method": "POST",
+      "path": "/v1/messages",
+      "role": "unknown",
+      "authOk": true,
+      "sessionHint": "sess_94975194-dd9b-4e43-9aa0-57f7805f8faa",
+      "model": "relay-droid-generator",
+      "stream": false,
+      "toolNames": [],
+      "messageCount": 1,
+      "notes": [
+        "new-session"
+      ]
+    },
+    {
+      "at": "2026-10-16T01:21:08.242Z",
+      "method": "POST",
+      "path": "/v1/messages",
+      "role": "chat",
+      "authOk": true,
+      "sessionHint": "sess_cde61e42-df21-4215-8cf8-d16b93bb9582",
+      "model": "relay-chat",
+      "stream": true,
+      "toolNames": [],
+      "messageCount": 1,
+      "notes": [
+        "new-session"
+      ]
+    },
+    {
+      "at": "2026-10-16T01:21:08.283Z",
+      "method": "POST",
+      "path": "/v1/messages",
+      "role": "chat",
+      "authOk": true,
+      "sessionHint": "sess_ed4e4cc7-633e-4c57-bf8f-568ff22d8feb",
+      "model": "relay-chat",
+      "stream": true,
+      "toolNames": [
+        "Read",
+        "LS",
+        "Execute",
+        "Edit",
+        "Grep",
+        "Glob",
+        "Create",
+        "ExitSpecMode",
+        "AskUser",
+        "TodoWrite",
+        "TaskOutput",
+        "TaskStop",
+        "ToolSearch",
+        "Skill",
+        "Task"
+      ],
+      "messageCount": 2,
+      "notes": [
+        "new-session"
+      ]
+    },
+    {
+      "at": "2026-10-16T01:21:17.219Z",
+      "method": "POST",
+      "path": "/v1/messages",
+      "role": "chat",
+      "authOk": true,
+      "sessionHint": "sess_ed4e4cc7-633e-4c57-bf8f-568ff22d8feb",
+      "model": "relay-chat",
+      "stream": true,
+      "toolNames": [
+        "Read",
+        "LS",
+        "Execute",
+        "Edit",
+        "Grep",
+        "Glob",
+        "Create",
+        "ExitSpecMode",
+        "AskUser",
+        "TodoWrite",
+        "TaskOutput",
+        "TaskStop",
+        "ToolSearch",
+        "Skill",
+        "Task"
+      ],
+      "messageCount": 4,
+      "notes": [
+        "history-prefix"
+      ]
+    },
+    {
+      "at": "2026-10-16T01:21:29.225Z",
+      "method": "POST",
+      "path": "/v1/messages",
+      "role": "chat",
+      "authOk": true,
+      "sessionHint": "sess_af3e1c06-23bb-4d24-b061-28c2c0869fa2",
+      "model": "relay-chat",
+      "stream": true,
+      "toolNames": [
+        "Read",
+        "LS",
+        "Grep",
+        "Glob",
+        "Skill"
+      ],
+      "messageCount": 3,
+      "notes": [
+        "new-session"
+      ]
+    },
+    {
+      "at": "2026-10-16T01:21:56.912Z",
+      "method": "POST",
+      "path": "/v1/messages",
+      "role": "chat",
+      "authOk": true,
+      "sessionHint": "sess_ed4e4cc7-633e-4c57-bf8f-568ff22d8feb",
+      "model": "relay-chat",
+      "stream": true,
+      "toolNames": [
+        "Read",
+        "LS",
+        "Execute",
+        "Edit",
+        "Grep",
+        "Glob",
+        "Create",
+        "ExitSpecMode",
+        "AskUser",
+        "TodoWrite",
+        "TaskOutput",
+        "TaskStop",
+        "ToolSearch",
+        "Skill",
+        "Task"
+      ],
+      "messageCount": 6,
+      "notes": [
+        "tool-use-id"
+      ]
+    }
+  ],
+  "sessions": [
+    {
+      "bridgeSessionId": "sess_94975194-dd9b-4e43-9aa0-57f7805f8faa",
+      "role": "unknown",
+      "state": "IDLE",
+      "model": "relay-droid-generator",
+      "historyHash": "aa22c6d53978c9f19947addf2e7c1f9d33844707fa1510c812690a069a940a8c",
+      "contextHash": "187b0827cc16079e27186b89794a727f2dab5465c8e1cb01401bd8db2c733756",
+      "requestMessageHashes": [
+        "2774dd6dddd204c245a81ee6f82c6c91e56a0d8d441f01075730771abc8fd8cc"
+      ],
+      "historyMessageHashes": [
+        "2774dd6dddd204c245a81ee6f82c6c91e56a0d8d441f01075730771abc8fd8cc",
+        "c4d3f3a909e9e5a564f4d33c63c4f32f51097971e8b776c61bf6417adb177c2c"
+      ],
+      "toolNames": [],
+      "createdAt": "2026-10-16T01:20:34.006Z",
+      "updatedAt": "2026-10-16T01:21:08.006Z",
+      "pendingToolIds": [],
+      "cancelRequested": false,
+      "notes": [],
+      "usage": {
+        "input_tokens": 3481,
+        "output_tokens": 2090,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 15232,
+        "status": "reported",
+        "coverage": "partial",
+        "knownFields": [
+          "input_tokens",
+          "output_tokens",
+          "cache_read_input_tokens"
+        ],
+        "scope": "provider_messages",
+        "estimated": true,
+        "modelRequests": 1
+      },
+      "sdkSessionId": "ca70860e-faf3-4dd4-abf0-d67d4b35f219"
+    },
+    {
+      "bridgeSessionId": "sess_cde61e42-df21-4215-8cf8-d16b93bb9582",
+      "role": "chat",
+      "state": "IDLE",
+      "model": "relay-chat",
+      "historyHash": "7042d76d81fbcf296b0dd576a8d5d435b143c8a599d8633baadc06a478e663ae",
+      "contextHash": "ecaa54358329648a6c5b664fdcd9c38f89567a9ef79fa4d21126c6f530ca8c89",
+      "requestMessageHashes": [
+        "ba653c19353cb8ed9d115f070fc0919d976f30b92dbf561061ce472607ba1f6a"
+      ],
+      "historyMessageHashes": [
+        "ba653c19353cb8ed9d115f070fc0919d976f30b92dbf561061ce472607ba1f6a",
+        "74ddb476290bc89e7df3774bcf11722448defed23372e13734047036bdbe83ed"
+      ],
+      "toolNames": [],
+      "createdAt": "2026-10-16T01:21:08.242Z",
+      "updatedAt": "2026-10-16T01:21:13.808Z",
+      "pendingToolIds": [],
+      "cancelRequested": false,
+      "notes": [],
+      "usage": {
+        "input_tokens": 3870,
+        "output_tokens": 8,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 15232,
+        "status": "reported",
+        "coverage": "partial",
+        "knownFields": [
+          "input_tokens",
+          "output_tokens",
+          "cache_read_input_tokens"
+        ],
+        "scope": "provider_messages",
+        "estimated": true,
+        "modelRequests": 1
+      },
+      "sdkSessionId": "869efb84-35f4-46d1-89eb-58fd2b26eb15"
+    },
+    {
+      "bridgeSessionId": "sess_ed4e4cc7-633e-4c57-bf8f-568ff22d8feb",
+      "role": "chat",
+      "state": "IDLE",
+      "model": "relay-chat",
+      "historyHash": "15092a67116ceb37f1e4126c16788dfc7b5eeb773cee40a452fd4bb648e0609a",
+      "contextHash": "ecaa54358329648a6c5b664fdcd9c38f89567a9ef79fa4d21126c6f530ca8c89",
+      "requestMessageHashes": [
+        "9d3b3ecc8196097ecb7802ccaa0520c94db94ccc77a30293c18a6b48987aec1c",
+        "ba653c19353cb8ed9d115f070fc0919d976f30b92dbf561061ce472607ba1f6a",
+        "6ba33dbb6dce47a956f677991dc5e87f58e5d77297d919960c04676364396b87",
+        "da419430313f98ec7c7dc7513e53f5d429adf3e7b0a3053cce537315f4ed226d",
+        "3fccf989e2ff1227ad4f2f17f04811a90cfea43fb64a7ebbd74280be0331913d",
+        "8ccfa9e10666afe5c04910c61f8baa8ddd7c74220c3edd35f050ecb2a19ad8a5"
+      ],
+      "historyMessageHashes": [
+        "9d3b3ecc8196097ecb7802ccaa0520c94db94ccc77a30293c18a6b48987aec1c",
+        "ba653c19353cb8ed9d115f070fc0919d976f30b92dbf561061ce472607ba1f6a",
+        "6ba33dbb6dce47a956f677991dc5e87f58e5d77297d919960c04676364396b87",
+        "da419430313f98ec7c7dc7513e53f5d429adf3e7b0a3053cce537315f4ed226d",
+        "3fccf989e2ff1227ad4f2f17f04811a90cfea43fb64a7ebbd74280be0331913d",
+        "8ccfa9e10666afe5c04910c61f8baa8ddd7c74220c3edd35f050ecb2a19ad8a5",
+        "e7958342f5a8a9990030bc34780d6547197cc9ce9e0427bbb5a1f41b01309b4c"
+      ],
+      "toolNames": [
+        "Read",
+        "LS",
+        "Execute",
+        "Edit",
+        "Grep",
+        "Glob",
+        "Create",
+        "ExitSpecMode",
+        "AskUser",
+        "TodoWrite",
+        "TaskOutput",
+        "TaskStop",
+        "ToolSearch",
+        "Skill",
+        "Task"
+      ],
+      "createdAt": "2026-10-16T01:21:08.283Z",
+      "updatedAt": "2026-10-16T01:22:06.226Z",
+      "pendingToolIds": [],
+      "cancelRequested": false,
+      "notes": [
+        "factory-session-ended"
+      ],
+      "usage": {
+        "input_tokens": 653,
+        "output_tokens": 164,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 25024,
+        "status": "reported",
+        "coverage": "partial",
+        "knownFields": [
+          "input_tokens",
+          "output_tokens",
+          "cache_read_input_tokens"
+        ],
+        "scope": "provider_messages",
+        "estimated": true,
+        "modelRequests": 1
+      },
+      "factorySessionId": "d0d46cfd-24a2-43be-a1e6-c1dfb281e592",
+      "factoryCwd": "/tmp/relay-e2e-ws-gKolhi",
+      "hostEnded": "resumable",
+      "sdkSessionId": "083fb7fd-de12-407d-81e2-584337f26bc1"
+    },
+    {
+      "bridgeSessionId": "sess_af3e1c06-23bb-4d24-b061-28c2c0869fa2",
+      "role": "chat",
+      "state": "IDLE",
+      "model": "relay-chat",
+      "historyHash": "5edf2297a6e7f2826161e21feb202be3b68ca2204e449dad0d48ada1f1946250",
+      "contextHash": "ecaa54358329648a6c5b664fdcd9c38f89567a9ef79fa4d21126c6f530ca8c89",
+      "requestMessageHashes": [
+        "f1e1469a5664d9d2f3f14e577453b5fb327c7c189a591c6b977a441d996090a0",
+        "ab6918f3fa1ba8154740b772c41e5212722d3d90970a000887413ccd2b75d9e6",
+        "8897e2498fc41e6937db7ab46acf45e04e375185a840d67683b85413960064e7"
+      ],
+      "historyMessageHashes": [
+        "f1e1469a5664d9d2f3f14e577453b5fb327c7c189a591c6b977a441d996090a0",
+        "ab6918f3fa1ba8154740b772c41e5212722d3d90970a000887413ccd2b75d9e6",
+        "8897e2498fc41e6937db7ab46acf45e04e375185a840d67683b85413960064e7",
+        "f2e2760a848cf2661c22cf24c003ccbe39373b5371193424fc1c3d73fdfc3912"
+      ],
+      "toolNames": [
+        "Read",
+        "LS",
+        "Grep",
+        "Glob",
+        "Skill"
+      ],
+      "createdAt": "2026-10-16T01:21:29.224Z",
+      "updatedAt": "2026-10-16T01:21:56.555Z",
+      "pendingToolIds": [],
+      "cancelRequested": false,
+      "notes": [
+        "factory-session-ended"
+      ],
+      "usage": {
+        "input_tokens": 19086,
+        "output_tokens": 421,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 22464,
+        "status": "reported",
+        "coverage": "partial",
+        "knownFields": [
+          "input_tokens",
+          "output_tokens",
+          "cache_read_input_tokens"
+        ],
+        "scope": "provider_messages",
+        "estimated": true,
+        "modelRequests": 2
+      },
+      "factorySessionId": "017dddae-11f3-45ed-a18b-f41d0836daf3",
+      "factoryCwd": "/tmp/relay-e2e-ws-gKolhi",
+      "hostEnded": "resumable",
+      "sdkSessionId": "8d3ea4ce-0841-4ac1-b902-9a2e3fbc5296"
+    }
+  ],
+  "runtimeBeforeClose": {
+    "kind": "sdk",
+    "authMode": "byok",
+    "permissionMode": "bypass",
+    "prompt": {
+      "systemPrompt": "preset:claude_code + stable append",
+      "dynamicPlacement": "user input on initial turn or context change",
+      "tools": "preset:claude_code built-ins + Droid-exclusive MCP"
+    },
+    "tools": "preset:claude_code + droid-exclusive MCP",
+    "input": "persistent SDK streaming input",
+    "includePartialMessages": true,
+    "approvalChannel": "external controller",
+    "activeNativeSessions": 2,
+    "activeNativeTurns": 0,
+    "pendingHostCalls": 0,
+    "pendingApprovals": 0,
+    "fatalErrors": [],
+    "overridesAnthropicEnv": true,
+    "upstream": {
+      "provider": "glm",
+      "label": "https://open.bigmodel.cn/api/anthropic",
+      "baseUrl": "https://open.bigmodel.cn/api/anthropic",
+      "model": "glm-5.2",
+      "tokenEnv": "READINESS_MODEL_API_KEY",
+      "authHeader": "x-api-key"
+    },
+    "control": {
+      "pendingApprovals": 0,
+      "failures": [],
+      "activeHostSessions": 0,
+      "boundNativeSessions": 0
+    }
+  },
+  "interactiveTitles": {
+    "entries": [
+      {
+        "factorySessionId": "017dddae-11f3-45ed-a18b-f41d0836daf3",
+        "type": "session_start",
+        "title": "Relay-json-auditor: Audit input.json sum and nonce"
+      },
+      {
+        "factorySessionId": "d0d46cfd-24a2-43be-a1e6-c1dfb281e592",
+        "type": "session_start",
+        "title": "Generate relay Droid configuration file"
+      }
+    ],
+    "scope": "Observed persisted interactive session titles; first-file-edit and fallback variants are not independently established."
+  },
+  "processCleanup": {
+    "supported": true,
+    "observedProcessCount": 50,
+    "terminatedProcessCount": 0,
+    "remainingProcessIds": [],
+    "complete": true
+  },
+  "removedOwnedDirectories": [
+    {
+      "path": "/tmp/relay-e2e-home-2pk1Jh",
+      "removed": true
+    },
+    {
+      "path": "/tmp/relay-e2e-ws-gKolhi",
+      "removed": true
+    },
+    {
+      "path": "/tmp/relay-verify-private-7BBANP",
+      "removed": true
+    }
+  ],
+  "finishedAt": "2026-10-16T01:22:11.611Z"
+}

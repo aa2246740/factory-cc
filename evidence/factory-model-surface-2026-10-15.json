@@ -43,11 +43,10 @@
     "unknown_not_enumerable": "Open-ended or opaque paths lack a complete denominator."
   },
   "countsByStatus": {
-    "historical_observed": 1,
     "historical_verified_scoped": 14,
     "not_verified_public_surface": 1,
     "not_verified_static_candidate": 9,
-    "unknown_not_enumerable": 1
+    "unknown_not_enumerable": 2
   },
   "staticLiterals": [
     {
@@ -282,9 +281,10 @@
       "id": "task-summary",
       "featureMap": "skills-agents",
       "name": "Factory Task result-summary helpers",
-      "status": "historical_observed",
+      "status": "unknown_not_enumerable",
       "source": {
-        "kind": "historical_factory_native_transcript"
+        "kind": "historical_transcript_reclassified_as_factory_summarizer",
+        "independentTaskSummaryCallsiteEstablished": false
       },
       "evidence": [
         {
@@ -299,11 +299,52 @@
         }
       ],
       "limitations": [
-        "Summary helper was observed during actual Mission; no independent summary-fidelity/large-result assertion.",
-        "Distinct from both Factory conversation compaction and native Claude compaction."
+        "The 2026-10-15 helper observation was misclassified. Its 2300-character system prompt exactly matches the real Factory Summarizer request observed on 2026-10-16; the old helper input contained session-hook markers, not Task output.",
+        "No distinct Task result-summary helper has been established by this observation. Custom Task result fidelity is separately verified; it does not prove a dedicated summary model call.",
+        "The old raw Mission evidence and original classification are retained in classificationCorrection. Existing evidence links above describe the old observation, not positive proof of an independent Task-summary path."
       ],
-      "neededVerification": [],
-      "featureMapFile": ".cursor/skills/verify-relay-bridge/features/skills-and-agents.md"
+      "neededVerification": [
+        "Establish a distinct real Task result-summary callsite, if present, and trigger it through a public Factory path with an independently checked large Task result. Do not infer this path from a Summarizer prompt or a generic helper model label."
+      ],
+      "featureMapFile": ".cursor/skills/verify-relay-bridge/features/skills-and-agents.md",
+      "classificationCorrection": {
+        "recordedAt": "2026-10-16",
+        "originalEntry": {
+          "id": "task-summary",
+          "featureMap": "skills-agents",
+          "name": "Factory Task result-summary helpers",
+          "status": "historical_observed",
+          "source": {
+            "kind": "historical_factory_native_transcript"
+          },
+          "evidence": [
+            {
+              "path": "evidence/mission-validation-2026-10-15.json",
+              "jsonPointer": "/claudeCodeUsage/limitations",
+              "timeScope": "historical 2026-10-15; not rerun by this inventory"
+            },
+            {
+              "path": "evidence/mission-validation-2026-10-15.json",
+              "jsonPointer": "/final/toolFreeHelperVerification",
+              "timeScope": "historical 2026-10-15; not rerun by this inventory"
+            }
+          ],
+          "limitations": [
+            "Summary helper was observed during actual Mission; no independent summary-fidelity/large-result assertion.",
+            "Distinct from both Factory conversation compaction and native Claude compaction."
+          ],
+          "neededVerification": [],
+          "featureMapFile": ".cursor/skills/verify-relay-bridge/features/skills-and-agents.md"
+        },
+        "reason": "Exact system-prompt hash matches prove the old observation belongs to Factory conversation Summarizer, not an independently established Task-result summary path.",
+        "comparison": {
+          "path": "evidence/factory-context-regression-2026-10-16.json",
+          "jsonPointer": "/historicalClassificationCorrection",
+          "sha256": "115a4ea6fe511ca4919c7029c94b10a2ff7016005c4b61fc31b1cf72d1b025ba"
+        },
+        "rawEvidencePreserved": true,
+        "systemSha256": "849fe6f4e9ce4431fc2f9cfa9e2965a5f9f7b23c9f0d96b2a2e6083d5d786f53"
+      }
     },
     {
       "id": "dynamic-host-tools",
@@ -573,7 +614,43 @@
       "neededVerification": [
         "Trigger actual Factory compaction and handoff surfaces in isolated session, record summary request/model, apply result, resume and prove retained markers plus native session behavior."
       ],
-      "featureMapFile": ".cursor/skills/verify-relay-bridge/features/spec-review-and-auxiliary.md"
+      "featureMapFile": ".cursor/skills/verify-relay-bridge/features/spec-review-and-auxiliary.md",
+      "currentEvidence": {
+        "recordedAt": "2026-10-16",
+        "status": "verified_scoped",
+        "historicalStatusPreserved": true,
+        "evidence": [
+          {
+            "path": "evidence/factory-context-validation-2026-10-16-r3.json",
+            "jsonPointer": "/checks",
+            "sha256": "29c6e72249bdae26071ddf7a219b4c9efbdd1c2763a56b020bc321e51d13879c"
+          },
+          {
+            "path": "evidence/factory-context-validation-2026-10-16-r3.json",
+            "jsonPointer": "/compactionStates",
+            "sha256": "29c6e72249bdae26071ddf7a219b4c9efbdd1c2763a56b020bc321e51d13879c"
+          },
+          {
+            "path": "evidence/factory-context-regression-2026-10-16.json",
+            "jsonPointer": "/automaticCompactionRegression",
+            "sha256": "115a4ea6fe511ca4919c7029c94b10a2ff7016005c4b61fc31b1cf72d1b025ba"
+          },
+          {
+            "path": "evidence/factory-context-handoff-2026-10-16.json",
+            "jsonPointer": "/checks",
+            "sha256": "ebefc29b65fcfdf8b447c9b9cf1546dd0a890f2863ebbd89d928e721410f136e"
+          }
+        ],
+        "scope": [
+          "Unmodified official Droid stream-jsonrpc: manual compactCurrentSession, automatic compaction with a public lowered threshold, and compactToNewSession handoff.",
+          "A fresh user turn after the actual automatic boundary and manual compaction retains the same native Claude session; same-worker handoff creates a distinct native session and retains tested facts."
+        ],
+        "limitations": [
+          "Automatic probe compacted one initial hook/context message at a 12000-token threshold. It does not establish default-threshold or large semantic-history automatic compaction fidelity.",
+          "This is Factory Summarizer coverage; it must not be conflated with native Claude manual or automatic compaction.",
+          "Partial provider cache counters demonstrate reuse only, not an exact hit ratio or subscription billing."
+        ]
+      }
     },
     {
       "id": "factory-spec",
@@ -837,5 +914,30 @@
     "method": "Cross-check parent actual Task tool-use subagent_type against child session_start callingSessionId/callingToolUseId. No classification from X-Bridge-Role."
   },
   "newVerificationSkillProof": "evidence/verification-skill-execution-2026-10-15.json",
-  "newVerificationSkillScope": "Only the separately recorded chat/native-file/resume path was newly driven. Historical candidate statuses below are retained, not promoted by that new result."
+  "newVerificationSkillScope": "Only the separately recorded chat/native-file/resume path was newly driven. Historical candidate statuses below are retained, not promoted by that new result.",
+  "originalCountsByStatus": {
+    "historical_observed": 1,
+    "historical_verified_scoped": 14,
+    "not_verified_public_surface": 1,
+    "not_verified_static_candidate": 9,
+    "unknown_not_enumerable": 1
+  },
+  "lastCorrectedAt": "2026-10-16",
+  "corrections": [
+    {
+      "recordedAt": "2026-10-16",
+      "entryId": "task-summary",
+      "fromStatus": "historical_observed",
+      "toStatus": "unknown_not_enumerable",
+      "reason": "Old Mission helper evidence exactly matches Factory Summarizer; a distinct Task-summary model helper remains unestablished.",
+      "evidence": {
+        "path": "evidence/factory-context-regression-2026-10-16.json",
+        "jsonPointer": "/historicalClassificationCorrection",
+        "sha256": "115a4ea6fe511ca4919c7029c94b10a2ff7016005c4b61fc31b1cf72d1b025ba"
+      },
+      "originalObservationPreserved": true,
+      "otherHistoricalStatusesUnchanged": true,
+      "currentFactoryCompactionEvidenceAddedWithoutBackdating": true
+    }
+  ]
 }

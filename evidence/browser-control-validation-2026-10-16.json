@@ -1,0 +1,306 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-10-16T01:31:36.322Z",
+  "scope": "Real Chromium /control DOM clicks + official Claude Code native Bash against explicit isolated BYOK. /v1/messages fixture supplies the advertised Execute tool; no claim that this is a separate Droid TUI run.",
+  "driver": "Playwright locator.fill/click; passive browser response listeners; frozen polling in one stale tab only for cancellation race",
+  "directory": "/workspace/work/factory-cc-prep/repo/evidence/local/verify-control-2026-10-16T01-31-36-314Z",
+  "upstream": {
+    "baseUrl": "https://open.bigmodel.cn/api/anthropic",
+    "model": "glm-5.2"
+  },
+  "actions": [
+    {
+      "decision": "deny",
+      "tool": "Bash",
+      "exactCommand": true,
+      "bridgeSessionId": "sess_4f97fe8b-0fed-4d93-87a4-9c678f44d107",
+      "sdkSessionId": "99efc0bf-9693-401e-9bf3-309272401fdb",
+      "approvalId": "6c103c99-2e4c-4301-9afd-b1970bbded6d",
+      "approvalPosts": [
+        {
+          "method": "POST",
+          "path": "/internal/approvals/6c103c99-2e4c-4301-9afd-b1970bbded6d",
+          "decision": "deny",
+          "status": 200
+        }
+      ],
+      "responseStatus": 200,
+      "sideEffect": {
+        "exists": false,
+        "content": "",
+        "lines": 0
+      },
+      "passed": true
+    },
+    {
+      "decision": "allow",
+      "tool": "Bash",
+      "exactCommand": true,
+      "bridgeSessionId": "sess_ff4b613d-0d79-4488-b608-8e4a89812169",
+      "sdkSessionId": "1bb705b8-7022-4f1f-9d40-5902e97361fc",
+      "approvalId": "4016b863-f61b-4a42-bb4e-a30f7808d28d",
+      "approvalPosts": [
+        {
+          "method": "POST",
+          "path": "/internal/approvals/4016b863-f61b-4a42-bb4e-a30f7808d28d",
+          "decision": "allow",
+          "status": 200
+        }
+      ],
+      "responseStatus": 200,
+      "sideEffect": {
+        "exists": true,
+        "content": "approved\n",
+        "lines": 1
+      },
+      "passed": true
+    },
+    {
+      "decision": "cancel",
+      "tool": "Bash",
+      "exactCommand": true,
+      "bridgeSessionId": "sess_4f65ff9c-21ab-48a3-8057-7ce9b3a5a238",
+      "sdkSessionId": "e8dfe58b-6edc-420b-ac92-0cc5b9d31e62",
+      "approvalId": "e16b655e-f4fc-4ab2-8ed8-b72e61db82f7",
+      "approvalPosts": [
+        {
+          "method": "POST",
+          "path": "/internal/approvals/e16b655e-f4fc-4ab2-8ed8-b72e61db82f7",
+          "decision": "allow",
+          "status": 409
+        }
+      ],
+      "cancelStatus": 200,
+      "staleStatus": 409,
+      "responseStatus": 499,
+      "sideEffect": {
+        "exists": false,
+        "content": "",
+        "lines": 0
+      },
+      "passed": true
+    }
+  ],
+  "screenshots": [
+    {
+      "name": "01-login",
+      "path": "evidence/control-browser-2026-10-16T01-31-36-314Z/01-login.png",
+      "sha256": "b59bf5e0206c526e2b74e42424f833d440626b8333c99f293a4fd548820820d9"
+    },
+    {
+      "name": "02-connected",
+      "path": "evidence/control-browser-2026-10-16T01-31-36-314Z/02-connected.png",
+      "sha256": "4a02df8305fbca565ce2e96a83d82d9348e4a41cefcc23a2ffa98d95161f28d5"
+    },
+    {
+      "name": "03-deny-pending",
+      "path": "evidence/control-browser-2026-10-16T01-31-36-314Z/03-deny-pending.png",
+      "sha256": "faa5c553e331e4975a0ec50151b7b9bbf2425f2430eaa1638fca0ecbb8077269"
+    },
+    {
+      "name": "03-allow-pending",
+      "path": "evidence/control-browser-2026-10-16T01-31-36-314Z/03-allow-pending.png",
+      "sha256": "5e7ef2aff96f47141deb1ebf1b6b831ed2f85c31b05c475a0c859fd4298c6f20"
+    },
+    {
+      "name": "03-cancel-pending",
+      "path": "evidence/control-browser-2026-10-16T01-31-36-314Z/03-cancel-pending.png",
+      "sha256": "52cb61cbe1059de19ba6f1624d73bf2d8d4c76d3bdd85cf39978941701d48a97"
+    },
+    {
+      "name": "04-cancelled-stale-approval-rejected",
+      "path": "evidence/control-browser-2026-10-16T01-31-36-314Z/04-cancelled-stale-approval-rejected.png",
+      "sha256": "46d58971b0ce2552d977ea8c5600af3a56b06951cbd0a5603fe174f1229e2165"
+    },
+    {
+      "name": "05-disconnected",
+      "path": "evidence/control-browser-2026-10-16T01-31-36-314Z/05-disconnected.png",
+      "sha256": "edb6ba2e3f99d6c9583e96450a72a3e574163dd74afef563da80b3a77730033a"
+    }
+  ],
+  "browserRequests": [
+    {
+      "method": "GET",
+      "path": "/internal/approvals",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/internal/sessions",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/internal/approvals",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/internal/sessions",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/internal/approvals",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/internal/sessions",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/internal/approvals/6c103c99-2e4c-4301-9afd-b1970bbded6d",
+      "decision": "deny",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/internal/approvals",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/internal/sessions",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/internal/approvals",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/internal/sessions",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/internal/approvals",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/internal/sessions",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/internal/approvals",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/internal/sessions",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/internal/approvals/4016b863-f61b-4a42-bb4e-a30f7808d28d",
+      "decision": "allow",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/internal/approvals",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/internal/sessions",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/internal/approvals",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/internal/sessions",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/internal/approvals",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/internal/sessions",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/internal/approvals",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/internal/sessions",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/internal/approvals",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/internal/sessions",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/internal/cancel",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/internal/approvals",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/internal/sessions",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/internal/approvals/e16b655e-f4fc-4ab2-8ed8-b72e61db82f7",
+      "decision": "allow",
+      "status": 409
+    },
+    {
+      "method": "GET",
+      "path": "/internal/approvals",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/internal/sessions",
+      "status": 200
+    }
+  ],
+  "browserVersion": "154.0.8037.57",
+  "disconnectClearsInputAndCards": true,
+  "processCleanup": {
+    "supported": true,
+    "observedProcessCount": 14,
+    "terminatedProcessCount": 0,
+    "remainingProcessIds": [],
+    "complete": true
+  },
+  "workspaceRemoved": true,
+  "checks": {
+    "actualBrowserConnected": true,
+    "denyNoWrite": true,
+    "allowExactlyOneWrite": true,
+    "cancelRejectsStaleApprovalWithoutWrite": true,
+    "disconnectClearsInputAndCards": true,
+    "processCleanupComplete": true,
+    "workspaceRemoved": true
+  },
+  "status": "PASS"
+}

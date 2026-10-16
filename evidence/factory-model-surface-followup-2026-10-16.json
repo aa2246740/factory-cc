@@ -1,0 +1,984 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-10-16",
+  "auditKind": "Evidence index for real followup runtime tests, preserved failures, corrections, and explicitly unverified paths",
+  "overall": "SCOPED_VERIFIED_WITH_BLOCKED_AND_UNKNOWN_PATHS",
+  "allFactoryModelCallsitesCovered": false,
+  "totalInternalCallsiteCount": null,
+  "coveragePercentage": null,
+  "coveragePercentageReason": "The 26 known inventory rows group features and candidates. They do not enumerate all conditional, remote, plugin, or server-side model calls. Counts below are row classifications, not coverage or confidence percentages.",
+  "inventoryItemCount": 26,
+  "inventory": {
+    "path": "evidence/factory-model-surface-2026-10-15.json",
+    "jsonPointer": "",
+    "sha256": "290233e84749d25c24c735fddc10cfe04cf295a51dd07dbd9ad22d5d77a0eec6"
+  },
+  "authentication": {
+    "mode": "isolated explicit BYOK through unmodified official Claude Code SDK/CLI",
+    "model": "glm-5.2",
+    "baseUrl": "https://open.bigmodel.cn/api/anthropic",
+    "tokenSourceName": "READINESS_MODEL_API_KEY",
+    "realSubscriptionCredentialsUsed": false,
+    "subscriptionPolicyOrBillingAssurance": false
+  },
+  "statusDefinitions": {
+    "verified_scoped": "A real runtime path has passing scoped acceptance evidence listed in this row. This does not imply every variant in the broad feature name is verified.",
+    "historical_only": "Earlier scoped runtime evidence is retained; this followup did not rerun that distinct path.",
+    "pending": "Fresh acceptance is not final in this snapshot. Earlier failures/interruption are retained and must not be promoted to PASS.",
+    "blocked_current_configuration": "The real public entrypoint/catalog is unavailable or rejects under the authorized isolated configuration. A different explicitly named alternative, if verified, is not the original service.",
+    "not_verified": "Static candidate or specialized service has no matching real semantic acceptance. Adjacent native behavior and synthetic guards do not count as that path.",
+    "unknown_not_enumerable": "A distinct path is unestablished or the remaining surface cannot be exhaustively enumerated."
+  },
+  "countsByStatus": {
+    "blocked_current_configuration": 3,
+    "historical_only": 2,
+    "not_verified": 3,
+    "unknown_not_enumerable": 2,
+    "verified_scoped": 16
+  },
+  "historicalCorrection": {
+    "path": "evidence/factory-model-surface-2026-10-15.json",
+    "jsonPointer": "/corrections/0",
+    "sha256": "290233e84749d25c24c735fddc10cfe04cf295a51dd07dbd9ad22d5d77a0eec6"
+  },
+  "evidenceRules": [
+    "Preserved failed and interrupted runs are evidence of regressions or incomplete tests; later passes do not rewrite their status.",
+    "Official Factory runtime tests, native SDK tests with synthetic hosts, and direct synthetic guard probes are explicitly distinguished.",
+    "Factory Summarizer, native Claude compaction, and the unestablished Task-summary helper are distinct rows.",
+    "Missing cache creation fields remain unknown; cache-read observations cannot establish exact hit ratio, subscription consumption, or billing safety.",
+    "Configured API sink observations do not establish complete egress interception or absence of internal services.",
+    "No production subscription account, binary patch, hosted authentication bypass, or fabricated classifier/image output was used."
+  ],
+  "entries": [
+    {
+      "id": "chat-main",
+      "name": "Main Droid exec conversation through Bridge and official Claude Code",
+      "historicalStatus": "historical_verified_scoped",
+      "historicalEvidence": {
+        "path": "evidence/factory-model-surface-2026-10-15.json",
+        "jsonPointer": "/entries/0",
+        "sha256": "290233e84749d25c24c735fddc10cfe04cf295a51dd07dbd9ad22d5d77a0eec6"
+      },
+      "currentStatus": "verified_scoped",
+      "executionKind": "official_factory_exec_to_native_claude_sdk",
+      "verifiedOrObserved": [
+        "Official production wrapper completed real native Read/Write with independently checked output, unchanged input, authenticated Bridge traffic, and owned cleanup."
+      ],
+      "currentEvidence": [
+        {
+          "path": "evidence/verification-skill-validation-2026-10-16.json",
+          "jsonPointer": "/checks",
+          "sha256": "34b84a56322a9c0789bfe755f0051c1bfe9e5c056414cd7d17317b7c69733eaf"
+        },
+        {
+          "path": "evidence/verification-skill-validation-2026-10-16.json",
+          "jsonPointer": "/actions",
+          "sha256": "34b84a56322a9c0789bfe755f0051c1bfe9e5c056414cd7d17317b7c69733eaf"
+        }
+      ],
+      "remainingLimitations": [
+        "Only isolated authorized GLM BYOK was used; other providers and subscription billing were not tested."
+      ]
+    },
+    {
+      "id": "chat-resume",
+      "name": "Normal Droid session continuation with native SDK checkpoint",
+      "historicalStatus": "historical_verified_scoped",
+      "historicalEvidence": {
+        "path": "evidence/factory-model-surface-2026-10-15.json",
+        "jsonPointer": "/entries/1",
+        "sha256": "290233e84749d25c24c735fddc10cfe04cf295a51dd07dbd9ad22d5d77a0eec6"
+      },
+      "currentStatus": "verified_scoped",
+      "executionKind": "official_factory_session_id_resume",
+      "verifiedOrObserved": [
+        "A second official Droid invocation resumed the same Factory and native Claude session; both hosts ended resumably and runtime drained before cleanup."
+      ],
+      "currentEvidence": [
+        {
+          "path": "evidence/verification-skill-validation-2026-10-16.json",
+          "jsonPointer": "/checks",
+          "sha256": "34b84a56322a9c0789bfe755f0051c1bfe9e5c056414cd7d17317b7c69733eaf"
+        },
+        {
+          "path": "evidence/verification-skill-validation-2026-10-16.json",
+          "jsonPointer": "/sessionIds",
+          "sha256": "34b84a56322a9c0789bfe755f0051c1bfe9e5c056414cd7d17317b7c69733eaf"
+        }
+      ],
+      "remainingLimitations": [
+        "No claim that an unresolved native MCP callback survives process loss."
+      ]
+    },
+    {
+      "id": "native-cache",
+      "name": "Claude Code provider-side prompt-cache reuse",
+      "historicalStatus": "historical_verified_scoped",
+      "historicalEvidence": {
+        "path": "evidence/factory-model-surface-2026-10-15.json",
+        "jsonPointer": "/entries/2",
+        "sha256": "290233e84749d25c24c735fddc10cfe04cf295a51dd07dbd9ad22d5d77a0eec6"
+      },
+      "currentStatus": "verified_scoped",
+      "executionKind": "native_provider_message_usage",
+      "verifiedOrObserved": [
+        "The real resumed native turn reported 23040 cache-read tokens; post-Factory-manual-compaction continuation reported 23872 cache-read tokens while preserving native identity."
+      ],
+      "currentEvidence": [
+        {
+          "path": "evidence/verification-skill-validation-2026-10-16.json",
+          "jsonPointer": "/continuationUsage",
+          "sha256": "34b84a56322a9c0789bfe755f0051c1bfe9e5c056414cd7d17317b7c69733eaf"
+        },
+        {
+          "path": "evidence/verification-skill-validation-2026-10-16.json",
+          "jsonPointer": "/cacheInterpretation",
+          "sha256": "34b84a56322a9c0789bfe755f0051c1bfe9e5c056414cd7d17317b7c69733eaf"
+        },
+        {
+          "path": "evidence/factory-context-validation-2026-10-16-r3.json",
+          "jsonPointer": "/currentNativeUsage",
+          "sha256": "29c6e72249bdae26071ddf7a219b4c9efbdd1c2763a56b020bc321e51d13879c"
+        }
+      ],
+      "remainingLimitations": [
+        "Provider cache-creation fields are absent from knownFields; any normalized zero is unknown, not zero cost.",
+        "These are scoped cache-reuse observations, not a controlled cost benchmark, exact cache-hit ratio, Anthropic subscription measurement, or guarantee for arbitrarily changed prompts/tools."
+      ]
+    },
+    {
+      "id": "native-manual-compact",
+      "name": "Claude Code manual /compact",
+      "historicalStatus": "historical_verified_scoped",
+      "historicalEvidence": {
+        "path": "evidence/factory-model-surface-2026-10-15.json",
+        "jsonPointer": "/entries/3",
+        "sha256": "290233e84749d25c24c735fddc10cfe04cf295a51dd07dbd9ad22d5d77a0eec6"
+      },
+      "currentStatus": "historical_only",
+      "executionKind": "not_rerun_in_this_followup",
+      "verifiedOrObserved": [
+        "The 2026-10-15 scoped native Claude compaction evidence is retained unchanged."
+      ],
+      "currentEvidence": [],
+      "remainingLimitations": [
+        "No fresh native Claude compaction acceptance was run in this followup. Factory Summarizer tests do not count as native Claude compaction tests.",
+        "Default production thresholds and arbitrary long Missions remain outside the retained scoped proof."
+      ]
+    },
+    {
+      "id": "native-auto-compact",
+      "name": "Claude Code automatic compaction with lowered documented threshold",
+      "historicalStatus": "historical_verified_scoped",
+      "historicalEvidence": {
+        "path": "evidence/factory-model-surface-2026-10-15.json",
+        "jsonPointer": "/entries/4",
+        "sha256": "290233e84749d25c24c735fddc10cfe04cf295a51dd07dbd9ad22d5d77a0eec6"
+      },
+      "currentStatus": "historical_only",
+      "executionKind": "not_rerun_in_this_followup",
+      "verifiedOrObserved": [
+        "The 2026-10-15 scoped native Claude compaction evidence is retained unchanged."
+      ],
+      "currentEvidence": [],
+      "remainingLimitations": [
+        "No fresh native Claude compaction acceptance was run in this followup. Factory Summarizer tests do not count as native Claude compaction tests.",
+        "Default production thresholds and arbitrary long Missions remain outside the retained scoped proof."
+      ]
+    },
+    {
+      "id": "factory-skill",
+      "name": "Factory Skill definition and complete body passed to native model",
+      "historicalStatus": "historical_verified_scoped",
+      "historicalEvidence": {
+        "path": "evidence/factory-model-surface-2026-10-15.json",
+        "jsonPointer": "/entries/5",
+        "sha256": "290233e84749d25c24c735fddc10cfe04cf295a51dd07dbd9ad22d5d77a0eec6"
+      },
+      "currentStatus": "verified_scoped",
+      "executionKind": "official_factory_interactive_review_skill",
+      "verifiedOrObserved": [
+        "The actual /review slash-menu workflow invoked the built-in Factory review Skill and produced findings on a known defective diff without changing the fixture."
+      ],
+      "currentEvidence": [
+        {
+          "path": "evidence/interactive-proof-recheck-2026-10-16.json",
+          "jsonPointer": "/review",
+          "sha256": "95d15469125dabd50bc457568ab759a1fda576f48c087846931e2018a877a344"
+        }
+      ],
+      "remainingLimitations": [
+        "This fresh acceptance covers the built-in review Skill path. Complete arbitrary external Skill body transport retains its earlier scoped evidence; no universal Skill compatibility claim is made."
+      ]
+    },
+    {
+      "id": "factory-task",
+      "name": "Factory Task child sessions and built-in subagent roles",
+      "historicalStatus": "historical_verified_scoped",
+      "historicalEvidence": {
+        "path": "evidence/factory-model-surface-2026-10-15.json",
+        "jsonPointer": "/entries/6",
+        "sha256": "290233e84749d25c24c735fddc10cfe04cf295a51dd07dbd9ad22d5d77a0eec6"
+      },
+      "currentStatus": "verified_scoped",
+      "executionKind": "actual_factory_task_with_distinct_native_child",
+      "verifiedOrObserved": [
+        "Actual Factory Task awaited a successful child result; child prompt matched delegation, native child was distinct, real child Read obtained a nonce absent from its prompt, and child/parent result JSON was correct.",
+        "Explicit custom Droid execution preserved a body-only marker and selected its configured Bridge model alias."
+      ],
+      "currentEvidence": [
+        {
+          "path": "evidence/interactive-proof-recheck-2026-10-16.json",
+          "jsonPointer": "/taskProof",
+          "sha256": "95d15469125dabd50bc457568ab759a1fda576f48c087846931e2018a877a344"
+        },
+        {
+          "path": "evidence/custom-droid-validation-2026-10-16-r2.json",
+          "jsonPointer": "/checks",
+          "sha256": "871a1837a7d3d0d2c88d88834e22760fc2563b45e03d21e499f263d5f217456a"
+        }
+      ],
+      "remainingLimitations": [
+        "The interactive parent had no native file access during the delegation turn; an earlier generation-command turn had read the fixture, so this is not a whole-session nonaccess assertion.",
+        "This verifies the exercised custom/generated children, not every built-in role, arbitrary asynchronous Task configuration, or independent Task-summary helper."
+      ]
+    },
+    {
+      "id": "task-summary",
+      "name": "Factory Task result-summary helpers",
+      "historicalStatus": "unknown_not_enumerable",
+      "historicalEvidence": {
+        "path": "evidence/factory-model-surface-2026-10-15.json",
+        "jsonPointer": "/entries/7",
+        "sha256": "290233e84749d25c24c735fddc10cfe04cf295a51dd07dbd9ad22d5d77a0eec6"
+      },
+      "currentStatus": "unknown_not_enumerable",
+      "executionKind": "historical_observation_reclassified",
+      "verifiedOrObserved": [
+        "The old helper system prompt exactly matches an actual Factory Summarizer request. It does not establish a distinct Task result-summary model."
+      ],
+      "currentEvidence": [
+        {
+          "path": "evidence/factory-context-regression-2026-10-16.json",
+          "jsonPointer": "/historicalClassificationCorrection",
+          "sha256": "115a4ea6fe511ca4919c7029c94b10a2ff7016005c4b61fc31b1cf72d1b025ba"
+        },
+        {
+          "path": "evidence/factory-model-surface-2026-10-15.json",
+          "jsonPointer": "/entries/7/classificationCorrection",
+          "sha256": "290233e84749d25c24c735fddc10cfe04cf295a51dd07dbd9ad22d5d77a0eec6"
+        }
+      ],
+      "remainingLimitations": [
+        "A distinct Task-summary callsite, invocation threshold, fidelity, and route remain unestablished. Short real Task result checks did not trigger a separately identified summary helper.",
+        "Original observations and raw request evidence are preserved; this row is not marked verified."
+      ]
+    },
+    {
+      "id": "dynamic-host-tools",
+      "name": "Dynamic Factory tool discovery and MCP host callback",
+      "historicalStatus": "historical_verified_scoped",
+      "historicalEvidence": {
+        "path": "evidence/factory-model-surface-2026-10-15.json",
+        "jsonPointer": "/entries/8",
+        "sha256": "290233e84749d25c24c735fddc10cfe04cf295a51dd07dbd9ad22d5d77a0eec6"
+      },
+      "currentStatus": "verified_scoped",
+      "executionKind": "official_native_sdk_with_synthetic_host_fixture",
+      "verifiedOrObserved": [
+        "Three real native SDK turns saw updated same-name tool schema arguments, maintained one native query/session, avoided an unnecessary catalog refresh, and completed exact host callbacks with cache reads on the stable turn."
+      ],
+      "currentEvidence": [
+        {
+          "path": "evidence/native-schema-validation-2026-10-16-r2.json",
+          "jsonPointer": "/scope",
+          "sha256": "ebec13fc84ee84c12f38e36850c0c3a12f9c72fe0e9dc1d87b5dea19aabe4e11"
+        },
+        {
+          "path": "evidence/native-schema-validation-2026-10-16-r2.json",
+          "jsonPointer": "/checks",
+          "sha256": "ebec13fc84ee84c12f38e36850c0c3a12f9c72fe0e9dc1d87b5dea19aabe4e11"
+        }
+      ],
+      "remainingLimitations": [
+        "The host/MCP catalog is a deterministic synthetic fixture around the real unmodified Claude runtime; this is not a real Factory ToolSearch or arbitrary plugin acceptance."
+      ]
+    },
+    {
+      "id": "custom-droid-run",
+      "name": "Project/personal custom Droid execution and model overrides",
+      "historicalStatus": "not_verified_static_candidate",
+      "historicalEvidence": {
+        "path": "evidence/factory-model-surface-2026-10-15.json",
+        "jsonPointer": "/entries/9",
+        "sha256": "290233e84749d25c24c735fddc10cfe04cf295a51dd07dbd9ad22d5d77a0eec6"
+      },
+      "currentStatus": "verified_scoped",
+      "executionKind": "official_factory_task_project_droid",
+      "verifiedOrObserved": [
+        "Real Factory Task selected a project Droid and model alias, preserved its body-only marker absent from the delegated prompt, produced an independently correct file result, and used a distinct child native session.",
+        "A read-only custom Droid completed native Read while attempted native Write was denied and forbidden output files remained absent."
+      ],
+      "currentEvidence": [
+        {
+          "path": "evidence/custom-droid-validation-2026-10-16-r2.json",
+          "jsonPointer": "/checks",
+          "sha256": "871a1837a7d3d0d2c88d88834e22760fc2563b45e03d21e499f263d5f217456a"
+        },
+        {
+          "path": "evidence/custom-droid-readonly-validation-2026-10-16-r2.json",
+          "jsonPointer": "/checks",
+          "sha256": "3dee6dc8b334255c30c022294b02c373fecf6aee476788fcd62d32993c27ea93"
+        },
+        {
+          "path": "evidence/spec-custom-validation-2026-10-16.json",
+          "jsonPointer": "/attempts",
+          "sha256": "754b4b1f3beeb8a66130be9d8c0934ed376b50d11dcdf4d510f952899b1516fe"
+        }
+      ],
+      "remainingLimitations": [
+        "Different Factory aliases still routed to the same authorized GLM provider/model; heterogeneous providers and personal-global Droid settings are not established.",
+        "Earlier failed attempts are preserved in the aggregate; no separate Task-summary helper was verified."
+      ]
+    },
+    {
+      "id": "mission-orchestrator",
+      "name": "Mission planning, proposal and orchestrator model",
+      "historicalStatus": "historical_verified_scoped",
+      "historicalEvidence": {
+        "path": "evidence/factory-model-surface-2026-10-15.json",
+        "jsonPointer": "/entries/10",
+        "sha256": "290233e84749d25c24c735fddc10cfe04cf295a51dd07dbd9ad22d5d77a0eec6"
+      },
+      "currentStatus": "verified_scoped",
+      "executionKind": "real_factory_uninterrupted_mission",
+      "verifiedOrObserved": [
+        "Fresh unseeded Mission completed continuously in 1126 seconds; actual orchestrator, implementation worker, scrutiny-validator and user-testing-validator paths ran.",
+        "Three features and five validation assertions completed; original product tests and package.json were preserved, all three tests passed independently, and matching EndFeatureRun worker transcripts were required.",
+        "No runtime/control errors or unsettled native work; 256 observed owned processes exited, none remained."
+      ],
+      "currentEvidence": [
+        {
+          "path": "evidence/mission-final-interruption-2026-10-16.json",
+          "jsonPointer": "",
+          "sha256": "7e74daed5ec352f027b481e931095a34cf10c8d45663ac78973039e3a580d65c"
+        },
+        {
+          "path": "evidence/mission-final-validation-2026-10-16-r2.json",
+          "jsonPointer": "",
+          "sha256": "42d4ded0ecf2415b3ce2cb8d9dfc3715c3327dc0e7ea37c019ebef7813a412ba"
+        },
+        {
+          "path": "evidence/mission-final-validation-2026-10-16-r3.json",
+          "jsonPointer": "",
+          "sha256": "62d9ad4591b22c0f7c5fbead8f09c4558671a28f703317b7d1dd5f61664f0ed6"
+        },
+        {
+          "path": "evidence/mission-final-validation-2026-10-16-r3.json",
+          "jsonPointer": "/sourceScope",
+          "sha256": "62d9ad4591b22c0f7c5fbead8f09c4558671a28f703317b7d1dd5f61664f0ed6"
+        }
+      ],
+      "remainingLimitations": [
+        "Mission ran at runtime fingerprint 22b04c2500b87ac3b7d0f91f9a48d24cc1923d14ff344509f67c8356162ac1d7. Subsequent BYOK environment-selector isolation, draft-07 dependencies annotation preparation and control-page status changes are separately verified; the full Mission is not claimed to have run again after those changes.",
+        "The small sum fixture verifies the workflow, not arbitrary project complexity or every hidden Factory model call."
+      ]
+    },
+    {
+      "id": "mission-worker",
+      "name": "Mission implementation worker model",
+      "historicalStatus": "historical_verified_scoped",
+      "historicalEvidence": {
+        "path": "evidence/factory-model-surface-2026-10-15.json",
+        "jsonPointer": "/entries/11",
+        "sha256": "290233e84749d25c24c735fddc10cfe04cf295a51dd07dbd9ad22d5d77a0eec6"
+      },
+      "currentStatus": "verified_scoped",
+      "executionKind": "real_factory_uninterrupted_mission",
+      "verifiedOrObserved": [
+        "Fresh unseeded Mission completed continuously in 1126 seconds; actual orchestrator, implementation worker, scrutiny-validator and user-testing-validator paths ran.",
+        "Three features and five validation assertions completed; original product tests and package.json were preserved, all three tests passed independently, and matching EndFeatureRun worker transcripts were required.",
+        "No runtime/control errors or unsettled native work; 256 observed owned processes exited, none remained."
+      ],
+      "currentEvidence": [
+        {
+          "path": "evidence/mission-final-interruption-2026-10-16.json",
+          "jsonPointer": "",
+          "sha256": "7e74daed5ec352f027b481e931095a34cf10c8d45663ac78973039e3a580d65c"
+        },
+        {
+          "path": "evidence/mission-final-validation-2026-10-16-r2.json",
+          "jsonPointer": "",
+          "sha256": "42d4ded0ecf2415b3ce2cb8d9dfc3715c3327dc0e7ea37c019ebef7813a412ba"
+        },
+        {
+          "path": "evidence/mission-final-validation-2026-10-16-r3.json",
+          "jsonPointer": "",
+          "sha256": "62d9ad4591b22c0f7c5fbead8f09c4558671a28f703317b7d1dd5f61664f0ed6"
+        },
+        {
+          "path": "evidence/mission-final-validation-2026-10-16-r3.json",
+          "jsonPointer": "/sourceScope",
+          "sha256": "62d9ad4591b22c0f7c5fbead8f09c4558671a28f703317b7d1dd5f61664f0ed6"
+        }
+      ],
+      "remainingLimitations": [
+        "Mission ran at runtime fingerprint 22b04c2500b87ac3b7d0f91f9a48d24cc1923d14ff344509f67c8356162ac1d7. Subsequent BYOK environment-selector isolation, draft-07 dependencies annotation preparation and control-page status changes are separately verified; the full Mission is not claimed to have run again after those changes.",
+        "The small sum fixture verifies the workflow, not arbitrary project complexity or every hidden Factory model call."
+      ]
+    },
+    {
+      "id": "mission-validators",
+      "name": "Mission scrutiny and user-testing validator model plus delegated review/flow Tasks",
+      "historicalStatus": "historical_verified_scoped",
+      "historicalEvidence": {
+        "path": "evidence/factory-model-surface-2026-10-15.json",
+        "jsonPointer": "/entries/12",
+        "sha256": "290233e84749d25c24c735fddc10cfe04cf295a51dd07dbd9ad22d5d77a0eec6"
+      },
+      "currentStatus": "verified_scoped",
+      "executionKind": "real_factory_uninterrupted_mission",
+      "verifiedOrObserved": [
+        "Fresh unseeded Mission completed continuously in 1126 seconds; actual orchestrator, implementation worker, scrutiny-validator and user-testing-validator paths ran.",
+        "Three features and five validation assertions completed; original product tests and package.json were preserved, all three tests passed independently, and matching EndFeatureRun worker transcripts were required.",
+        "No runtime/control errors or unsettled native work; 256 observed owned processes exited, none remained."
+      ],
+      "currentEvidence": [
+        {
+          "path": "evidence/mission-final-interruption-2026-10-16.json",
+          "jsonPointer": "",
+          "sha256": "7e74daed5ec352f027b481e931095a34cf10c8d45663ac78973039e3a580d65c"
+        },
+        {
+          "path": "evidence/mission-final-validation-2026-10-16-r2.json",
+          "jsonPointer": "",
+          "sha256": "42d4ded0ecf2415b3ce2cb8d9dfc3715c3327dc0e7ea37c019ebef7813a412ba"
+        },
+        {
+          "path": "evidence/mission-final-validation-2026-10-16-r3.json",
+          "jsonPointer": "",
+          "sha256": "62d9ad4591b22c0f7c5fbead8f09c4558671a28f703317b7d1dd5f61664f0ed6"
+        },
+        {
+          "path": "evidence/mission-final-validation-2026-10-16-r3.json",
+          "jsonPointer": "/sourceScope",
+          "sha256": "62d9ad4591b22c0f7c5fbead8f09c4558671a28f703317b7d1dd5f61664f0ed6"
+        }
+      ],
+      "remainingLimitations": [
+        "Mission ran at runtime fingerprint 22b04c2500b87ac3b7d0f91f9a48d24cc1923d14ff344509f67c8356162ac1d7. Subsequent BYOK environment-selector isolation, draft-07 dependencies annotation preparation and control-page status changes are separately verified; the full Mission is not claimed to have run again after those changes.",
+        "The small sum fixture verifies the workflow, not arbitrary project complexity or every hidden Factory model call."
+      ]
+    },
+    {
+      "id": "native-approvals",
+      "name": "Native tool permission, denial, cancellation and stale-result rejection",
+      "historicalStatus": "historical_verified_scoped",
+      "historicalEvidence": {
+        "path": "evidence/factory-model-surface-2026-10-15.json",
+        "jsonPointer": "/entries/13",
+        "sha256": "290233e84749d25c24c735fddc10cfe04cf295a51dd07dbd9ad22d5d77a0eec6"
+      },
+      "currentStatus": "verified_scoped",
+      "executionKind": "official_factory_native_permission_and_cancellation_paths",
+      "verifiedOrObserved": [
+        "Real Factory only-tools policy denied native Bash in Read-only turns, allowed it when Execute was granted, and denied it after revocation.",
+        "Authenticated Factory spec mode mechanically denied native Write before the real ExitSpecMode approval and then permitted implementation.",
+        "After an independently observed shell-start marker, interactive Escape stopped native turns in 3756 ms; the delayed output remained absent after a 47000 ms observation exceeding the shell delay."
+      ],
+      "currentEvidence": [
+        {
+          "path": "evidence/native-tool-policy-validation-2026-10-16.json",
+          "jsonPointer": "/verifiedRun/checks",
+          "sha256": "22c5ab529f0c12126c3ed2599f8731a8338acd78743d327c1852121193b8d017"
+        },
+        {
+          "path": "evidence/spec-readonly-validation-2026-10-16.json",
+          "jsonPointer": "/checks",
+          "sha256": "2a7c38d25456a87e000d403300a670a6d273bfb208a9caaa920ae9516e13c1bf"
+        },
+        {
+          "path": "evidence/interactive-cancel-validation-2026-10-16.json",
+          "jsonPointer": "/escapeCancellation",
+          "sha256": "2bee8f26ecd2bb28def4621fe9300f78c2da565bd2530508570da7033324d30c"
+        }
+      ],
+      "remainingLimitations": [
+        "These are native authority and cancellation paths, not Factory command-risk or Droid Shield classifier execution.",
+        "Historical stale-result and approval-controller tests remain separate; not every UI/controller variant was rerun."
+      ]
+    },
+    {
+      "id": "factory-lifecycle",
+      "name": "Factory lifecycle hooks, once-only ownership and session generation",
+      "historicalStatus": "historical_verified_scoped",
+      "historicalEvidence": {
+        "path": "evidence/factory-model-surface-2026-10-15.json",
+        "jsonPointer": "/entries/14",
+        "sha256": "290233e84749d25c24c735fddc10cfe04cf295a51dd07dbd9ad22d5d77a0eec6"
+      },
+      "currentStatus": "verified_scoped",
+      "executionKind": "official_factory_hooks_jsonrpc_and_tty",
+      "verifiedOrObserved": [
+        "Real UserPromptSubmit refreshed authenticated binding after automatic Factory compaction; separate post-boundary turn retained the original native session.",
+        "Real SessionStart(source=compact, previous_session_id) safely transitioned same-worker handoff to a distinct native session.",
+        "Official process resume remained resumable, and actual TTY Escape stopped the owned native work with normal process exit and complete cleanup."
+      ],
+      "currentEvidence": [
+        {
+          "path": "evidence/factory-context-validation-2026-10-16-r3.json",
+          "jsonPointer": "/checks",
+          "sha256": "29c6e72249bdae26071ddf7a219b4c9efbdd1c2763a56b020bc321e51d13879c"
+        },
+        {
+          "path": "evidence/factory-context-validation-2026-10-16-r3.json",
+          "jsonPointer": "/hookMetadata",
+          "sha256": "29c6e72249bdae26071ddf7a219b4c9efbdd1c2763a56b020bc321e51d13879c"
+        },
+        {
+          "path": "evidence/factory-context-regression-2026-10-16.json",
+          "jsonPointer": "/automaticCompactionRegression",
+          "sha256": "115a4ea6fe511ca4919c7029c94b10a2ff7016005c4b61fc31b1cf72d1b025ba"
+        },
+        {
+          "path": "evidence/verification-skill-validation-2026-10-16.json",
+          "jsonPointer": "/checks",
+          "sha256": "34b84a56322a9c0789bfe755f0051c1bfe9e5c056414cd7d17317b7c69733eaf"
+        },
+        {
+          "path": "evidence/interactive-cancel-validation-2026-10-16.json",
+          "jsonPointer": "/escapeCancellation",
+          "sha256": "2bee8f26ecd2bb28def4621fe9300f78c2da565bd2530508570da7033324d30c"
+        },
+        {
+          "path": "evidence/interactive-cancel-validation-2026-10-16.json",
+          "jsonPointer": "/ptyExit",
+          "sha256": "2bee8f26ecd2bb28def4621fe9300f78c2da565bd2530508570da7033324d30c"
+        }
+      ],
+      "remainingLimitations": [
+        "Hooks bind the exercised host sessions; they do not prove every internal or remote Factory model request uses Bridge.",
+        "Arbitrary concurrent desktop/daemon/remote-worker lifecycles remain outside these probes."
+      ]
+    },
+    {
+      "id": "factory-title",
+      "name": "Factory session-title generation helpers",
+      "historicalStatus": "historical_verified_scoped",
+      "historicalEvidence": {
+        "path": "evidence/factory-model-surface-2026-10-15.json",
+        "jsonPointer": "/entries/15",
+        "sha256": "290233e84749d25c24c735fddc10cfe04cf295a51dd07dbd9ad22d5d77a0eec6"
+      },
+      "currentStatus": "verified_scoped",
+      "executionKind": "official_factory_generated_title_notification",
+      "verifiedOrObserved": [
+        "The real JSON-RPC session emitted a nonempty session_title_updated notification with updateType=llm_generated; real TTY sessions also persisted generated titles."
+      ],
+      "currentEvidence": [
+        {
+          "path": "evidence/factory-context-validation-2026-10-16-r3.json",
+          "jsonPointer": "/generatedTitles",
+          "sha256": "29c6e72249bdae26071ddf7a219b4c9efbdd1c2763a56b020bc321e51d13879c"
+        },
+        {
+          "path": "evidence/interactive-proof-recheck-2026-10-16.json",
+          "jsonPointer": "/interactiveTitles",
+          "sha256": "95d15469125dabd50bc457568ab759a1fda576f48c087846931e2018a877a344"
+        }
+      ],
+      "remainingLimitations": [
+        "First-file-edit title stages, model-fallback branches, and every title helper variant remain unverified."
+      ]
+    },
+    {
+      "id": "factory-compaction",
+      "name": "Factory own conversation Summarizer / compaction / handoff",
+      "historicalStatus": "not_verified_static_candidate",
+      "historicalEvidence": {
+        "path": "evidence/factory-model-surface-2026-10-15.json",
+        "jsonPointer": "/entries/16",
+        "sha256": "290233e84749d25c24c735fddc10cfe04cf295a51dd07dbd9ad22d5d77a0eec6"
+      },
+      "currentStatus": "verified_scoped",
+      "executionKind": "official_factory_stream_jsonrpc_summarizer",
+      "verifiedOrObserved": [
+        "Actual automatic Factory compaction removed one initial context message at a public lowered 12000-token threshold; a separate subsequent user turn recalled the facts in the same native session.",
+        "Actual manual current-session compaction removed 14 messages, retained tested values in the summary, and continued the same native session.",
+        "Actual same-worker handoff removed 19 messages, retained the facts, and loaded the new Factory session into a distinct native session.",
+        "The manual continuity, automatic binding-loss, and same-worker handoff regressions have preserved failures and passing real reruns."
+      ],
+      "currentEvidence": [
+        {
+          "path": "evidence/factory-context-validation-2026-10-16-r3.json",
+          "jsonPointer": "/checks",
+          "sha256": "29c6e72249bdae26071ddf7a219b4c9efbdd1c2763a56b020bc321e51d13879c"
+        },
+        {
+          "path": "evidence/factory-context-validation-2026-10-16-r3.json",
+          "jsonPointer": "/compactionStates",
+          "sha256": "29c6e72249bdae26071ddf7a219b4c9efbdd1c2763a56b020bc321e51d13879c"
+        },
+        {
+          "path": "evidence/factory-context-validation-2026-10-16-r3.json",
+          "jsonPointer": "/requests",
+          "sha256": "29c6e72249bdae26071ddf7a219b4c9efbdd1c2763a56b020bc321e51d13879c"
+        },
+        {
+          "path": "evidence/factory-context-regression-2026-10-16.json",
+          "jsonPointer": "/bug",
+          "sha256": "115a4ea6fe511ca4919c7029c94b10a2ff7016005c4b61fc31b1cf72d1b025ba"
+        },
+        {
+          "path": "evidence/factory-context-regression-2026-10-16.json",
+          "jsonPointer": "/automaticCompactionRegression",
+          "sha256": "115a4ea6fe511ca4919c7029c94b10a2ff7016005c4b61fc31b1cf72d1b025ba"
+        },
+        {
+          "path": "evidence/factory-context-regression-2026-10-16.json",
+          "jsonPointer": "/handoff",
+          "sha256": "115a4ea6fe511ca4919c7029c94b10a2ff7016005c4b61fc31b1cf72d1b025ba"
+        }
+      ],
+      "remainingLimitations": [
+        "The automatic fixture removed an initial hook/context message; it does not establish default-threshold or large semantic-history automatic summarization fidelity.",
+        "Summary fallback models/reasoning modes, arbitrary histories with pending tool callbacks, and all long Missions are not covered.",
+        "Factory Summarizer is distinct from native Claude compaction and from any unestablished Task-result summary helper."
+      ]
+    },
+    {
+      "id": "factory-spec",
+      "name": "Factory spec planning model and ExitSpecMode transition",
+      "historicalStatus": "not_verified_public_surface",
+      "historicalEvidence": {
+        "path": "evidence/factory-model-surface-2026-10-15.json",
+        "jsonPointer": "/entries/17",
+        "sha256": "290233e84749d25c24c735fddc10cfe04cf295a51dd07dbd9ad22d5d77a0eec6"
+      },
+      "currentStatus": "verified_scoped",
+      "executionKind": "official_factory_use_spec_and_exit_spec_mode",
+      "verifiedOrObserved": [
+        "Official --use-spec workflow advertised and executed the real Factory ExitSpecMode tool, observed approval, then completed an independently verified native file result.",
+        "A live attempted native Write before approval was denied and its output file remained absent; approved implementation then succeeded."
+      ],
+      "currentEvidence": [
+        {
+          "path": "evidence/spec-readonly-validation-2026-10-16.json",
+          "jsonPointer": "/checks",
+          "sha256": "2a7c38d25456a87e000d403300a670a6d273bfb208a9caaa920ae9516e13c1bf"
+        },
+        {
+          "path": "evidence/spec-validation-2026-10-16-r4.json",
+          "jsonPointer": "/observations/hookModes",
+          "sha256": "41dfee48d006d3350df2f8c57f707872987f9eaf80536170cbf8206279323215"
+        },
+        {
+          "path": "evidence/spec-custom-validation-2026-10-16.json",
+          "jsonPointer": "/attempts",
+          "sha256": "754b4b1f3beeb8a66130be9d8c0934ed376b50d11dcdf4d510f952899b1516fe"
+        }
+      ],
+      "remainingLimitations": [
+        "New-session spec mode and auto-high approval were exercised. All interactive approval variants and heterogeneous upstream models remain unverified.",
+        "The first reproduced missing ExitSpecMode tool attempt remains in the aggregate; successful reruns use the corrected official tool list."
+      ]
+    },
+    {
+      "id": "factory-review",
+      "name": "Interactive /review flow and review Skill",
+      "historicalStatus": "not_verified_static_candidate",
+      "historicalEvidence": {
+        "path": "evidence/factory-model-surface-2026-10-15.json",
+        "jsonPointer": "/entries/18",
+        "sha256": "290233e84749d25c24c735fddc10cfe04cf295a51dd07dbd9ad22d5d77a0eec6"
+      },
+      "currentStatus": "verified_scoped",
+      "executionKind": "official_factory_tty_slash_review",
+      "verifiedOrObserved": [
+        "The actual /review slash-menu invoked the built-in review Skill on a known diff, reported the multiplication/division regression, and left the fixture unchanged; PTY and driver exited successfully."
+      ],
+      "currentEvidence": [
+        {
+          "path": "evidence/interactive-proof-recheck-2026-10-16.json",
+          "jsonPointer": "/review",
+          "sha256": "95d15469125dabd50bc457568ab759a1fda576f48c087846931e2018a877a344"
+        },
+        {
+          "path": "evidence/interactive-proof-recheck-2026-10-16.json",
+          "jsonPointer": "/checks",
+          "sha256": "95d15469125dabd50bc457568ab759a1fda576f48c087846931e2018a877a344"
+        },
+        {
+          "path": "evidence/interactive-proof-recheck-2026-10-16.json",
+          "jsonPointer": "/ptyExit",
+          "sha256": "95d15469125dabd50bc457568ab759a1fda576f48c087846931e2018a877a344"
+        }
+      ],
+      "remainingLimitations": [
+        "This validates a local known diff; remote PR ingestion, every review target selection, and other models are outside the run."
+      ]
+    },
+    {
+      "id": "generate-droid",
+      "name": "AI-generated custom Droid configuration from /droids",
+      "historicalStatus": "not_verified_static_candidate",
+      "historicalEvidence": {
+        "path": "evidence/factory-model-surface-2026-10-15.json",
+        "jsonPointer": "/entries/19",
+        "sha256": "290233e84749d25c24c735fddc10cfe04cf295a51dd07dbd9ad22d5d77a0eec6"
+      },
+      "currentStatus": "blocked_current_configuration",
+      "executionKind": "official_hosted_generator_plus_verified_local_alternative",
+      "verifiedOrObserved": [
+        "Actual /droids hosted generation returned Factory-auth 401 and added zero Bridge model requests.",
+        "The separate /relay-droid project-command alternative generated a usable project Droid through configured BYOK; real Factory Task execution of that child passed strict prompt, native Read, nonce, result, and session checks."
+      ],
+      "currentEvidence": [
+        {
+          "path": "evidence/interactive-proof-recheck-2026-10-16.json",
+          "jsonPointer": "/hostedGenerator",
+          "sha256": "95d15469125dabd50bc457568ab759a1fda576f48c087846931e2018a877a344"
+        },
+        {
+          "path": "evidence/interactive-proof-recheck-2026-10-16.json",
+          "jsonPointer": "/taskProof",
+          "sha256": "95d15469125dabd50bc457568ab759a1fda576f48c087846931e2018a877a344"
+        },
+        {
+          "path": "evidence/interactive-validation-2026-10-16-r2.json",
+          "jsonPointer": "/generator",
+          "sha256": "591b39f4d1368a9537a403fc7ebe135d3472edbabf344bd0adddc8eb63000293"
+        }
+      ],
+      "remainingLimitations": [
+        "The original Factory hosted GenerateDroid model route is not verified or made BYOK by this alternative.",
+        "The replacement is an explicit user-invoked project command; it does not impersonate the hosted service or bypass Factory authentication."
+      ],
+      "alternative": {
+        "entryPoint": "/relay-droid",
+        "status": "verified_scoped",
+        "sameAsOriginalHostedService": false
+      }
+    },
+    {
+      "id": "factory-auto-router",
+      "name": "Auto Model classifier and routing fallbacks",
+      "historicalStatus": "not_verified_static_candidate",
+      "historicalEvidence": {
+        "path": "evidence/factory-model-surface-2026-10-15.json",
+        "jsonPointer": "/entries/20",
+        "sha256": "290233e84749d25c24c735fddc10cfe04cf295a51dd07dbd9ad22d5d77a0eec6"
+      },
+      "currentStatus": "blocked_current_configuration",
+      "executionKind": "official_factory_cli_rejection_before_inference",
+      "verifiedOrObserved": [
+        "Actual --model auto was rejected as Invalid model with no built-in models available in the isolated airgap/custom-model configuration and no Bridge inference requests."
+      ],
+      "currentEvidence": [
+        {
+          "path": "evidence/auxiliary-validation-2026-10-16.json",
+          "jsonPointer": "/actions/1",
+          "sha256": "2ece1e4e4ea5271b29def95ce5304990f85a5d65b49edeea2e21b1cda377e2ee"
+        },
+        {
+          "path": "evidence/auxiliary-validation-2026-10-16.json",
+          "jsonPointer": "/checks/autoRejectedBeforeInference",
+          "sha256": "2ece1e4e4ea5271b29def95ce5304990f85a5d65b49edeea2e21b1cda377e2ee"
+        }
+      ],
+      "remainingLimitations": [
+        "No Auto classifier, routing decision, deterministic single-candidate skip, or fallback model path was executed.",
+        "Requires an officially supported authorized Auto configuration to verify this distinct service; fixed custom-model success does not substitute for it."
+      ]
+    },
+    {
+      "id": "factory-command-risk",
+      "name": "Independent command-risk classification model",
+      "historicalStatus": "not_verified_static_candidate",
+      "historicalEvidence": {
+        "path": "evidence/factory-model-surface-2026-10-15.json",
+        "jsonPointer": "/entries/21",
+        "sha256": "290233e84749d25c24c735fddc10cfe04cf295a51dd07dbd9ad22d5d77a0eec6"
+      },
+      "currentStatus": "not_verified",
+      "executionKind": "static_candidate_not_executed",
+      "verifiedOrObserved": [
+        "A harmless real Execute request completed as native Claude Bash; that mapping does not invoke Factory command-risk classification."
+      ],
+      "currentEvidence": [
+        {
+          "path": "evidence/auxiliary-validation-2026-10-16.json",
+          "jsonPointer": "/actions/2",
+          "sha256": "2ece1e4e4ea5271b29def95ce5304990f85a5d65b49edeea2e21b1cda377e2ee"
+        },
+        {
+          "path": "evidence/auxiliary-validation-2026-10-16.json",
+          "jsonPointer": "/onlyToolsLimitation",
+          "sha256": "2ece1e4e4ea5271b29def95ce5304990f85a5d65b49edeea2e21b1cda377e2ee"
+        },
+        {
+          "path": "evidence/native-tool-policy-validation-2026-10-16.json",
+          "jsonPointer": "/knownScope",
+          "sha256": "22c5ab529f0c12126c3ed2599f8731a8338acd78743d327c1852121193b8d017"
+        }
+      ],
+      "remainingLimitations": [
+        "Factory classifier enablement, request route, response decisions, cache and failure paths remain unverified.",
+        "The configured Factory API sink only observes traffic honoring its overrides; it is not an all-egress trace or proof of classifier absence."
+      ]
+    },
+    {
+      "id": "factory-droid-shield",
+      "name": "Droid Shield learned classification models",
+      "historicalStatus": "not_verified_static_candidate",
+      "historicalEvidence": {
+        "path": "evidence/factory-model-surface-2026-10-15.json",
+        "jsonPointer": "/entries/22",
+        "sha256": "290233e84749d25c24c735fddc10cfe04cf295a51dd07dbd9ad22d5d77a0eec6"
+      },
+      "currentStatus": "not_verified",
+      "executionKind": "static_candidate_and_synthetic_output_contract_guard",
+      "verifiedOrObserved": [
+        "A direct synthetic Bridge probe requiring logprobs/top_logprobs/response_format was rejected with 422 unsupported_output_contract before native execution."
+      ],
+      "currentEvidence": [
+        {
+          "path": "evidence/auxiliary-validation-2026-10-16.json",
+          "jsonPointer": "/specializedOutputGuard",
+          "sha256": "2ece1e4e4ea5271b29def95ce5304990f85a5d65b49edeea2e21b1cda377e2ee"
+        },
+        {
+          "path": "evidence/auxiliary-validation-2026-10-16.json",
+          "jsonPointer": "/nativeOutputCapabilities",
+          "sha256": "2ece1e4e4ea5271b29def95ce5304990f85a5d65b49edeea2e21b1cda377e2ee"
+        },
+        {
+          "path": "evidence/auxiliary-validation-2026-10-16.json",
+          "jsonPointer": "/onlyToolsLimitation",
+          "sha256": "2ece1e4e4ea5271b29def95ce5304990f85a5d65b49edeea2e21b1cda377e2ee"
+        }
+      ],
+      "remainingLimitations": [
+        "No real Factory Droid Shield classification was triggered, and the synthetic guard is not Shield runtime coverage.",
+        "The current native-agent output route cannot honor the specialized token-probability/constrained-response contract; a separately authorized compatible model route would be needed.",
+        "Availability under official consent/account/feature configuration remains unverified; feature flags and authentication were not patched."
+      ]
+    },
+    {
+      "id": "factory-local-signals",
+      "name": "Local Signals analytics classifications and reused-prefix sidechain",
+      "historicalStatus": "not_verified_static_candidate",
+      "historicalEvidence": {
+        "path": "evidence/factory-model-surface-2026-10-15.json",
+        "jsonPointer": "/entries/23",
+        "sha256": "290233e84749d25c24c735fddc10cfe04cf295a51dd07dbd9ad22d5d77a0eec6"
+      },
+      "currentStatus": "not_verified",
+      "executionKind": "static_candidate_not_executed",
+      "verifiedOrObserved": [],
+      "currentEvidence": [
+        {
+          "path": "evidence/auxiliary-validation-2026-10-16.json",
+          "jsonPointer": "/onlyToolsLimitation",
+          "sha256": "2ece1e4e4ea5271b29def95ce5304990f85a5d65b49edeea2e21b1cda377e2ee"
+        },
+        {
+          "path": "evidence/auxiliary-validation-2026-10-16.json",
+          "jsonPointer": "/note",
+          "sha256": "2ece1e4e4ea5271b29def95ce5304990f85a5d65b49edeea2e21b1cda377e2ee"
+        },
+        {
+          "path": "evidence/auxiliary-validation-2026-10-16.json",
+          "jsonPointer": "/auxiliaryClassifiersVerified",
+          "sha256": "2ece1e4e4ea5271b29def95ce5304990f85a5d65b49edeea2e21b1cda377e2ee"
+        }
+      ],
+      "remainingLimitations": [
+        "Local Signals needs its own consent/feature configuration. SessionEnd/compaction callbacks alone do not prove its classifier ran.",
+        "Neither the reused-prefix nor one-shot classifier route, decisions, usage, or complete egress was observed."
+      ]
+    },
+    {
+      "id": "factory-image-generation",
+      "name": "GenerateImage model tool and image-edit model requests",
+      "historicalStatus": "not_verified_static_candidate",
+      "historicalEvidence": {
+        "path": "evidence/factory-model-surface-2026-10-15.json",
+        "jsonPointer": "/entries/24",
+        "sha256": "290233e84749d25c24c735fddc10cfe04cf295a51dd07dbd9ad22d5d77a0eec6"
+      },
+      "currentStatus": "blocked_current_configuration",
+      "executionKind": "official_tool_catalog_and_native_output_capabilities",
+      "verifiedOrObserved": [
+        "The real isolated Factory tool catalog did not advertise GenerateImage; the configured native route has no verified generated-image/audio output contract."
+      ],
+      "currentEvidence": [
+        {
+          "path": "evidence/auxiliary-validation-2026-10-16.json",
+          "jsonPointer": "/actions/0",
+          "sha256": "2ece1e4e4ea5271b29def95ce5304990f85a5d65b49edeea2e21b1cda377e2ee"
+        },
+        {
+          "path": "evidence/auxiliary-validation-2026-10-16.json",
+          "jsonPointer": "/imageAdvertised",
+          "sha256": "2ece1e4e4ea5271b29def95ce5304990f85a5d65b49edeea2e21b1cda377e2ee"
+        },
+        {
+          "path": "evidence/auxiliary-validation-2026-10-16.json",
+          "jsonPointer": "/nativeOutputCapabilities",
+          "sha256": "2ece1e4e4ea5271b29def95ce5304990f85a5d65b49edeea2e21b1cda377e2ee"
+        }
+      ],
+      "remainingLimitations": [
+        "No image generation, image edit, image model fallback, or image billing path was invoked.",
+        "Text-model success and synthetic specialized-output rejection cannot be counted as image-model execution. An authorized compatible image backend is needed."
+      ]
+    },
+    {
+      "id": "transport-and-open-ended-extensions",
+      "name": "Other frontends, remote services, plugins and future/conditional model surfaces",
+      "historicalStatus": "unknown_not_enumerable",
+      "historicalEvidence": {
+        "path": "evidence/factory-model-surface-2026-10-15.json",
+        "jsonPointer": "/entries/25",
+        "sha256": "290233e84749d25c24c735fddc10cfe04cf295a51dd07dbd9ad22d5d77a0eec6"
+      },
+      "currentStatus": "unknown_not_enumerable",
+      "executionKind": "multiple_public_transports_with_open_ended_remainder",
+      "verifiedOrObserved": [
+        "Fresh real public transport coverage includes production exec/--session-id, stream-jsonrpc Factory compaction/handoff, and TTY /review, /droids rejection, /relay-droid alternative, and Escape cancellation."
+      ],
+      "currentEvidence": [
+        {
+          "path": "evidence/verification-skill-validation-2026-10-16.json",
+          "jsonPointer": "/checks",
+          "sha256": "34b84a56322a9c0789bfe755f0051c1bfe9e5c056414cd7d17317b7c69733eaf"
+        },
+        {
+          "path": "evidence/factory-context-validation-2026-10-16-r3.json",
+          "jsonPointer": "/checks",
+          "sha256": "29c6e72249bdae26071ddf7a219b4c9efbdd1c2763a56b020bc321e51d13879c"
+        },
+        {
+          "path": "evidence/interactive-proof-recheck-2026-10-16.json",
+          "jsonPointer": "/checks",
+          "sha256": "95d15469125dabd50bc457568ab759a1fda576f48c087846931e2018a877a344"
+        },
+        {
+          "path": "evidence/interactive-cancel-validation-2026-10-16.json",
+          "jsonPointer": "/escapeCancellation",
+          "sha256": "2bee8f26ecd2bb28def4621fe9300f78c2da565bd2530508570da7033324d30c"
+        },
+        {
+          "path": "evidence/interactive-cancel-validation-2026-10-16.json",
+          "jsonPointer": "/ptyExit",
+          "sha256": "2bee8f26ecd2bb28def4621fe9300f78c2da565bd2530508570da7033324d30c"
+        }
+      ],
+      "remainingLimitations": [
+        "ACP, all fork variants, desktop/daemon/remote worker frontends, arbitrary MCP/plugins, and remotely configured/server-side model calls are not exhaustively verified.",
+        "The 26 inventory rows are candidate feature groupings, not the complete number of Factory internal model callsites; no coverage percentage can be computed."
+      ]
+    }
+  ]
+}

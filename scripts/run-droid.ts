@@ -18,7 +18,10 @@ const help = `Usage: npm run run-droid -- [wrapper options] -- [Droid arguments]
 BRIDGE_ADMIN_TOKEN is required. BRIDGE_CONTROL_URL defaults to http://127.0.0.1:18787.
 BRIDGE_DROID_EXECUTABLE selects the Droid executable (default: droid).
 Project Factory hooks must be installed for session lifecycle and cancellation.
-Arguments after -- are passed unchanged; without Droid arguments the interactive CLI starts.`;
+Arguments after -- are forwarded to Droid. For exec spec mode the wrapper explicitly
+enables ExitSpecMode to preserve Factory's plan approval transition; conflicting
+explicit tool restrictions are rejected before launching. Without arguments the
+interactive CLI starts.`;
 
 export interface DroidWrapperArgs {
   home?: string;
@@ -66,6 +69,58 @@ export function parseDroidWrapperArgs(argv: string[]): DroidWrapperArgs {
   return result;
 }
 
+/** Droid 0.242.0 removes ExitSpecMode from exec's effective tool policy during
+ * its spec -> implementation transition unless explicitly enabled. Keep the
+ * official Factory approval tool available; never implement approval ourselves.
+ * Only parse documented top-level exec options, never prompt or file content. */
+export function prepareDroidExecArgs(argv: string[]): string[] {
+  if (argv[0] !== "exec") return argv;
+  const booleans = new Set(["--use-spec", "--skip-permissions-unsafe", "--disable-builtin-skills", "--mission", "--list-tools", "--help", "-h"]);
+  const valued = new Set(["--output-format", "-o", "--input-format", "--file", "-f", "--auto", "--session-id", "-s", "--fork", "--model", "-m", "--reasoning-effort", "-r", "--spec-model", "--spec-reasoning-effort", "--only-tools", "--add-tools", "--remove-tools", "--cwd", "--settings", "--worktree-dir", "--tag", "--log-group-id", "--worker-model", "--worker-reasoning-effort", "--validator-model", "--validator-reasoning-effort", "--append-system-prompt", "--append-system-prompt-file", "--session-title", "--enabled-tools", "--additional-tools", "--disabled-tools", "--restrict-tools"]);
+  const options: Array<{ name: string; value?: string; index: number; inline: boolean }> = [];
+  for (let index = 1; index < argv.length; index++) {
+    const argument = argv[index]!;
+    if (argument === "--") break;
+    if (!argument.startsWith("-")) continue; // one positional prompt, kept verbatim
+    const equal = argument.indexOf("="), name = equal < 0 ? argument : argument.slice(0, equal);
+    const inline = equal >= 0;
+    if (booleans.has(name)) { options.push({ name, index, inline }); continue; }
+    if (name === "--worktree" || name === "-w") {
+      if (!inline && argv[index + 1] && !argv[index + 1]!.startsWith("-")) index++;
+      continue;
+    }
+    // Future/unknown flags have an unknown arity. Defer them to Droid rather
+    // than accidentally interpreting their payload as a security option.
+    if (!valued.has(name)) return argv;
+    const optionIndex = index;
+    const value = inline ? argument.slice(equal + 1) : argv[++index];
+    if (value === undefined) return argv; // let the official parser report it
+    options.push({ name, value, index: optionIndex, inline });
+  }
+  if (!options.some((option) => option.name === "--use-spec" || option.name === "--spec-model")
+    || options.some((option) => ["--help", "-h", "--list-tools"].includes(option.name))
+    || options.some((option) => option.name === "--input-format" && option.value === "stream-jsonrpc")) return argv;
+  const hasExit = (value?: string) => (value ?? "").split(",").some((name) => ["exitspecmode", "exit-spec-mode"].includes(name.trim().toLowerCase()));
+  if (options.some((option) => ["--remove-tools", "--disabled-tools"].includes(option.name) && hasExit(option.value))) {
+    throw new Error("Spec mode requires Factory ExitSpecMode, but the explicit removed-tools policy denies it. Droid was not started.");
+  }
+  const fixed = options.filter((option) => ["--only-tools", "--enabled-tools", "--restrict-tools"].includes(option.name));
+  const alreadyAdded = options.some((option) => ["--add-tools", "--additional-tools"].includes(option.name) && hasExit(option.value));
+  if (fixed.some((option) => !hasExit(option.value)) && !alreadyAdded) {
+    throw new Error("Spec mode requires Factory ExitSpecMode; include it in the explicit tool allowlist. Droid was not started.");
+  }
+  if (alreadyAdded || fixed.some((option) => hasExit(option.value))) return argv;
+  const legacy = options.some((option) => ["--enabled-tools", "--additional-tools", "--disabled-tools", "--restrict-tools"].includes(option.name));
+  const flag = legacy ? "--additional-tools" : "--add-tools";
+  const existing = [...options].reverse().find((option) => option.name === flag);
+  const prepared = [...argv];
+  if (existing) {
+    const value = `${existing.value},ExitSpecMode`;
+    prepared[existing.index + (existing.inline ? 0 : 1)] = existing.inline ? `${flag}=${value}` : value;
+  } else prepared.splice(1, 0, flag, "ExitSpecMode");
+  return prepared;
+}
+
 interface RunDroidOptions {
   env?: NodeJS.ProcessEnv;
   signal?: AbortSignal;
@@ -103,6 +158,7 @@ async function finishOwnedProcessGroup(child: ChildProcess, graceMs: number): Pr
 export async function runDroid(argv: string[], options: RunDroidOptions = {}): Promise<number> {
   const parsed = parseDroidWrapperArgs(argv);
   if (parsed.help) { process.stdout.write(`${help}\n`); return 0; }
+  const droidArgs = prepareDroidExecArgs(parsed.args);
   const sourceEnv = options.env ?? process.env;
   const token = sourceEnv.BRIDGE_ADMIN_TOKEN?.trim();
   if (!token) throw new Error("BRIDGE_ADMIN_TOKEN is required for launch-scoped cancellation; Droid was not started.");
@@ -175,7 +231,7 @@ export async function runDroid(argv: string[], options: RunDroidOptions = {}): P
     if (!parsed.keepFactoryKey) delete env.FACTORY_API_KEY;
     if (parsed.airgap === "0") delete env.FACTORY_AIRGAP_ENABLED;
     if (parsed.airgap === "1") env.FACTORY_AIRGAP_ENABLED = "1";
-    child = spawn(sourceEnv.BRIDGE_DROID_EXECUTABLE ?? "droid", parsed.args, {
+    child = spawn(sourceEnv.BRIDGE_DROID_EXECUTABLE ?? "droid", droidArgs, {
       cwd, env, detached: process.platform !== "win32",
       stdio: parsed.out ? [options.stdio === "ignore" ? "ignore" : "inherit", "pipe", "pipe"] : options.stdio ?? "inherit",
     });

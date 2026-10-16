@@ -1,0 +1,342 @@
+{
+  "feature": "custom",
+  "status": "FAIL",
+  "startedAt": "2026-10-16T01:04:16.280Z",
+  "authentication": {
+    "provider": "glm",
+    "label": "https://open.bigmodel.cn/api/anthropic",
+    "baseUrl": "https://open.bigmodel.cn/api/anthropic",
+    "model": "glm-5.2",
+    "tokenEnv": "READINESS_MODEL_API_KEY",
+    "authHeader": "x-api-key",
+    "subscriptionCredentialsRead": false
+  },
+  "exclusions": [
+    "Anthropic subscription billing or account-safety guarantees",
+    "different underlying models for Factory aliases",
+    "all possible custom droids"
+  ],
+  "exitCode": 0,
+  "checks": {
+    "droidSucceeded": true,
+    "independentFileResult": true,
+    "inputUnchanged": true,
+    "authenticatedBridgeTraffic": true,
+    "nativeReadCompleted": true,
+    "nativeWriteCompleted": true,
+    "runtimeDrained": true,
+    "nativeSessionsPresent": true,
+    "actualCustomFactoryTask": true,
+    "bodyOnlyMarkerPreserved": true,
+    "customModelSelected": true,
+    "childNativeSession": true,
+    "parentDidNotReadOrWrite": true,
+    "markerNotInDelegatedPrompt": true,
+    "readOnlyResultFidelity": true,
+    "childAdvertisesOnlyRead": false
+  },
+  "observations": {
+    "result": {
+      "type": "result",
+      "subtype": "success",
+      "is_error": false,
+      "duration_ms": 65082,
+      "num_turns": 2,
+      "result": "CUSTOM_PARENT_OK\n\nThe relay-verifier droid completed its verification task (session `f7f71fd7-02b8-4279-bc1b-8ac235b36c17`) and returned:\n\n```json\n{\"nonce\": \"551f6e2ae52a6acceff78bf5\", \"sum\": 46, \"bodyMarker\": \"DROID_BODY_779fb101de6dc8438dfa\"}\n```\n\nSummary of what the child did and verified:\n- **Permission probe**: attempted a native Write to `forbidden-custom-write.json`, which was mechanically denied by the PreToolUse hook (`BRIDGE_HOST_TOOL_NOT_ADVERTISED`), as the test expects; no retry via another tool.\n- **Input**: read `input.json` → `{\"nonce\":\"551f6e2ae52a6acceff78bf5\",\"a\":17,\"b\":29}`.\n- **Computation**: sum = 17 + 29 = **46**.\n- **Files written**: none; it returned `CUSTOM_CHILD_OK` with the JSON above.\n\nI did not read `.factory/droids` or `input.json` myself and wrote no files.",
+      "session_id": "542519cc-17c0-4fce-a98f-951ec987c3c7",
+      "usage": {
+        "input_tokens": 12990,
+        "output_tokens": 1534,
+        "cache_read_input_tokens": 94848,
+        "cache_creation_input_tokens": 0,
+        "factory_credits": 0,
+        "ttft_ms": 7545.5
+      }
+    },
+    "tools": [
+      {
+        "name": "Write",
+        "id": "call_2c5ad5ca7f38449daf888da7",
+        "input": {
+          "file_path": "/tmp/relay-e2e-ws-aEufPz/forbidden-custom-write.json",
+          "content": "PERMISSION_PROBE"
+        },
+        "sessionId": "5e424adf-21c7-46de-8609-f7444f730265",
+        "resultSeen": true,
+        "isError": true
+      },
+      {
+        "name": "Read",
+        "id": "call_5edf58f987214b9a944a5173",
+        "input": {
+          "file_path": "/tmp/relay-e2e-ws-aEufPz/input.json"
+        },
+        "sessionId": "5e424adf-21c7-46de-8609-f7444f730265",
+        "resultSeen": true,
+        "isError": false
+      },
+      {
+        "name": "mcp__droid__Task",
+        "id": "call_5ceaf12d8da944f9a50b8a46",
+        "input": {
+          "subagent_type": "relay-verifier",
+          "description": "Run relay-verifier verification task",
+          "prompt": "Execute the verification task defined in your own droid instructions (the relay-verifier project droid). Follow all of your instructions exactly, including anything they specify about reading input.json, computing values, or writing output files. When finished, return a report that includes the literal token CUSTOM_CHILD_OK along with your bodyMarker value, plus any nonce, sum, or other computed fields your instructions require. Do not omit any field your instructions define.",
+          "await": true
+        },
+        "sessionId": "d103c3d2-9e8a-4bfc-b30b-a27405ebec80",
+        "resultSeen": true,
+        "isError": false
+      }
+    ],
+    "hookModes": [
+      {
+        "at": "2026-10-16T01:04:16.612Z",
+        "hook": "SessionStart",
+        "sessionId": "542519cc-17c0-4fce-a98f-951ec987c3c7",
+        "permissionMode": "off"
+      },
+      {
+        "at": "2026-10-16T01:04:28.086Z",
+        "hook": "PreToolUse",
+        "sessionId": "542519cc-17c0-4fce-a98f-951ec987c3c7",
+        "permissionMode": "auto-high",
+        "toolName": "Task"
+      },
+      {
+        "at": "2026-10-16T01:04:28.488Z",
+        "hook": "SessionStart",
+        "sessionId": "f7f71fd7-02b8-4279-bc1b-8ac235b36c17",
+        "permissionMode": "auto-high"
+      },
+      {
+        "at": "2026-10-16T01:04:28.672Z",
+        "hook": "UserPromptSubmit",
+        "sessionId": "f7f71fd7-02b8-4279-bc1b-8ac235b36c17",
+        "permissionMode": "auto-high"
+      },
+      {
+        "at": "2026-10-16T01:05:15.152Z",
+        "hook": "SessionEnd",
+        "sessionId": "f7f71fd7-02b8-4279-bc1b-8ac235b36c17",
+        "permissionMode": "auto-high"
+      },
+      {
+        "at": "2026-10-16T01:05:15.469Z",
+        "hook": "PostToolUse",
+        "sessionId": "542519cc-17c0-4fce-a98f-951ec987c3c7",
+        "permissionMode": "auto-high",
+        "toolName": "Task"
+      },
+      {
+        "at": "2026-10-16T01:05:21.848Z",
+        "hook": "SessionEnd",
+        "sessionId": "542519cc-17c0-4fce-a98f-951ec987c3c7",
+        "permissionMode": "auto-high"
+      }
+    ],
+    "requests": [
+      {
+        "at": "2026-10-16T01:04:16.907Z",
+        "session": "sess_a5f64eb2-bbb5-4939-a387-f1eb6d7d069a",
+        "model": "relay-chat"
+      },
+      {
+        "at": "2026-10-16T01:04:28.805Z",
+        "session": "sess_a7b0300f-5563-4e01-8fab-133df8a34297",
+        "model": "relay-custom-child"
+      },
+      {
+        "at": "2026-10-16T01:05:15.576Z",
+        "session": "sess_a5f64eb2-bbb5-4939-a387-f1eb6d7d069a",
+        "model": "relay-chat"
+      }
+    ],
+    "sessions": [
+      {
+        "bridgeSessionId": "sess_a5f64eb2-bbb5-4939-a387-f1eb6d7d069a",
+        "role": "chat",
+        "state": "IDLE",
+        "model": "relay-chat",
+        "historyHash": "78db5330bb47bf2b02d3b5e9e56809a067f89b117080e6b406d60a31cc3d0c2f",
+        "contextHash": "c408c3be7b5f1683a5ecc2c13d41b5d085d12463cd1aa31acabd0bf683af1a3f",
+        "requestMessageHashes": [
+          "de4f8fe7f74ee1ea5b04e41faf0576142db7662484ab306d64c56f865458a57f",
+          "4a3445750b21cb0de801c810d51a57a3a95bcce1e0b06bc7cbee716eabdc53dd",
+          "d28aa8d543f199c2c8c67907179440216301212aa3ff6607d4172ac11c1ac362",
+          "66b0f9769e431585bd670eb76e727ffe85175e0b52ca6934cbbaaa95ba9554d1"
+        ],
+        "historyMessageHashes": [
+          "de4f8fe7f74ee1ea5b04e41faf0576142db7662484ab306d64c56f865458a57f",
+          "4a3445750b21cb0de801c810d51a57a3a95bcce1e0b06bc7cbee716eabdc53dd",
+          "d28aa8d543f199c2c8c67907179440216301212aa3ff6607d4172ac11c1ac362",
+          "66b0f9769e431585bd670eb76e727ffe85175e0b52ca6934cbbaaa95ba9554d1",
+          "2fcec45c139005a23046187488fefdc2ac4a2530819be51140be790925fbc25e"
+        ],
+        "toolNames": [
+          "Read",
+          "LS",
+          "Execute",
+          "Edit",
+          "Grep",
+          "Glob",
+          "Create",
+          "TaskOutput",
+          "TaskStop",
+          "ToolSearch",
+          "Skill",
+          "Task"
+        ],
+        "createdAt": "2026-10-16T01:04:16.906Z",
+        "updatedAt": "2026-10-16T01:05:21.925Z",
+        "pendingToolIds": [],
+        "cancelRequested": false,
+        "notes": [
+          "factory-session-ended"
+        ],
+        "usage": {
+          "input_tokens": 6674,
+          "output_tokens": 640,
+          "cache_creation_input_tokens": 0,
+          "cache_read_input_tokens": 39680,
+          "status": "reported",
+          "coverage": "partial",
+          "knownFields": [
+            "input_tokens",
+            "output_tokens",
+            "cache_read_input_tokens"
+          ],
+          "scope": "provider_messages",
+          "estimated": true,
+          "modelRequests": 1
+        },
+        "factorySessionId": "542519cc-17c0-4fce-a98f-951ec987c3c7",
+        "factoryCwd": "/tmp/relay-e2e-ws-aEufPz",
+        "hostEnded": "resumable",
+        "sdkSessionId": "d103c3d2-9e8a-4bfc-b30b-a27405ebec80"
+      },
+      {
+        "bridgeSessionId": "sess_a7b0300f-5563-4e01-8fab-133df8a34297",
+        "role": "chat",
+        "state": "IDLE",
+        "model": "relay-custom-child",
+        "historyHash": "3c67929aa62fdcef0782d723445c79350f6ad1d4816ef37e45508f0cf55e908c",
+        "contextHash": "134757c6026ad481949ba94c62c1da8bb54268abd736844389ab911206b619ce",
+        "requestMessageHashes": [
+          "1e0672f76c85ffc4bd46b4efb9b71fe5b18981126a1044a63bf28b482a9ce9e0",
+          "f1fc6f10b361482fd774553fb76802b9cbaf7ab2f212a9f86fbdcf6619c82a0f"
+        ],
+        "historyMessageHashes": [
+          "1e0672f76c85ffc4bd46b4efb9b71fe5b18981126a1044a63bf28b482a9ce9e0",
+          "f1fc6f10b361482fd774553fb76802b9cbaf7ab2f212a9f86fbdcf6619c82a0f",
+          "cf9e9f643ed15c62c3059eac9e6efa7c3e9032e4ca6be1ffdc5173dbf44ad3aa"
+        ],
+        "toolNames": [
+          "Read",
+          "Skill"
+        ],
+        "createdAt": "2026-10-16T01:04:28.805Z",
+        "updatedAt": "2026-10-16T01:05:15.223Z",
+        "pendingToolIds": [],
+        "cancelRequested": false,
+        "notes": [
+          "factory-session-ended"
+        ],
+        "usage": {
+          "input_tokens": 6316,
+          "output_tokens": 894,
+          "cache_creation_input_tokens": 0,
+          "cache_read_input_tokens": 55168,
+          "status": "reported",
+          "coverage": "partial",
+          "knownFields": [
+            "input_tokens",
+            "output_tokens",
+            "cache_read_input_tokens"
+          ],
+          "scope": "provider_messages",
+          "estimated": true,
+          "modelRequests": 3
+        },
+        "factorySessionId": "f7f71fd7-02b8-4279-bc1b-8ac235b36c17",
+        "factoryCwd": "/tmp/relay-e2e-ws-aEufPz",
+        "hostEnded": "resumable",
+        "sdkSessionId": "5e424adf-21c7-46de-8609-f7444f730265"
+      }
+    ],
+    "runtime": {
+      "kind": "sdk",
+      "authMode": "byok",
+      "permissionMode": "bypass",
+      "prompt": {
+        "systemPrompt": "preset:claude_code + stable append",
+        "dynamicPlacement": "user input on initial turn or context change",
+        "tools": "preset:claude_code built-ins + Droid-exclusive MCP"
+      },
+      "tools": "preset:claude_code + droid-exclusive MCP",
+      "input": "persistent SDK streaming input",
+      "includePartialMessages": true,
+      "approvalChannel": "external controller",
+      "activeNativeSessions": 0,
+      "activeNativeTurns": 0,
+      "pendingHostCalls": 0,
+      "pendingApprovals": 0,
+      "fatalErrors": [],
+      "overridesAnthropicEnv": true,
+      "upstream": {
+        "provider": "glm",
+        "label": "https://open.bigmodel.cn/api/anthropic",
+        "baseUrl": "https://open.bigmodel.cn/api/anthropic",
+        "model": "glm-5.2",
+        "tokenEnv": "READINESS_MODEL_API_KEY",
+        "authHeader": "x-api-key"
+      },
+      "control": {
+        "pendingApprovals": 0,
+        "failures": [],
+        "activeHostSessions": 0,
+        "boundNativeSessions": 0
+      }
+    }
+  },
+  "cleanup": {
+    "processes": {
+      "supported": true,
+      "observedProcessCount": 33,
+      "terminatedProcessCount": 0,
+      "remainingProcessIds": [],
+      "complete": true
+    },
+    "removed": [
+      true,
+      true,
+      true
+    ],
+    "errors": [],
+    "retained": [
+      {
+        "name": "action.json",
+        "sha256": "c14546774427d621a3d8ae726b3ae60811385c860caebcaa716955451c4c3f5e",
+        "unchanged": true
+      },
+      {
+        "name": "requests.json",
+        "sha256": "512223206adefb4d89b8381f0cf9faf9ac15ff42e5157ea70740f8e59ad0265b",
+        "unchanged": true
+      },
+      {
+        "name": "native-transcript.json",
+        "sha256": "2a1be2c08f733aa8f424a537dc9db36dda1dce35bf776d9de9571e433d97c6d4",
+        "unchanged": true
+      },
+      {
+        "name": "snapshot.json",
+        "sha256": "1e9d94733b61f73de7cf613d0919cc3fc6ea66cf0ac5e26c7d3d8d5a699ded9c",
+        "unchanged": true
+      }
+    ],
+    "complete": true
+  },
+  "finishedAt": "2026-10-16T01:05:21.998Z",
+  "evidenceDirectory": "/workspace/work/factory-cc-prep/repo/evidence/local/verify-custom-2026-10-16T01-04-16-279Z-73d591"
+}

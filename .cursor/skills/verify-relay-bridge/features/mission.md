@@ -23,15 +23,16 @@ Preconditions:
 - Parent skill's explicit BYOK selection and official CLIs are available.
 - Allow the one-hour default deadline. The harness starts from an intentionally broken project with original tests; it must not seed Mission plans or completed ledgers.
 
-- **Launch and drive.** Run `npm run test:e2e:mission`. Capture the unique evidence directory printed by the harness.
+- **Launch and drive.** Run `npm run verify:mission -- --summary evidence/new-mission.json`. Capture the unique evidence directory printed by the harness.
 - **Check work.** Require genuine Factory tool calls and native work for actual orchestrator/worker/validator sessions, with corresponding feature handoffs.
-- **Check result.** Require CLI success, Mission `completed`, every feature completed, every assertion passed, original tests/package unchanged and tests green.
+- **Check result.** Require CLI success, Mission `completed`, every feature completed, every assertion passed, original tests/package unchanged and tests green; both scrutiny-validator and user-testing-validator completed, each completed feature matched to its real EndFeatureRun transcript.
 - **Check health.** Require no runtime/control errors, pending tool callbacks or approvals before cleanup, and no owned processes after cleanup.
 - **Recovery.** For a healthy timeout report only, use `npx tsx scripts/e2e-mission-resume.ts` followed by that run's actual printed evidence directory. The recovery helper validates ownership and the original fixture. Preserve both attempt reports and label success `PASS_WITH_RECOVERY`.
 
 ## Gotchas
 
-- The previous recorded Mission needed recovery after the old 20-minute harness timeout. It is not an uninterrupted pass.
+- The final wrapper fingerprints actual runtime files before and after the run; changed runtime source invalidates acceptance. Its host-tool deadline is 8 hours, so it cannot undercut the 1-hour outer run deadline.
+- The historical 2026-10-15 Mission needed recovery after the old 20-minute harness timeout. The fresh [2026-10-16 Mission](../../../../evidence/mission-final-validation-2026-10-16-r3.json) passed continuously in 1126s. Use its exact source fingerprint; three subsequent independently verified changes are identified in the final summary.
 - Recovery uses the same Factory Mission and retained completed worker identities; it cannot recreate abandoned in-memory native callbacks.
 - Factory can finish a worker before emitting an EndFeatureRun PostToolUse hook. Authentic SessionEnd closes its waiter without inventing a success receipt.
 - Restoring a completed ledger or forcing StartMissionRun inside Bridge invalidates acceptance.

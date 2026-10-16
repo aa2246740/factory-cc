@@ -1,0 +1,156 @@
+{
+  "status": "PASS",
+  "recordedAt": "2026-10-16T01:41:54.541Z",
+  "scope": "Production sdkEnv checks plus real official Droid/Claude Code chat, native file work and resume with synthetic competing selectors in the parent environment.",
+  "selectors": [
+    "CLAUDE_CODE_USE_BEDROCK",
+    "CLAUDE_CODE_USE_VERTEX",
+    "CLAUDE_CODE_USE_FOUNDRY",
+    "CLAUDE_CODE_USE_ANTHROPIC_AWS",
+    "CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD",
+    "CLAUDE_CODE_USE_MANTLE",
+    "CLAUDE_CODE_USE_GATEWAY",
+    "CLAUDE_CODE_OAUTH_TOKEN_FILE_DESCRIPTOR",
+    "CLAUDE_CODE_GATEWAY_TOKEN_FILE_DESCRIPTOR",
+    "CLAUDE_CODE_API_KEY_FILE_DESCRIPTOR",
+    "CLAUDE_CODE_WEBSOCKET_AUTH_FILE_DESCRIPTOR",
+    "CCR_AGENT_PROXY_TOKEN_FILE_DESCRIPTOR",
+    "CLAUDE_CODE_OAUTH_TOKEN",
+    "CLAUDE_CODE_OAUTH_REFRESH_TOKEN",
+    "CLAUDE_CODE_SESSION_ACCESS_TOKEN",
+    "CLAUDE_CODE_HOST_SESSION_ID",
+    "CLAUDE_CODE_HOST_AUTH_ENV_VAR",
+    "CLAUDE_CODE_HOST_CREDS_FILE",
+    "CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST",
+    "CLAUDE_CODE_SDK_HAS_HOST_AUTH_REFRESH",
+    "CLAUDE_CODE_SDK_HAS_OAUTH_REFRESH",
+    "CLAUDE_CODE_GATEWAY_TOKEN",
+    "CLAUDE_CODE_HOST_GATEWAY_LINEAGE",
+    "AGENT_PROXY_AUTH_TOKEN",
+    "ANTHROPIC_CUSTOM_HEADERS",
+    "_CLAUDE_CODE_ASSUME_FIRST_PARTY_BASE_URL",
+    "ANTHROPIC_UNIX_SOCKET",
+    "_CLAUDE_CODE_AGENT_PROXY_HTTP_SOCKET",
+    "CLAUDE_CODE_API_BASE_URL",
+    "CLAUDE_CODE_SUBAGENT_MODEL_FORCE",
+    "FALLBACK_FOR_ALL_PRIMARY_MODELS"
+  ],
+  "modelSlots": [
+    "ANTHROPIC_MODEL",
+    "ANTHROPIC_DEFAULT_MODEL",
+    "ANTHROPIC_DEFAULT_FABLE_MODEL",
+    "ANTHROPIC_SMALL_FAST_MODEL",
+    "CLAUDE_CODE_WORKFLOW_SUBAGENT_MODEL",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL",
+    "CLAUDE_CODE_SUBAGENT_MODEL"
+  ],
+  "checks": {
+    "allCompetingSelectorsCleared": true,
+    "allModelSlotsPinned": true,
+    "proxyAndCaPreserved": true
+  },
+  "authentication": {
+    "mode": "explicit isolated BYOK",
+    "baseUrl": "https://open.bigmodel.cn/api/anthropic",
+    "model": "glm-5.2",
+    "realSubscriptionUsed": false,
+    "credentialFilesOrDescriptorsInspected": false
+  },
+  "chat": {
+    "path": "evidence/verification-skill-validation-2026-10-16-r2.json",
+    "sha256": "a197d4206de49c8411c52a06750387982aa5d77c9fcd3cece65cc10d1de56fd5",
+    "status": "PASS",
+    "checks": {
+      "firstDroidSucceeded": true,
+      "independentFileResult": true,
+      "inputUnchanged": true,
+      "nativeReadCompleted": true,
+      "nativeWriteCompleted": true,
+      "secondDroidSucceeded": true,
+      "sameFactorySession": true,
+      "sameNativeSession": true,
+      "bothHostSessionsEndedResumably": true,
+      "providerUsageReported": true,
+      "continuationUsageReported": true,
+      "runtimeDrainedBeforeCleanup": true,
+      "noPendingStoredTools": true
+    },
+    "continuationUsage": {
+      "input_tokens": 58,
+      "output_tokens": 68,
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 23360,
+      "status": "reported",
+      "coverage": "partial",
+      "knownFields": [
+        "input_tokens",
+        "output_tokens",
+        "cache_read_input_tokens"
+      ],
+      "scope": "provider_messages",
+      "estimated": true,
+      "modelRequests": 1
+    },
+    "cleanup": {
+      "at": "2026-10-16T01:41:54.540Z",
+      "processes": {
+        "supported": true,
+        "observedProcessCount": 17,
+        "terminatedProcessCount": 0,
+        "remainingProcessIds": [],
+        "complete": true
+      },
+      "removed": [
+        {
+          "kind": "relay-e2e-home-<run>",
+          "removed": true
+        },
+        {
+          "kind": "relay-e2e-ws-<run>",
+          "removed": true
+        },
+        {
+          "kind": "relay-verify-private-<run>",
+          "removed": true
+        }
+      ],
+      "errors": [],
+      "evidenceRetention": [
+        {
+          "artifact": "doctor.json",
+          "exists": true,
+          "sha256": "49015d1e20c6cfdf2a760856baff599a7efff1da526c040316221699a6baa033",
+          "unchangedAfterCleanup": true
+        },
+        {
+          "artifact": "action-1.json",
+          "exists": true,
+          "sha256": "a558a30531c5be819eb369f4293251d75324c164b1ce953c4cfb32617d1185c6",
+          "unchangedAfterCleanup": true
+        },
+        {
+          "artifact": "after-first.json",
+          "exists": true,
+          "sha256": "4c11a8d963cbc975a7afb1fadc909dcfb01624eaa4ef442501ab22d1110633e2",
+          "unchangedAfterCleanup": true
+        },
+        {
+          "artifact": "action-2.json",
+          "exists": true,
+          "sha256": "d7054bba15b2fac3f433128b68ef87601bb80cece42c027a45fa6459a96dc114",
+          "unchangedAfterCleanup": true
+        },
+        {
+          "artifact": "snapshot.json",
+          "exists": true,
+          "sha256": "4dcd1790ec95311eaecd9ba4122ecd7c26654b2f0879cc88963c0ca297451299",
+          "unchangedAfterCleanup": true
+        }
+      ],
+      "complete": true
+    }
+  },
+  "limitation": "This is a scoped SDK environment-routing verification, not complete network interception or a subscription billing claim."
+}

@@ -219,4 +219,52 @@ describe("conversation continuity and isolation", () => {
   it("does not resume a failed or cancelled transcript through history matching", () => {
     expect(resolve([session({ state: "FAILED" }), session({ bridgeSessionId: "bridge-b", state: "CANCELLED" })]).match).toBeUndefined();
   });
+
+  describe("authenticated Factory compaction", () => {
+    const compacted: MessagesRequest = { ...continuation, messages: [
+      { role: "user", content: "Rewritten Factory summary and environment reminders." },
+      ...continuation.messages,
+    ] };
+    const owned = (patch: Partial<SessionRecord> = {}) => session({ factorySessionId: "host-a", factoryCwd: cwd, ...patch });
+    const resolveOwned = (records: SessionRecord[], request = compacted, hostSessionId = "host-a") =>
+      resolveSession(records, headers, request, { cwd, hostSessionId });
+
+    it("keeps the native session after prefix rewriting using the exact retained complete turn", () => {
+      const record = owned();
+      expect(resolveOwned([record])).toMatchObject({ match: record, reason: "authenticated-history-tail" });
+    });
+
+    it("requires authenticated ownership, the complete reply and unchanged execution settings", () => {
+      const record = owned();
+      expect(resolveSession([record], headers, compacted, { cwd }).match).toBeUndefined();
+      expect(resolveOwned([record], compacted, "handoff-host").match).toBeUndefined();
+      expect(resolveOwned([owned({ factorySessionId: undefined })]).match).toBeUndefined();
+      expect(resolveOwned([owned({ factoryCwd: "/tmp/other-workspace" })]).match).toBeUndefined();
+      expect(resolveOwned([record], { ...compacted, model: "different" }).match).toBeUndefined();
+      expect(resolveOwned([record], { ...compacted, messages: [compacted.messages[0]!, initial.messages[0]!,
+        { role: "assistant", content: "A different assistant reply." }, continuation.messages[2]!] }).match).toBeUndefined();
+      expect(resolveOwned([record], { ...compacted, messages: [compacted.messages[0]!, continuation.messages[2]!] }).match).toBeUndefined();
+    });
+
+    it("does not merge tool-free helpers, unfinished turns or unresumable checkpoints", () => {
+      expect(resolveOwned([owned()], { ...compacted, tools: [] }).match).toBeUndefined();
+      for (const patch of [
+        { toolNames: [] }, { state: "GENERATING" as const }, { pendingToolIds: ["unresolved"] },
+        { sdkSessionId: undefined }, { cancelRequested: true }, { hostEnded: "terminal" as const },
+        { hostEnded: "interrupted" as const }, { requestMessageHashes: ["different-current-request"] },
+      ]) expect(resolveOwned([owned(patch)]).match).toBeUndefined();
+    });
+
+    it("does not discard extra new user messages or consume callback results through tail matching", () => {
+      expect(resolveOwned([owned()], { ...compacted, messages: [...compacted.messages, { role: "user", content: "Second new message" }] }).match).toBeUndefined();
+      expect(resolveOwned([owned()], { ...compacted, messages: [...compacted.messages.slice(0, -1), {
+        role: "user", content: [{ type: "tool_result", tool_use_id: "unowned-tool", content: "done" }],
+      }] }).match).toBeUndefined();
+    });
+
+    it("rejects ambiguous retained turns instead of guessing one native checkpoint", () => {
+      expect(() => resolveOwned([owned(), owned({ bridgeSessionId: "bridge-b", sdkSessionId: "sdk-b" })]))
+        .toThrowError(expect.objectContaining({ status: 409, code: "ambiguous_session" }));
+    });
+  });
 });

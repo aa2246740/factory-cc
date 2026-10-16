@@ -1,0 +1,403 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-10-16T00:58:35.575Z",
+  "status": "PASS_FACTORY_CONTEXT_AND_LIFECYCLE_REGRESSIONS",
+  "scope": "Real Factory manual current-session Summarizer and handoff through official stream-jsonrpc; official Claude Code with explicit authorized GLM BYOK.",
+  "bug": {
+    "symptom": "Factory compaction rewrote message prefixes and caused a fresh native Claude session even though Factory session stayed the same.",
+    "before": {
+      "evidence": "evidence/local/factory-context-2026-10-16T00-54-49-376Z-3d5abb/result.json",
+      "factorySessionId": "ccdbfcc4-09a4-4536-b0fb-8e06a80a2e0f",
+      "nativeSessions": [
+        {
+          "bridgeSessionId": "sess_224dcccc-096c-4d7a-a098-50dc8af8937e",
+          "factorySessionId": "ccdbfcc4-09a4-4536-b0fb-8e06a80a2e0f",
+          "sdkSessionId": "4ee6f505-7b83-42c4-8e9c-7c3f907d38b0",
+          "state": "IDLE",
+          "historyMessageCount": 3
+        },
+        {
+          "bridgeSessionId": "sess_07e660ce-97de-4ed3-a6f0-03166e9c42c9",
+          "factorySessionId": "ccdbfcc4-09a4-4536-b0fb-8e06a80a2e0f",
+          "sdkSessionId": "6c4dc2ba-5965-4981-b886-eb5f363a87cf",
+          "state": "IDLE",
+          "historyMessageCount": 7
+        }
+      ],
+      "recallSucceeded": true,
+      "nativeContinuityPassed": false,
+      "providerRecallUsage": {
+        "input_tokens": 4422,
+        "output_tokens": 133,
+        "cache_read_input_tokens": 19520,
+        "cache_creation_input_tokens": null
+      }
+    },
+    "fix": "Match the exact retained final user/assistant turn only with authenticated same-Factory-session and canonical-workspace ownership, unchanged execution settings, a completed resumable native checkpoint, no pending tools, nonempty main-agent catalogs, and exactly one following new user message. Ambiguous matches fail closed.",
+    "after": {
+      "evidence": "evidence/local/factory-context-2026-10-16T00-58-35-534Z-597917/result.json",
+      "factorySessionId": "5a880fed-cc64-44cf-92d6-f6c8d9c09d33",
+      "nativeSessions": [
+        {
+          "bridgeSessionId": "sess_82fd00d0-0641-4cb5-9cc6-246e402f596f",
+          "factorySessionId": "5a880fed-cc64-44cf-92d6-f6c8d9c09d33",
+          "sdkSessionId": "d708d92c-25dc-4194-838b-d2ac9159220f",
+          "state": "IDLE",
+          "historyMessageCount": 7
+        }
+      ],
+      "checks": {
+        "stored": true,
+        "currentCompacted": true,
+        "currentRecall": true,
+        "currentNativeContinued": true,
+        "handoffCreated": true,
+        "handoffRecall": true,
+        "handoffNativeIsolated": true
+      },
+      "providerRecallUsage": {
+        "input_tokens": 308,
+        "output_tokens": 99,
+        "cache_creation_input_tokens": null,
+        "cache_read_input_tokens": 23360,
+        "status": "reported",
+        "coverage": "partial",
+        "knownFields": [
+          "input_tokens",
+          "output_tokens",
+          "cache_read_input_tokens"
+        ],
+        "scope": "provider_messages",
+        "estimated": true,
+        "modelRequests": 1
+      }
+    },
+    "cacheCaveat": "Input/cache-read fields are provider observations for these individual calls; cache-create is absent. They do not establish a provider billing invoice, exact cache hit ratio, or cross-provider benchmark."
+  },
+  "handoff": {
+    "lifecycle": "droid.compact_session(mode=handoff), droid.close_session on old worker, then a new official JSON-RPC worker droid.load_session(newSessionId).",
+    "newNativeSessionExpected": true,
+    "recallAndIsolationPassed": true,
+    "preservedFailedDriverAttempt": {
+      "evidence": "evidence/local/factory-context-2026-10-16T00-54-49-376Z-3d5abb/result.json",
+      "error": "Turn ended: {\"type\":\"agent_turn_completed\",\"reason\":\"error\",\"turnId\":\"945b5bbe-c659-404b-95cf-9afc3de8daf5\",\"tokenUsage\":{\"inputTokens\":0,\"outputTokens\":0,\"cacheCreationTokens\":0,\"cacheReadTokens\":0,\"thinkingTokens\":0,\"factoryCredits\":0},\"cumulativeTokenUsage\":{\"inputTokens\":0,\"outputTokens\":2163,\"cacheCreationTokens\":0,\"cacheReadTokens\":66368,\"thinkingTokens\":0,\"factoryCredits\":0},\"childTokenUsage\":{\"inputTokens\":0,\"outputTokens\":0,\"cacheCreationTokens\":0,\"cacheReadTokens\":0,\"thinkingTokens\":0,\"factoryCredits\":0},\"cumulativeChildTokenUsage\":{\"inputTokens\":0,\"outputTokens\":0,\"cacheCreationTokens\":0,\"cacheReadTokens\":0,\"thinkingTokens\":0,\"factoryCredits\":0},\"durationMs\":171}",
+      "explanation": "The original same-worker load copied two live hook generations and was rejected. Initial verification used explicit close/load; later authenticated previous-session lifecycle support was implemented and the original same-worker case passed (see sameWorkerFix)."
+    },
+    "sameWorkerFix": {
+      "evidence": "evidence/factory-context-handoff-2026-10-16.json",
+      "status": "PASS",
+      "checks": {
+        "stored": true,
+        "currentCompacted": true,
+        "currentRecall": true,
+        "currentNativeContinued": true,
+        "handoffCreated": true,
+        "handoffRecall": true,
+        "handoffNativeIsolated": true
+      },
+      "resolution": "Authenticated SessionStart(source=compact, previous_session_id=old) retires the prior host only inside the same canonical workspace and owning launch. The original same-worker load failure is now verified fixed without weakening marker validation."
+    }
+  },
+  "validation": {
+    "unitCommand": "npx vitest run tests/unit/session-history.test.ts",
+    "unitTestsPassed": 40,
+    "typecheck": "npx tsc --noEmit --pretty false PASS",
+    "actualDriver": "scripts/verify-factory-context.ts",
+    "publicCliHelp": "droid exec --help documents --input-format stream-jsonrpc"
+  },
+  "cleanup": {
+    "supported": true,
+    "observedProcessCount": 29,
+    "terminatedProcessCount": 0,
+    "remainingProcessIds": [],
+    "complete": true
+  },
+  "limitations": [
+    "Default-threshold automatic Factory compaction is not covered by this manual evidence; any lowered-threshold probe has its own result.",
+    "The exact-tail optimization deliberately cold-imports histories without a provable retained prior turn.",
+    "Native Claude compaction and Factory compaction remain different paths.",
+    "No real Claude subscription credentials were used; no account safety guarantee."
+  ],
+  "runtimeFileSha256": {
+    "src/sessions/correlate.ts": "411df2d6fbbbbbe1fb49188b93ce72419c33f8e042fb97e4a5052ab7dfd22997"
+  },
+  "historicalClassificationCorrection": {
+    "previousLabel": "Task-summary helper",
+    "correctedClassification": "Factory Summarizer system prompt exact match; no evidence here of separate Task result-summary helper",
+    "evidence": [
+      {
+        "path": "evidence/local/e2e-mission-2026-10-15T09-47-43-619Z/bridge-data/logs/requests.jsonl",
+        "at": "2026-10-15T09:59:14.474Z",
+        "systemSha256": "849fe6f4e9ce4431fc2f9cfa9e2965a5f9f7b23c9f0d96b2a2e6083d5d786f53",
+        "systemChars": 2300
+      },
+      {
+        "path": "evidence/local/e2e-mission-2026-10-15T09-47-43-619Z/bridge-data/logs/requests.jsonl",
+        "at": "2026-10-15T10:06:17.821Z",
+        "systemSha256": "849fe6f4e9ce4431fc2f9cfa9e2965a5f9f7b23c9f0d96b2a2e6083d5d786f53",
+        "systemChars": 2300
+      },
+      {
+        "path": "evidence/local/factory-context-2026-10-16T00-58-35-534Z-597917/bridge/logs/requests.jsonl",
+        "at": "2026-10-16T00:58:55.714Z",
+        "systemSha256": "849fe6f4e9ce4431fc2f9cfa9e2965a5f9f7b23c9f0d96b2a2e6083d5d786f53",
+        "systemChars": 2300
+      },
+      {
+        "path": "evidence/local/factory-context-2026-10-16T00-58-35-534Z-597917/bridge/logs/requests.jsonl",
+        "at": "2026-10-16T00:59:16.305Z",
+        "systemSha256": "096111874f0a711b14a4d385ad78f216b8270436eecc0065593fd5cc4ee36c03",
+        "systemChars": 2416
+      }
+    ]
+  },
+  "automaticCompactionRegression": {
+    "failedEvidence": "evidence/factory-context-validation-2026-10-16-r2.json",
+    "failure": "Factory automatic compaction removed the initial hook binding. The next real user turn cold-imported into an unbound native session even though exact memory recall still succeeded. The verifier now checks the actual model request sessionHint, not only previously owned rows.",
+    "fix": "The official authenticated UserPromptSubmit hook renews the live session marker on each new user turn; exact retained-tail matching then preserves the original native session without replaying history.",
+    "passedEvidence": "evidence/factory-context-validation-2026-10-16-r3.json",
+    "checks": {
+      "stored": true,
+      "automaticBoundaryObserved": true,
+      "automaticTurnResponse": true,
+      "automaticPostBoundaryRecall": true,
+      "automaticNativeContinued": true,
+      "currentCompacted": true,
+      "currentRecall": true,
+      "currentNativeContinued": true,
+      "handoffCreated": true,
+      "handoffRecall": true,
+      "handoffNativeIsolated": true
+    },
+    "observedPromptSubmitEvents": [
+      {
+        "at": "2026-10-16T01:10:15.105Z",
+        "eventId": "f723c177-7ae2-49df-8a34-f7c3ab46f7b2",
+        "hook": "UserPromptSubmit",
+        "hostSessionId": "3b2498ca-bbe9-441e-8a88-77f384b657da"
+      },
+      {
+        "at": "2026-10-16T01:10:21.872Z",
+        "eventId": "af7eeb11-ef53-4b8c-801d-df2d956b22fa",
+        "hook": "UserPromptSubmit",
+        "hostSessionId": "3b2498ca-bbe9-441e-8a88-77f384b657da"
+      },
+      {
+        "at": "2026-10-16T01:10:40.186Z",
+        "eventId": "fb12b975-fd26-4942-856b-9bb34fe2cc4e",
+        "hook": "UserPromptSubmit",
+        "hostSessionId": "3b2498ca-bbe9-441e-8a88-77f384b657da"
+      },
+      {
+        "at": "2026-10-16T01:10:57.879Z",
+        "eventId": "d2e7f680-b3c8-45ce-bf83-86a487fe2ba5",
+        "hook": "UserPromptSubmit",
+        "hostSessionId": "3b2498ca-bbe9-441e-8a88-77f384b657da"
+      },
+      {
+        "at": "2026-10-16T01:11:15.605Z",
+        "eventId": "528b49a3-8151-4e53-8ea2-bbd7d003e1ec",
+        "hook": "UserPromptSubmit",
+        "hostSessionId": "d1bbac99-2dd1-44d8-914c-32038f6d5fe1"
+      }
+    ],
+    "actualMainRequests": [
+      {
+        "at": "2026-10-16T01:10:15.349Z",
+        "method": "POST",
+        "path": "/v1/messages",
+        "role": "chat",
+        "authOk": true,
+        "sessionHint": "sess_d8955b09-de29-40ae-97a5-fca44d1d13ec",
+        "model": "relay-chat",
+        "stream": true,
+        "toolNames": [
+          "Read",
+          "LS",
+          "Execute",
+          "Edit",
+          "Grep",
+          "Glob",
+          "Create",
+          "ExitSpecMode",
+          "AskUser",
+          "TodoWrite",
+          "TaskOutput",
+          "TaskStop",
+          "ToolSearch",
+          "Task"
+        ],
+        "messageCount": 2,
+        "notes": [
+          "new-session"
+        ]
+      },
+      {
+        "at": "2026-10-16T01:10:21.950Z",
+        "method": "POST",
+        "path": "/v1/messages",
+        "role": "chat",
+        "authOk": true,
+        "sessionHint": "sess_d8955b09-de29-40ae-97a5-fca44d1d13ec",
+        "model": "relay-chat",
+        "stream": true,
+        "toolNames": [
+          "Read",
+          "LS",
+          "Execute",
+          "Edit",
+          "Grep",
+          "Glob",
+          "Create",
+          "ExitSpecMode",
+          "AskUser",
+          "TodoWrite",
+          "TaskOutput",
+          "TaskStop",
+          "ToolSearch",
+          "Task"
+        ],
+        "messageCount": 4,
+        "notes": [
+          "history-prefix"
+        ]
+      },
+      {
+        "at": "2026-10-16T01:10:40.402Z",
+        "method": "POST",
+        "path": "/v1/messages",
+        "role": "chat",
+        "authOk": true,
+        "sessionHint": "sess_d8955b09-de29-40ae-97a5-fca44d1d13ec",
+        "model": "relay-chat",
+        "stream": true,
+        "toolNames": [
+          "Read",
+          "LS",
+          "Execute",
+          "Edit",
+          "Grep",
+          "Glob",
+          "Create",
+          "ExitSpecMode",
+          "AskUser",
+          "TodoWrite",
+          "TaskOutput",
+          "TaskStop",
+          "ToolSearch",
+          "Task"
+        ],
+        "messageCount": 8,
+        "notes": [
+          "authenticated-history-tail"
+        ]
+      },
+      {
+        "at": "2026-10-16T01:10:57.953Z",
+        "method": "POST",
+        "path": "/v1/messages",
+        "role": "chat",
+        "authOk": true,
+        "sessionHint": "sess_d8955b09-de29-40ae-97a5-fca44d1d13ec",
+        "model": "relay-chat",
+        "stream": true,
+        "toolNames": [
+          "Read",
+          "LS",
+          "Execute",
+          "Edit",
+          "Grep",
+          "Glob",
+          "Create",
+          "ExitSpecMode",
+          "AskUser",
+          "TodoWrite",
+          "TaskOutput",
+          "TaskStop",
+          "ToolSearch",
+          "Task"
+        ],
+        "messageCount": 10,
+        "notes": [
+          "authenticated-history-tail"
+        ]
+      },
+      {
+        "at": "2026-10-16T01:11:15.681Z",
+        "method": "POST",
+        "path": "/v1/messages",
+        "role": "chat",
+        "authOk": true,
+        "sessionHint": "sess_a8a68728-38c2-4927-9fed-4b50736179bc",
+        "model": "relay-chat",
+        "stream": true,
+        "toolNames": [
+          "Read",
+          "LS",
+          "Execute",
+          "Edit",
+          "Grep",
+          "Glob",
+          "Create",
+          "ExitSpecMode",
+          "AskUser",
+          "TodoWrite",
+          "TaskOutput",
+          "TaskStop",
+          "ToolSearch",
+          "Task"
+        ],
+        "messageCount": 13,
+        "notes": [
+          "new-session"
+        ]
+      }
+    ],
+    "nativeRecallUsage": {
+      "input_tokens": 171,
+      "output_tokens": 109,
+      "cache_creation_input_tokens": null,
+      "cache_read_input_tokens": 23872,
+      "status": "reported",
+      "coverage": "partial",
+      "knownFields": [
+        "input_tokens",
+        "output_tokens",
+        "cache_read_input_tokens"
+      ],
+      "scope": "provider_messages",
+      "estimated": true,
+      "modelRequests": 1
+    },
+    "scope": "Automatic Factory compaction at public 12000-token threshold; a separate new user turn after the actual session_compacted notification verifies recall and native continuity. Small fixture compacts the initial hook/context prefix; large semantic-history and default threshold behavior remain outside this proof."
+  },
+  "finalCleanup": {
+    "processes": {
+      "supported": true,
+      "observedProcessCount": 38,
+      "terminatedProcessCount": 0,
+      "remainingProcessIds": [],
+      "complete": true
+    },
+    "removedOwnedDirectories": [
+      "/tmp/relay-e2e-home-nerfZS",
+      "/tmp/relay-e2e-ws-OJdfFZ"
+    ]
+  },
+  "finalSourceSha256": {
+    "src/sessions/correlate.ts": "411df2d6fbbbbbe1fb49188b93ce72419c33f8e042fb97e4a5052ab7dfd22997",
+    "src/control/broker.ts": "8a9126d9807dddf668293baf7da2f62453b0f43a1eec0abda88d34d2d7329fe4",
+    "src/control/factory-hooks.ts": "cb096d8e44d553a4243f5b827d72cd604ae6d29bd000d825a2a9cbed193d866c",
+    "scripts/verify-factory-context.ts": "ded1236c76006861c41b8ac88435f28757160a689e1871fa3e73f44517d2aad9"
+  },
+  "newRpcTitleObservation": {
+    "titles": [
+      {
+        "type": "session_title_updated",
+        "title": "Test memory through Factory compaction",
+        "updateType": "llm_generated"
+      }
+    ],
+    "scope": "Actual Factory stream-jsonrpc session_title_updated notification; not all interactive TUI title variants."
+  }
+}

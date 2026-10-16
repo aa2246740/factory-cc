@@ -35,7 +35,7 @@ class FakeSdk implements SdkHandle {
     return { ...options, instance: {
       isConnected: () => this.calls.length > 0,
       sendToolListChanged: changed,
-      server: { sendToolListChanged: async () => changed() },
+      server: { sendToolListChanged: async () => changed(), setRequestHandler: () => undefined },
       registerTool: (name: string, config: { inputSchema: unknown; description: string }, handler: (args: Record<string, unknown>, extra?: unknown) => Promise<unknown>) => {
         const wrapped = (args: Record<string, unknown>, extra?: unknown) => handler((config.inputSchema as { parse(input: unknown): Record<string, unknown> }).parse(args), extra);
         this.handlers.set(name, wrapped);
@@ -231,6 +231,21 @@ describe("official SDK streaming-input lifecycle (injected offline SDK)", () => 
     await runtime.handle(followup);
     expect(completed).toBe(1);
     expect(sdk.calls).toHaveLength(1);
+  });
+
+  it("rejects a root prototype argument before a native parser can strip it and strand the handler", async () => {
+    const original = JSON.parse('{"__proto__":{"mustNotDisappear":true},"value":1}');
+    const sdk = new FakeSdk(async function* (_input, _index, self) {
+      // Real MCP transport strips this root key before dispatching the handler.
+      const callback = self.handlers.get("TaskOutput")!({ value: 1 }, { toolUseID: "reserved-key-call" });
+      void callback.catch(() => undefined);
+      yield { type: "assistant", message: { content: [{ type: "tool_use", id: "reserved-key-call", name: "mcp__droid__TaskOutput", input: original }] } };
+      await callback;
+    });
+    const { runtime } = create(sdk);
+    await expect(runtime.handle(request(session(), "test unsupported root JSON key", { tools: [tool] }))).rejects.toMatchObject({ status: 422, code: "unsupported_tool_argument" });
+    expect(runtime.describe().pendingHostCalls).toBe(0);
+    expect(sdk.interrupt).toHaveBeenCalled();
   });
 
   it("does not forward native permission refusals or duplicate assistant proposals", async () => {
@@ -451,7 +466,9 @@ describe("official SDK streaming-input lifecycle (injected offline SDK)", () => 
     const first = sdk.schemas.get("FactoryArgs") as { safeParse(args: unknown): { success: boolean } };
     expect(first.safeParse({ value: "before" }).success).toBe(true);
     await runtime.handle(request(s, "second", { tools: [{ name: "FactoryArgs", input_schema: schema("integer") }] }));
-    const second = sdk.schemas.get("FactoryArgs") as typeof first;
+    expect(sdk.schemas.has("FactoryArgs")).toBe(false);
+    const revision = [...sdk.schemas.keys()].find((name) => name.startsWith("droid_revision_"))!;
+    const second = sdk.schemas.get(revision) as typeof first;
     expect(second.safeParse({ value: 7 }).success).toBe(true);
     expect(second.safeParse({ value: "before" }).success).toBe(false);
     expect(second.safeParse({ value: 7, extra: true }).success).toBe(false);
@@ -570,7 +587,7 @@ describe("official SDK streaming-input lifecycle (injected offline SDK)", () => 
     let offered!: RuntimeApprovalRequest;
     let decide!: (decision: RuntimePermissionDecision) => void;
     runtime.setControl({ requestApproval: (approval) => { offered = approval; return new Promise((resolve) => { decide = resolve; }); } });
-    await runtime.handle(request(session(), "start", { tools: [tool] }));
+    await runtime.handle(request(session(), "start", { tools: [tool, { name: "Execute", input_schema: { type: "object" } }] }));
     const check = sdk.calls[0]!.options.canUseTool as (name: string, input: unknown, context: unknown) => Promise<unknown>;
     const pending = check("Bash", { command: "original" }, { toolUseID: "native-op", requestId: "native-request", defaultToNo: true });
     expect(offered).toMatchObject({ bridgeSessionId: "session-a", sdkSessionId: "native-sdk-session", toolName: "Bash", toolUseId: "native-op", requestId: "native-request", defaultToNo: true });
@@ -589,7 +606,7 @@ describe("official SDK streaming-input lifecycle (injected offline SDK)", () => 
     let offered!: RuntimeApprovalRequest;
     let decide!: (decision: RuntimePermissionDecision) => void;
     runtime.setControl({ requestApproval: (approval) => { offered = approval; return new Promise((resolve) => { decide = resolve; }); } });
-    await runtime.handle(request(session(), "start"));
+    await runtime.handle(request(session(), "start", { tools: [{ name: "Execute", input_schema: { type: "object" } }] }));
     const check = sdk.calls[0]!.options.canUseTool as (name: string, input: unknown, context: unknown) => Promise<unknown>;
     const nativeAbort = new AbortController();
     const pending = check("Bash", { command: "side effect" }, { signal: nativeAbort.signal });
@@ -606,7 +623,7 @@ describe("official SDK streaming-input lifecycle (injected offline SDK)", () => 
     const sdk = new FakeSdk(async function* () { yield success("ready"); });
     const { runtime } = create(sdk, { requestTimeoutMs: 30 });
     runtime.setControl({ requestApproval: () => new Promise(() => {}) });
-    await runtime.handle(request(session(), "start"));
+    await runtime.handle(request(session(), "start", { tools: [{ name: "Execute", input_schema: { type: "object" } }] }));
     const check = sdk.calls[0]!.options.canUseTool as (name: string, input: unknown) => Promise<unknown>;
     expect(await check("Bash", {})).toMatchObject({ behavior: "deny" });
     runtime.setControl({ requestApproval: async () => { throw new Error("transport closed"); } });
@@ -666,7 +683,7 @@ describe("official SDK streaming-input lifecycle (injected offline SDK)", () => 
     });
     const { runtime } = create(sdk);
     runtime.setControl({ requestApproval: (approval) => { offered = approval; return new Promise(() => {}); } });
-    const running = runtime.handle(request(session(), "work"));
+    const running = runtime.handle(request(session(), "work", { tools: [{ name: "Execute", input_schema: { type: "object" } }] }));
     const rejected = expect(running).rejects.toMatchObject({ code: "host_session_ended" });
     await vi.waitFor(() => expect(offered).toBeDefined());
     await runtime.endHostSession("session-a", "Factory session closed");
@@ -745,7 +762,7 @@ describe("official SDK streaming-input lifecycle (injected offline SDK)", () => 
     expect(await check("Bash", { command: "modify project" })).toMatchObject({ behavior: "deny" });
     expect(controller).not.toHaveBeenCalled();
     for (const key of ["BRIDGE_ADMIN_TOKEN", "BRIDGE_FACTORY_BINDING", "BRIDGE_FACTORY_LAUNCH_ID"]) expect(options.env).not.toHaveProperty(key);
-    await runtime.handle(request(session(), "enable tools", { tools: [tool] }));
+    await runtime.handle(request(session(), "enable tools", { tools: [tool, { name: "Create", input_schema: { type: "object" } }, { name: "Execute", input_schema: { type: "object" } }] }));
     expect(await hooks.PreToolUse[0]!.hooks[0]!({ tool_name: "Write" })).toEqual({});
     expect(await check("Bash", { command: "explicitly allowed by controller" })).toMatchObject({ behavior: "allow" });
     expect(controller).toHaveBeenCalledOnce();
@@ -771,6 +788,77 @@ describe("official SDK streaming-input lifecycle (injected offline SDK)", () => 
     }
     expect(controller).not.toHaveBeenCalled();
     expect(options.tools).toEqual({ type: "preset", preset: "claude_code" });
+  });
+
+  it("enforces a changing native tool subset without rebuilding the cached query", async () => {
+    const sdk = new FakeSdk(async function* () { yield success("ready"); });
+    const { runtime } = create(sdk, { permissionMode: "bypass" });
+    const controller = vi.fn(async () => ({ behavior: "allow" as const }));
+    runtime.setControl({ requestApproval: controller });
+    const read = { name: "Read", input_schema: { type: "object" as const } };
+    const execute = { name: "Execute", input_schema: { type: "object" as const } };
+    await runtime.handle(request(session(), "read only", { tools: [read, tool] }));
+    const options = sdk.calls[0]!.options;
+    const hook = (options.hooks as { PreToolUse: Array<{ hooks: Array<(input: unknown) => Promise<unknown>> }> }).PreToolUse[0]!.hooks[0]!;
+    const check = options.canUseTool as (name: string, input: unknown) => Promise<unknown>;
+    expect(await hook({ tool_name: "Read" })).toEqual({});
+    expect(await hook({ tool_name: "mcp__droid__TaskOutput" })).toEqual({});
+    for (const name of ["Bash", "Write", "Agent", "Task", "Skill", "TaskOutput", "mcp__other__run", "mcp__droid__removed"]) {
+      expect(await hook({ tool_name: name })).toMatchObject({ hookSpecificOutput: { permissionDecision: "deny" } });
+      expect(await check(name, {})).toMatchObject({ behavior: "deny" });
+    }
+    expect(controller).not.toHaveBeenCalled();
+    await runtime.handle(request(session(), "enable execute", { tools: [read, execute] }));
+    expect(await hook({ tool_name: "Bash" })).toEqual({});
+    expect(await check("Bash", {})).toMatchObject({ behavior: "allow" });
+    expect(await hook({ tool_name: "mcp__droid__TaskOutput" })).toMatchObject({ hookSpecificOutput: { permissionDecision: "deny" } });
+    await runtime.handle(request(session(), "revoke execute", { tools: [read] }));
+    expect(await hook({ tool_name: "Bash" })).toMatchObject({ hookSpecificOutput: { permissionDecision: "deny" } });
+    expect(await check("Bash", {})).toMatchObject({ behavior: "deny" });
+    await runtime.handle(request(session(), "no inherited tools"));
+    expect(await hook({ tool_name: "Read" })).toMatchObject({ hookSpecificOutput: { permissionDecision: "deny" } });
+    expect(controller).toHaveBeenCalledOnce();
+    expect(sdk.calls).toHaveLength(1);
+  });
+
+  it("applies authenticated Factory spec permission before native bypass or external approval", async () => {
+    const sdk = new FakeSdk(async function* () { yield success("ready"); });
+    const { runtime } = create(sdk, { permissionMode: "bypass" });
+    const controller = vi.fn(async () => ({ behavior: "allow" as const }));
+    runtime.setControl({ requestApproval: controller });
+    const tools = ["Read", "Glob", "Grep", "Execute", "Create", "Edit", "TaskOutput"].map((name) => ({ name, input_schema: { type: "object" as const } }));
+    await runtime.handle({ ...request(session(), "spec", { tools }), factoryPermissionMode: "spec" });
+    const options = sdk.calls[0]!.options;
+    const hook = (options.hooks as { PreToolUse: Array<{ hooks: Array<(input: unknown) => Promise<unknown>> }> }).PreToolUse[0]!.hooks[0]!;
+    const check = options.canUseTool as (name: string, input: unknown) => Promise<unknown>;
+    for (const name of ["Read", "Glob", "Grep", "mcp__droid__TaskOutput"]) expect(await hook({ tool_name: name })).toEqual({});
+    for (const name of ["Bash", "Write", "Edit", "TaskOutput", "TaskStop"]) {
+      expect(await hook({ tool_name: name })).toMatchObject({ hookSpecificOutput: { permissionDecision: "deny", permissionDecisionReason: expect.stringContaining("SPEC_READ_ONLY") } });
+      expect(await check(name, {})).toMatchObject({ behavior: "deny" });
+    }
+    await runtime.handle({ ...request(session(), "approved", { tools }), factoryPermissionMode: "auto-high" });
+    expect(await hook({ tool_name: "Bash" })).toEqual({});
+    expect(controller).not.toHaveBeenCalled();
+    expect(sdk.calls).toHaveLength(1);
+  });
+
+  it("rechecks the live authenticated spec lock before accepting a delayed native approval", async () => {
+    const sdk = new FakeSdk(async function* () { yield success("ready"); });
+    const { runtime } = create(sdk);
+    let mode = "spec";
+    let decide!: (decision: RuntimePermissionDecision) => void;
+    runtime.setControl({ factoryPermissionMode: () => mode, requestApproval: () => new Promise((resolve) => { decide = resolve; }) });
+    await runtime.handle({ ...request(session(), "start", { tools: [{ name: "Execute", input_schema: { type: "object" } }] }), factoryPermissionMode: "auto-high" });
+    const options = sdk.calls[0]!.options;
+    const hook = (options.hooks as { PreToolUse: Array<{ hooks: Array<(input: unknown) => Promise<unknown>> }> }).PreToolUse[0]!.hooks[0]!;
+    const check = options.canUseTool as (name: string, input: unknown) => Promise<unknown>;
+    expect(await hook({ tool_name: "Bash" })).toMatchObject({ hookSpecificOutput: { permissionDecision: "deny" } });
+    mode = "auto-high";
+    expect(await hook({ tool_name: "Bash" })).toEqual({});
+    const pending = check("Bash", { command: "delayed side effect" });
+    mode = "spec";
+    decide({ behavior: "allow" });
+    expect(await pending).toMatchObject({ behavior: "deny", message: expect.stringContaining("SPEC_READ_ONLY") });
   });
 
   it("bounds idle CLI processes and resumes an evicted official session", async () => {

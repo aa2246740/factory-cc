@@ -136,6 +136,9 @@ export class SseWriter {
       type: "message_delta",
       delta: { stop_reason: message.stop_reason, stop_sequence: message.stop_sequence },
       usage: {
+        // The stream starts before the native agent has reported usage. The
+        // final delta must replace that provisional zero for standard clients.
+        input_tokens: message.usage.input_tokens,
         output_tokens: message.usage.output_tokens,
         cache_creation_input_tokens: message.usage.cache_creation_input_tokens,
         cache_read_input_tokens: message.usage.cache_read_input_tokens,

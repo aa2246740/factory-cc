@@ -22,6 +22,20 @@ function collect(): { res: ServerResponse; text: () => string } {
 }
 
 describe("live SSE", () => {
+  it("reports final native input usage after starting before provider usage is available", () => {
+    const { res, text } = collect();
+    const writer = new SseWriter(res, { id: "msg_usage", model: "relay-chat" });
+    writer.start();
+    writer.textDelta("answer");
+    const usage = { input_tokens: 281, output_tokens: 17, cache_read_input_tokens: 21800 };
+    writer.finish(assistantMessage("relay-chat", [{ type: "text", text: "answer" }], "end_turn", usage));
+    const events = text().split("\n").filter((line) => line.startsWith("data: ")).map((line) => JSON.parse(line.slice(6)));
+    const start = events.find((event) => event.type === "message_start");
+    const delta = events.find((event) => event.type === "message_delta");
+    expect(start.message.usage.input_tokens).toBe(0);
+    expect({ ...start.message.usage, ...delta.usage }).toEqual(usage);
+    expect(delta.usage).not.toHaveProperty("cache_creation_input_tokens");
+  });
   it("returns the exact wire transcript with traces, original whitespace and tool inputs", () => {
     const { res, text } = collect();
     const writer = new SseWriter(res, { id: "msg_wire", model: "relay-chat" });

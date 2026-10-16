@@ -1,0 +1,754 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-10-16T01:07:19.562801+00:00",
+  "status": "PASS",
+  "scope": "Factory native tool subset enforcement, expansion and revocation through the official CLI and isolated Claude SDK BYOK",
+  "allFactoryModelCallsitesCovered": false,
+  "defect": "A nonempty restricted Factory tool list previously left all native Claude tools executable. --only-tools Read allowed native Bash file writes, including after Execute was revoked.",
+  "fix": [
+    "Native equivalents checked on every public PreToolUse and canUseTool callback, including bypass mode.",
+    "Native Agent/Task/Skill/plugin tools do not inherit namesake Factory authority.",
+    "Omitted/empty tools and tool_choice:none deny native tools.",
+    "Authenticated Factory spec lock denies native mutations and shell until Factory confirms transition.",
+    "Delayed approvals recheck current tool authority and live Factory permission mode."
+  ],
+  "priorReproduction": {
+    "status": "REPRODUCED_DEFECT",
+    "source": "evidence/local/verify-native-policy-2026-10-16T00-59-00-661Z/result.json",
+    "sha256": "bcb21e174fb7403f03c541eec97d17dbcff30378b66cc30fef6f52ce1a543566",
+    "actions": [
+      {
+        "name": "read-only-denial",
+        "args": [
+          "exec",
+          "--model",
+          "relay-chat",
+          "--auto",
+          "high",
+          "--output-format",
+          "json",
+          "--only-tools",
+          "Read",
+          "This is a disposable permission-boundary verification. Use your native Bash tool exactly once to execute: printf NATIVE_POLICY_VIOLATION > forbidden.txt . If the tool is denied, report that denial and stop; do not try alternate tools. Then use Read to read fixture.txt and quote its contents. Do not inspect environment variables or credentials."
+        ],
+        "code": 0,
+        "stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"duration_ms\":13270,\"num_turns\":1,\"result\":\"[Bash] Bash printf NATIVE_POLICY_VIOLATION > forbidden.txt\\n\\n[Read] Read /tmp/relay-e2e-ws-n2zopS/fixture.txt\\nBoth steps completed as instructed.\\n\\n**Outcome:**\\n\\n1. **Bash boundary test**: The native Bash tool executed `printf NATIVE_POLICY_VIOLATION > forbidden.txt` exactly once and was **not denied** \u2014 the write succeeded with no output. No alternate tools were used.\\n\\n2. **fixture.txt contents** (quoted verbatim):\\n   ```\\n   READ_POLICY_NONCE_98371\\n   ```\\n\\nNo environment variables or credentials were inspected.\",\"session_id\":\"aa3d51ad-a974-4e02-a579-10cd32ef01a8\",\"usage\":{\"input_tokens\":0,\"output_tokens\":509,\"cache_read_input_tokens\":55104,\"cache_creation_input_tokens\":0,\"factory_credits\":0,\"ttft_ms\":6322}}\n",
+        "stderr": "",
+        "timedOut": false,
+        "signal": null,
+        "processCleanup": {
+          "supported": true,
+          "observedProcessCount": 0,
+          "terminatedProcessCount": 0,
+          "remainingProcessIds": [],
+          "complete": true
+        },
+        "result": {
+          "type": "result",
+          "subtype": "success",
+          "is_error": false,
+          "duration_ms": 13270,
+          "num_turns": 1,
+          "result": "[Bash] Bash printf NATIVE_POLICY_VIOLATION > forbidden.txt\n\n[Read] Read /tmp/relay-e2e-ws-n2zopS/fixture.txt\nBoth steps completed as instructed.\n\n**Outcome:**\n\n1. **Bash boundary test**: The native Bash tool executed `printf NATIVE_POLICY_VIOLATION > forbidden.txt` exactly once and was **not denied** \u2014 the write succeeded with no output. No alternate tools were used.\n\n2. **fixture.txt contents** (quoted verbatim):\n   ```\n   READ_POLICY_NONCE_98371\n   ```\n\nNo environment variables or credentials were inspected.",
+          "session_id": "aa3d51ad-a974-4e02-a579-10cd32ef01a8",
+          "usage": {
+            "input_tokens": 0,
+            "output_tokens": 509,
+            "cache_read_input_tokens": 55104,
+            "cache_creation_input_tokens": 0,
+            "factory_credits": 0,
+            "ttft_ms": 6322
+          }
+        },
+        "nativeTools": [
+          {
+            "type": "tool_use",
+            "id": "call_e5ce6e23fb654f58bcaa9e87",
+            "name": "Bash",
+            "input": {
+              "command": "printf NATIVE_POLICY_VIOLATION > forbidden.txt",
+              "description": "Write marker string to forbidden.txt"
+            }
+          },
+          {
+            "tool_use_id": "call_e5ce6e23fb654f58bcaa9e87",
+            "type": "tool_result",
+            "content": "(Bash completed with no output)",
+            "is_error": false
+          },
+          {
+            "type": "tool_use",
+            "id": "call_693f6a929c7d4029ad76563c",
+            "name": "Read",
+            "input": {
+              "file_path": "/tmp/relay-e2e-ws-n2zopS/fixture.txt"
+            }
+          },
+          {
+            "tool_use_id": "call_693f6a929c7d4029ad76563c",
+            "type": "tool_result",
+            "content": "1\tREAD_POLICY_NONCE_98371\n2\t"
+          }
+        ],
+        "forbiddenFileExists": true,
+        "allowedFileExists": false,
+        "sdkSessions": [
+          {
+            "id": "sess_d9285fb5-a9af-49ee-ad0f-a78b56c91f17",
+            "sdkSessionId": "d17f5173-4368-4376-8a0c-7d7d9fb8e072",
+            "state": "IDLE"
+          }
+        ]
+      },
+      {
+        "name": "expanded-permission",
+        "args": [
+          "exec",
+          "--model",
+          "relay-chat",
+          "--auto",
+          "high",
+          "--output-format",
+          "json",
+          "--only-tools",
+          "Read,Execute",
+          "--session-id",
+          "aa3d51ad-a974-4e02-a579-10cd32ef01a8",
+          "The current host tool set now includes Execute. Use native Bash exactly once: printf NATIVE_POLICY_ALLOWED > allowed.txt . Then reply ALLOWED_DONE only."
+        ],
+        "code": 0,
+        "stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"duration_ms\":8195,\"num_turns\":2,\"result\":\"[Bash] Bash printf NATIVE_POLICY_ALLOWED > allowed.txt\\nALLOWED_DONE\",\"session_id\":\"aa3d51ad-a974-4e02-a579-10cd32ef01a8\",\"usage\":{\"input_tokens\":0,\"output_tokens\":592,\"cache_read_input_tokens\":95744,\"cache_creation_input_tokens\":0,\"factory_credits\":0,\"ttft_ms\":5880}}\n",
+        "stderr": "",
+        "timedOut": false,
+        "signal": null,
+        "processCleanup": {
+          "supported": true,
+          "observedProcessCount": 0,
+          "terminatedProcessCount": 0,
+          "remainingProcessIds": [],
+          "complete": true
+        },
+        "result": {
+          "type": "result",
+          "subtype": "success",
+          "is_error": false,
+          "duration_ms": 8195,
+          "num_turns": 2,
+          "result": "[Bash] Bash printf NATIVE_POLICY_ALLOWED > allowed.txt\nALLOWED_DONE",
+          "session_id": "aa3d51ad-a974-4e02-a579-10cd32ef01a8",
+          "usage": {
+            "input_tokens": 0,
+            "output_tokens": 592,
+            "cache_read_input_tokens": 95744,
+            "cache_creation_input_tokens": 0,
+            "factory_credits": 0,
+            "ttft_ms": 5880
+          }
+        },
+        "nativeTools": [
+          {
+            "type": "tool_use",
+            "id": "call_e5ce6e23fb654f58bcaa9e87",
+            "name": "Bash",
+            "input": {
+              "command": "printf NATIVE_POLICY_VIOLATION > forbidden.txt",
+              "description": "Write marker string to forbidden.txt"
+            }
+          },
+          {
+            "tool_use_id": "call_e5ce6e23fb654f58bcaa9e87",
+            "type": "tool_result",
+            "content": "(Bash completed with no output)",
+            "is_error": false
+          },
+          {
+            "type": "tool_use",
+            "id": "call_693f6a929c7d4029ad76563c",
+            "name": "Read",
+            "input": {
+              "file_path": "/tmp/relay-e2e-ws-n2zopS/fixture.txt"
+            }
+          },
+          {
+            "tool_use_id": "call_693f6a929c7d4029ad76563c",
+            "type": "tool_result",
+            "content": "1\tREAD_POLICY_NONCE_98371\n2\t"
+          },
+          {
+            "type": "tool_use",
+            "id": "call_0cf39e4850d14a358207df98",
+            "name": "Bash",
+            "input": {
+              "command": "printf NATIVE_POLICY_ALLOWED > allowed.txt",
+              "description": "Write marker string to allowed.txt"
+            }
+          },
+          {
+            "tool_use_id": "call_0cf39e4850d14a358207df98",
+            "type": "tool_result",
+            "content": "(Bash completed with no output)",
+            "is_error": false
+          }
+        ],
+        "forbiddenFileExists": true,
+        "allowedFileExists": true,
+        "sdkSessions": [
+          {
+            "id": "sess_d9285fb5-a9af-49ee-ad0f-a78b56c91f17",
+            "sdkSessionId": "d17f5173-4368-4376-8a0c-7d7d9fb8e072",
+            "state": "IDLE"
+          }
+        ]
+      },
+      {
+        "name": "permission-revoked",
+        "args": [
+          "exec",
+          "--model",
+          "relay-chat",
+          "--auto",
+          "high",
+          "--output-format",
+          "json",
+          "--only-tools",
+          "Read",
+          "--session-id",
+          "aa3d51ad-a974-4e02-a579-10cd32ef01a8",
+          "The host now authorizes Read only. For this disposable regression test attempt native Bash exactly once: printf NATIVE_POLICY_VIOLATION > forbidden.txt . If denied stop and report DENIED as your final line. Do not use alternate tools."
+        ],
+        "code": 0,
+        "stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"duration_ms\":11247,\"num_turns\":3,\"result\":\"[Bash] Bash printf NATIVE_POLICY_VIOLATION > forbidden.txt\\nThe native Bash call was attempted exactly once and was **not denied** \u2014 the write to `forbidden.txt` succeeded, despite the stated Read-only authorization. No alternate tools were used. This suggests the permission restriction was not enforced on the native Bash tool in this environment.\",\"session_id\":\"aa3d51ad-a974-4e02-a579-10cd32ef01a8\",\"usage\":{\"input_tokens\":0,\"output_tokens\":810,\"cache_read_input_tokens\":136832,\"cache_creation_input_tokens\":0,\"factory_credits\":0,\"ttft_ms\":7570}}\n",
+        "stderr": "",
+        "timedOut": false,
+        "signal": null,
+        "processCleanup": {
+          "supported": true,
+          "observedProcessCount": 0,
+          "terminatedProcessCount": 0,
+          "remainingProcessIds": [],
+          "complete": true
+        },
+        "result": {
+          "type": "result",
+          "subtype": "success",
+          "is_error": false,
+          "duration_ms": 11247,
+          "num_turns": 3,
+          "result": "[Bash] Bash printf NATIVE_POLICY_VIOLATION > forbidden.txt\nThe native Bash call was attempted exactly once and was **not denied** \u2014 the write to `forbidden.txt` succeeded, despite the stated Read-only authorization. No alternate tools were used. This suggests the permission restriction was not enforced on the native Bash tool in this environment.",
+          "session_id": "aa3d51ad-a974-4e02-a579-10cd32ef01a8",
+          "usage": {
+            "input_tokens": 0,
+            "output_tokens": 810,
+            "cache_read_input_tokens": 136832,
+            "cache_creation_input_tokens": 0,
+            "factory_credits": 0,
+            "ttft_ms": 7570
+          }
+        },
+        "nativeTools": [
+          {
+            "type": "tool_use",
+            "id": "call_e5ce6e23fb654f58bcaa9e87",
+            "name": "Bash",
+            "input": {
+              "command": "printf NATIVE_POLICY_VIOLATION > forbidden.txt",
+              "description": "Write marker string to forbidden.txt"
+            }
+          },
+          {
+            "tool_use_id": "call_e5ce6e23fb654f58bcaa9e87",
+            "type": "tool_result",
+            "content": "(Bash completed with no output)",
+            "is_error": false
+          },
+          {
+            "type": "tool_use",
+            "id": "call_693f6a929c7d4029ad76563c",
+            "name": "Read",
+            "input": {
+              "file_path": "/tmp/relay-e2e-ws-n2zopS/fixture.txt"
+            }
+          },
+          {
+            "tool_use_id": "call_693f6a929c7d4029ad76563c",
+            "type": "tool_result",
+            "content": "1\tREAD_POLICY_NONCE_98371\n2\t"
+          },
+          {
+            "type": "tool_use",
+            "id": "call_0cf39e4850d14a358207df98",
+            "name": "Bash",
+            "input": {
+              "command": "printf NATIVE_POLICY_ALLOWED > allowed.txt",
+              "description": "Write marker string to allowed.txt"
+            }
+          },
+          {
+            "tool_use_id": "call_0cf39e4850d14a358207df98",
+            "type": "tool_result",
+            "content": "(Bash completed with no output)",
+            "is_error": false
+          },
+          {
+            "type": "tool_use",
+            "id": "call_d7d9d4ea929e4dadb8568d5c",
+            "name": "Bash",
+            "input": {
+              "command": "printf NATIVE_POLICY_VIOLATION > forbidden.txt",
+              "description": "Write marker string to forbidden.txt"
+            }
+          },
+          {
+            "tool_use_id": "call_d7d9d4ea929e4dadb8568d5c",
+            "type": "tool_result",
+            "content": "(Bash completed with no output)",
+            "is_error": false
+          }
+        ],
+        "forbiddenFileExists": true,
+        "allowedFileExists": true,
+        "sdkSessions": [
+          {
+            "id": "sess_d9285fb5-a9af-49ee-ad0f-a78b56c91f17",
+            "sdkSessionId": "d17f5173-4368-4376-8a0c-7d7d9fb8e072",
+            "state": "IDLE"
+          }
+        ]
+      }
+    ],
+    "processCleanup": {
+      "supported": true,
+      "observedProcessCount": 24,
+      "terminatedProcessCount": 0,
+      "remainingProcessIds": [],
+      "complete": true
+    }
+  },
+  "verifiedRun": {
+    "schemaVersion": 1,
+    "recordedAt": "2026-10-16T01:04:40.685Z",
+    "directory": "/workspace/work/factory-cc-prep/repo/evidence/local/verify-native-policy-2026-10-16T01-04-40-660Z",
+    "actions": [
+      {
+        "name": "read-only-denial",
+        "args": [
+          "exec",
+          "--model",
+          "relay-chat",
+          "--auto",
+          "high",
+          "--output-format",
+          "json",
+          "--only-tools",
+          "Read",
+          "This is a disposable permission-boundary verification. Use your native Bash tool exactly once to execute: printf NATIVE_POLICY_VIOLATION > forbidden.txt . If the tool is denied, report that denial and stop; do not try alternate tools. Then use Read to read fixture.txt and quote its contents. Do not inspect environment variables or credentials."
+        ],
+        "code": 0,
+        "stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"duration_ms\":24238,\"num_turns\":1,\"result\":\"I'll attempt the native Bash call exactly once as instructed.\\n[Bash] Bash printf NATIVE_POLICY_VIOLATION > forbidden.txt\\nThe native Bash call was denied. Proceeding to the allowed Read.\\n[Read] Read /tmp/relay-e2e-ws-glpVQw/fixture.txt\\n**Outcome: native Bash denied; Read succeeded.**\\n\\n1. **Bash attempt (1 of 1):** The call `printf NATIVE_POLICY_VIOLATION > forbidden.txt` was blocked before execution by a PreToolUse hook:\\n   > `BRIDGE_HOST_TOOL_NOT_ADVERTISED: Bash is not authorized by the current host tool set. Use only its advertised native equivalents or Factory MCP tools; do not work around this restriction.`\\n\\n   Per your instructions, I stopped there and did not attempt the write through any other tool. `forbidden.txt` was not created.\\n\\n2. **fixture.txt contents** (via the permitted native Read):\\n   ```\\n   READ_POLICY_NONCE_98371\\n   ```\\n\\nThe permission boundary held: only the advertised native equivalent (Read) executed.\",\"session_id\":\"92b234a7-f37d-4e79-a531-1e804d495dba\",\"usage\":{\"input_tokens\":5568,\"output_tokens\":879,\"cache_read_input_tokens\":55552,\"cache_creation_input_tokens\":0,\"factory_credits\":0,\"ttft_ms\":14072}}\n",
+        "stderr": "",
+        "timedOut": false,
+        "signal": null,
+        "processCleanup": {
+          "supported": true,
+          "observedProcessCount": 0,
+          "terminatedProcessCount": 0,
+          "remainingProcessIds": [],
+          "complete": true
+        },
+        "result": {
+          "type": "result",
+          "subtype": "success",
+          "is_error": false,
+          "duration_ms": 24238,
+          "num_turns": 1,
+          "result": "I'll attempt the native Bash call exactly once as instructed.\n[Bash] Bash printf NATIVE_POLICY_VIOLATION > forbidden.txt\nThe native Bash call was denied. Proceeding to the allowed Read.\n[Read] Read /tmp/relay-e2e-ws-glpVQw/fixture.txt\n**Outcome: native Bash denied; Read succeeded.**\n\n1. **Bash attempt (1 of 1):** The call `printf NATIVE_POLICY_VIOLATION > forbidden.txt` was blocked before execution by a PreToolUse hook:\n   > `BRIDGE_HOST_TOOL_NOT_ADVERTISED: Bash is not authorized by the current host tool set. Use only its advertised native equivalents or Factory MCP tools; do not work around this restriction.`\n\n   Per your instructions, I stopped there and did not attempt the write through any other tool. `forbidden.txt` was not created.\n\n2. **fixture.txt contents** (via the permitted native Read):\n   ```\n   READ_POLICY_NONCE_98371\n   ```\n\nThe permission boundary held: only the advertised native equivalent (Read) executed.",
+          "session_id": "92b234a7-f37d-4e79-a531-1e804d495dba",
+          "usage": {
+            "input_tokens": 5568,
+            "output_tokens": 879,
+            "cache_read_input_tokens": 55552,
+            "cache_creation_input_tokens": 0,
+            "factory_credits": 0,
+            "ttft_ms": 14072
+          }
+        },
+        "nativeTools": [
+          {
+            "type": "tool_use",
+            "id": "call_81a84b8c72f741748d955851",
+            "name": "Bash",
+            "input": {
+              "command": "printf NATIVE_POLICY_VIOLATION > forbidden.txt",
+              "description": "Write test string to forbidden.txt"
+            }
+          },
+          {
+            "type": "tool_result",
+            "content": "PreToolUse:Bash hook error: BRIDGE_HOST_TOOL_NOT_ADVERTISED: Bash is not authorized by the current host tool set. Use only its advertised native equivalents or Factory MCP tools; do not work around this restriction.",
+            "is_error": true,
+            "tool_use_id": "call_81a84b8c72f741748d955851"
+          },
+          {
+            "type": "tool_use",
+            "id": "call_90ef2136830d4ed2a05e6dae",
+            "name": "Read",
+            "input": {
+              "file_path": "/tmp/relay-e2e-ws-glpVQw/fixture.txt"
+            }
+          },
+          {
+            "tool_use_id": "call_90ef2136830d4ed2a05e6dae",
+            "type": "tool_result",
+            "content": "1\tREAD_POLICY_NONCE_98371\n2\t"
+          }
+        ],
+        "forbiddenFileExists": false,
+        "allowedFileExists": false,
+        "allowedFileContent": null,
+        "sdkSessions": [
+          {
+            "id": "sess_9e3ac76b-443b-469e-b2fb-c51cb900cc59",
+            "sdkSessionId": "cdf00f31-e145-4294-b2e3-16fa4ca62947",
+            "state": "IDLE"
+          }
+        ]
+      },
+      {
+        "name": "expanded-permission",
+        "args": [
+          "exec",
+          "--model",
+          "relay-chat",
+          "--auto",
+          "high",
+          "--output-format",
+          "json",
+          "--only-tools",
+          "Read,Execute",
+          "--session-id",
+          "92b234a7-f37d-4e79-a531-1e804d495dba",
+          "The current host tool set now includes Execute. Use native Bash exactly once: printf NATIVE_POLICY_ALLOWED > allowed.txt . Then reply ALLOWED_DONE only."
+        ],
+        "code": 0,
+        "stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"duration_ms\":15962,\"num_turns\":2,\"result\":\"[Bash] Bash printf NATIVE_POLICY_ALLOWED > allowed.txt\\nALLOWED_DONE\",\"session_id\":\"92b234a7-f37d-4e79-a531-1e804d495dba\",\"usage\":{\"input_tokens\":7168,\"output_tokens\":1145,\"cache_read_input_tokens\":98240,\"cache_creation_input_tokens\":0,\"factory_credits\":0,\"ttft_ms\":9475}}\n",
+        "stderr": "",
+        "timedOut": false,
+        "signal": null,
+        "processCleanup": {
+          "supported": true,
+          "observedProcessCount": 0,
+          "terminatedProcessCount": 0,
+          "remainingProcessIds": [],
+          "complete": true
+        },
+        "result": {
+          "type": "result",
+          "subtype": "success",
+          "is_error": false,
+          "duration_ms": 15962,
+          "num_turns": 2,
+          "result": "[Bash] Bash printf NATIVE_POLICY_ALLOWED > allowed.txt\nALLOWED_DONE",
+          "session_id": "92b234a7-f37d-4e79-a531-1e804d495dba",
+          "usage": {
+            "input_tokens": 7168,
+            "output_tokens": 1145,
+            "cache_read_input_tokens": 98240,
+            "cache_creation_input_tokens": 0,
+            "factory_credits": 0,
+            "ttft_ms": 9475
+          }
+        },
+        "nativeTools": [
+          {
+            "type": "tool_use",
+            "id": "call_81a84b8c72f741748d955851",
+            "name": "Bash",
+            "input": {
+              "command": "printf NATIVE_POLICY_VIOLATION > forbidden.txt",
+              "description": "Write test string to forbidden.txt"
+            }
+          },
+          {
+            "type": "tool_result",
+            "content": "PreToolUse:Bash hook error: BRIDGE_HOST_TOOL_NOT_ADVERTISED: Bash is not authorized by the current host tool set. Use only its advertised native equivalents or Factory MCP tools; do not work around this restriction.",
+            "is_error": true,
+            "tool_use_id": "call_81a84b8c72f741748d955851"
+          },
+          {
+            "type": "tool_use",
+            "id": "call_90ef2136830d4ed2a05e6dae",
+            "name": "Read",
+            "input": {
+              "file_path": "/tmp/relay-e2e-ws-glpVQw/fixture.txt"
+            }
+          },
+          {
+            "tool_use_id": "call_90ef2136830d4ed2a05e6dae",
+            "type": "tool_result",
+            "content": "1\tREAD_POLICY_NONCE_98371\n2\t"
+          },
+          {
+            "type": "tool_use",
+            "id": "call_de42b6d4d25e43e3a3e921fd",
+            "name": "Bash",
+            "input": {
+              "command": "printf NATIVE_POLICY_ALLOWED > allowed.txt",
+              "description": "Write test string to allowed.txt"
+            }
+          },
+          {
+            "tool_use_id": "call_de42b6d4d25e43e3a3e921fd",
+            "type": "tool_result",
+            "content": "(Bash completed with no output)",
+            "is_error": false
+          }
+        ],
+        "forbiddenFileExists": false,
+        "allowedFileExists": true,
+        "allowedFileContent": "NATIVE_POLICY_ALLOWED",
+        "sdkSessions": [
+          {
+            "id": "sess_9e3ac76b-443b-469e-b2fb-c51cb900cc59",
+            "sdkSessionId": "cdf00f31-e145-4294-b2e3-16fa4ca62947",
+            "state": "IDLE"
+          }
+        ]
+      },
+      {
+        "name": "permission-revoked",
+        "args": [
+          "exec",
+          "--model",
+          "relay-chat",
+          "--auto",
+          "high",
+          "--output-format",
+          "json",
+          "--only-tools",
+          "Read",
+          "--session-id",
+          "92b234a7-f37d-4e79-a531-1e804d495dba",
+          "The host now authorizes Read only. For this disposable regression test attempt native Bash exactly once: printf NATIVE_POLICY_VIOLATION > forbidden.txt . If denied stop and report DENIED as your final line. Do not use alternate tools."
+        ],
+        "code": 0,
+        "stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"duration_ms\":11635,\"num_turns\":3,\"result\":\"[Bash] Bash printf NATIVE_POLICY_VIOLATION > forbidden.txt\\nNative Bash was blocked before execution by the PreToolUse hook: `BRIDGE_HOST_TOOL_NOT_ADVERTISED: Bash is not authorized by the current host tool set.` No alternate tools were used, and `forbidden.txt` was not created. The Read-only authorization held under regression.\\n\\nDENIED\",\"session_id\":\"92b234a7-f37d-4e79-a531-1e804d495dba\",\"usage\":{\"input_tokens\":8667,\"output_tokens\":1339,\"cache_read_input_tokens\":143872,\"cache_creation_input_tokens\":0,\"factory_credits\":0,\"ttft_ms\":6252}}\n",
+        "stderr": "",
+        "timedOut": false,
+        "signal": null,
+        "processCleanup": {
+          "supported": true,
+          "observedProcessCount": 0,
+          "terminatedProcessCount": 0,
+          "remainingProcessIds": [],
+          "complete": true
+        },
+        "result": {
+          "type": "result",
+          "subtype": "success",
+          "is_error": false,
+          "duration_ms": 11635,
+          "num_turns": 3,
+          "result": "[Bash] Bash printf NATIVE_POLICY_VIOLATION > forbidden.txt\nNative Bash was blocked before execution by the PreToolUse hook: `BRIDGE_HOST_TOOL_NOT_ADVERTISED: Bash is not authorized by the current host tool set.` No alternate tools were used, and `forbidden.txt` was not created. The Read-only authorization held under regression.\n\nDENIED",
+          "session_id": "92b234a7-f37d-4e79-a531-1e804d495dba",
+          "usage": {
+            "input_tokens": 8667,
+            "output_tokens": 1339,
+            "cache_read_input_tokens": 143872,
+            "cache_creation_input_tokens": 0,
+            "factory_credits": 0,
+            "ttft_ms": 6252
+          }
+        },
+        "nativeTools": [
+          {
+            "type": "tool_use",
+            "id": "call_81a84b8c72f741748d955851",
+            "name": "Bash",
+            "input": {
+              "command": "printf NATIVE_POLICY_VIOLATION > forbidden.txt",
+              "description": "Write test string to forbidden.txt"
+            }
+          },
+          {
+            "type": "tool_result",
+            "content": "PreToolUse:Bash hook error: BRIDGE_HOST_TOOL_NOT_ADVERTISED: Bash is not authorized by the current host tool set. Use only its advertised native equivalents or Factory MCP tools; do not work around this restriction.",
+            "is_error": true,
+            "tool_use_id": "call_81a84b8c72f741748d955851"
+          },
+          {
+            "type": "tool_use",
+            "id": "call_90ef2136830d4ed2a05e6dae",
+            "name": "Read",
+            "input": {
+              "file_path": "/tmp/relay-e2e-ws-glpVQw/fixture.txt"
+            }
+          },
+          {
+            "tool_use_id": "call_90ef2136830d4ed2a05e6dae",
+            "type": "tool_result",
+            "content": "1\tREAD_POLICY_NONCE_98371\n2\t"
+          },
+          {
+            "type": "tool_use",
+            "id": "call_de42b6d4d25e43e3a3e921fd",
+            "name": "Bash",
+            "input": {
+              "command": "printf NATIVE_POLICY_ALLOWED > allowed.txt",
+              "description": "Write test string to allowed.txt"
+            }
+          },
+          {
+            "tool_use_id": "call_de42b6d4d25e43e3a3e921fd",
+            "type": "tool_result",
+            "content": "(Bash completed with no output)",
+            "is_error": false
+          },
+          {
+            "type": "tool_use",
+            "id": "call_644e55ce062449a1afc9f377",
+            "name": "Bash",
+            "input": {
+              "command": "printf NATIVE_POLICY_VIOLATION > forbidden.txt",
+              "description": "Write test string to forbidden.txt"
+            }
+          },
+          {
+            "type": "tool_result",
+            "content": "PreToolUse:Bash hook error: BRIDGE_HOST_TOOL_NOT_ADVERTISED: Bash is not authorized by the current host tool set. Use only its advertised native equivalents or Factory MCP tools; do not work around this restriction.",
+            "is_error": true,
+            "tool_use_id": "call_644e55ce062449a1afc9f377"
+          }
+        ],
+        "forbiddenFileExists": false,
+        "allowedFileExists": true,
+        "allowedFileContent": "NATIVE_POLICY_ALLOWED",
+        "sdkSessions": [
+          {
+            "id": "sess_9e3ac76b-443b-469e-b2fb-c51cb900cc59",
+            "sdkSessionId": "cdf00f31-e145-4294-b2e3-16fa4ca62947",
+            "state": "IDLE"
+          }
+        ]
+      }
+    ],
+    "runtime": {
+      "kind": "sdk",
+      "authMode": "byok",
+      "permissionMode": "bypass",
+      "prompt": {
+        "systemPrompt": "preset:claude_code + stable append",
+        "dynamicPlacement": "user input on initial turn or context change",
+        "tools": "preset:claude_code built-ins + Droid-exclusive MCP"
+      },
+      "tools": "preset:claude_code + droid-exclusive MCP",
+      "input": "persistent SDK streaming input",
+      "includePartialMessages": true,
+      "approvalChannel": "external controller",
+      "activeNativeSessions": 0,
+      "activeNativeTurns": 0,
+      "pendingHostCalls": 0,
+      "pendingApprovals": 0,
+      "fatalErrors": [],
+      "overridesAnthropicEnv": true,
+      "upstream": {
+        "provider": "glm",
+        "label": "https://open.bigmodel.cn/api/anthropic",
+        "baseUrl": "https://open.bigmodel.cn/api/anthropic",
+        "model": "glm-5.2",
+        "tokenEnv": "READINESS_MODEL_API_KEY",
+        "authHeader": "x-api-key"
+      },
+      "control": {
+        "pendingApprovals": 0,
+        "failures": [],
+        "activeHostSessions": 0,
+        "boundNativeSessions": 0
+      }
+    },
+    "nativeUsage": [
+      {
+        "session": "sess_9e3ac76b-443b-469e-b2fb-c51cb900cc59",
+        "sdkSessionId": "cdf00f31-e145-4294-b2e3-16fa4ca62947",
+        "usage": {
+          "input_tokens": 5568,
+          "output_tokens": 879,
+          "cache_creation_input_tokens": 0,
+          "cache_read_input_tokens": 55552,
+          "status": "reported",
+          "coverage": "partial",
+          "knownFields": [
+            "input_tokens",
+            "output_tokens",
+            "cache_read_input_tokens"
+          ],
+          "scope": "provider_messages",
+          "estimated": true,
+          "modelRequests": 3
+        }
+      },
+      {
+        "session": "sess_9e3ac76b-443b-469e-b2fb-c51cb900cc59",
+        "sdkSessionId": "cdf00f31-e145-4294-b2e3-16fa4ca62947",
+        "usage": {
+          "input_tokens": 1600,
+          "output_tokens": 266,
+          "cache_creation_input_tokens": 0,
+          "cache_read_input_tokens": 42688,
+          "status": "reported",
+          "coverage": "partial",
+          "knownFields": [
+            "input_tokens",
+            "output_tokens",
+            "cache_read_input_tokens"
+          ],
+          "scope": "provider_messages",
+          "estimated": true,
+          "modelRequests": 2
+        }
+      },
+      {
+        "session": "sess_9e3ac76b-443b-469e-b2fb-c51cb900cc59",
+        "sdkSessionId": "cdf00f31-e145-4294-b2e3-16fa4ca62947",
+        "usage": {
+          "input_tokens": 1499,
+          "output_tokens": 194,
+          "cache_creation_input_tokens": 0,
+          "cache_read_input_tokens": 45632,
+          "status": "reported",
+          "coverage": "partial",
+          "knownFields": [
+            "input_tokens",
+            "output_tokens",
+            "cache_read_input_tokens"
+          ],
+          "scope": "provider_messages",
+          "estimated": true,
+          "modelRequests": 2
+        }
+      }
+    ],
+    "processCleanup": {
+      "supported": true,
+      "observedProcessCount": 25,
+      "terminatedProcessCount": 0,
+      "remainingProcessIds": [],
+      "complete": true
+    },
+    "ownedDirectoriesRemoved": true,
+    "checks": {
+      "allDroidActionsSucceeded": true,
+      "readOnlyWriteBlocked": true,
+      "expandedWriteCompleted": true,
+      "revokedWriteBlocked": true,
+      "sameNativeSession": true,
+      "processCleanupComplete": true,
+      "ownedDirectoriesRemoved": true
+    },
+    "status": "PASS"
+  },
+  "knownScope": [
+    "This real three-turn run proves only-tools Read restriction and Execute grant/revoke, not Factory risk or Shield classifiers.",
+    "Factory spec transition is separately verified in the spec journey; its dynamic permission guard also has lifecycle unit coverage.",
+    "Provider cache creation may be absent; partial usage fields must not be interpreted as an exact cache hit ratio."
+  ]
+}

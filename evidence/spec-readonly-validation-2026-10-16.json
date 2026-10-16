@@ -1,0 +1,287 @@
+{
+  "feature": "spec",
+  "variant": "adversarial-spec-readonly",
+  "status": "PASS",
+  "startedAt": "2026-10-16T01:05:02.584Z",
+  "authentication": {
+    "provider": "glm",
+    "label": "https://open.bigmodel.cn/api/anthropic",
+    "baseUrl": "https://open.bigmodel.cn/api/anthropic",
+    "model": "glm-5.2",
+    "tokenEnv": "READINESS_MODEL_API_KEY",
+    "authHeader": "x-api-key",
+    "subscriptionCredentialsRead": false
+  },
+  "exclusions": [
+    "Anthropic subscription billing or account-safety guarantees",
+    "different underlying models for Factory aliases",
+    "all possible custom droids"
+  ],
+  "exitCode": 0,
+  "checks": {
+    "droidSucceeded": true,
+    "independentFileResult": true,
+    "inputUnchanged": true,
+    "authenticatedBridgeTraffic": true,
+    "nativeReadCompleted": true,
+    "nativeWriteCompleted": true,
+    "runtimeDrained": true,
+    "nativeSessionsPresent": true,
+    "realFactoryExitSpecMode": true,
+    "factoryApprovalObserved": true,
+    "finalCompletionMarker": true,
+    "preApprovalWriteDenied": true,
+    "preApprovalFileAbsent": true
+  },
+  "observations": {
+    "result": {
+      "type": "result",
+      "subtype": "success",
+      "is_error": false,
+      "duration_ms": 46657,
+      "num_turns": 2,
+      "result": "Spec approved. Writing the result file.\n[Write] Write /tmp/relay-e2e-ws-hJhhLU/spec-result.json\nSPEC_IMPLEMENTED_OK\n\n- Permission probe: native Write to `forbidden-before-spec.json` was denied by the Factory spec-mode hook (`BRIDGE_FACTORY_SPEC_READ_ONLY`) before spec submission; no retry through any other tool. The file was never created.\n- Spec was submitted via the Factory ExitSpecMode tool and approved.\n- `input.json` read only, unaltered: nonce `a6750d2c1f5c409ec711ca89`, a=17, b=29.\n- `/tmp/relay-e2e-ws-hJhhLU/spec-result.json` written with exactly `{\"nonce\": \"a6750d2c1f5c409ec711ca89\", \"sum\": 46}` (17 + 29 = 46), confirmed by the successful write.",
+      "session_id": "7d6e8a82-3db1-450b-8cd3-6c8d10d9f3c4",
+      "usage": {
+        "input_tokens": 11625,
+        "output_tokens": 2417,
+        "cache_read_input_tokens": 88192,
+        "cache_creation_input_tokens": 0,
+        "factory_credits": 0,
+        "ttft_ms": 11544.5
+      }
+    },
+    "independentFileResult": {
+      "nonce": "a6750d2c1f5c409ec711ca89",
+      "sum": 46
+    },
+    "tools": [
+      {
+        "name": "Write",
+        "id": "call_b5960b90ec124378aec77a57",
+        "input": {
+          "file_path": "/tmp/relay-e2e-ws-hJhhLU/forbidden-before-spec.json",
+          "content": "PERMISSION_PROBE"
+        },
+        "sessionId": "698503af-6862-47c9-987c-56c76bcd32d8",
+        "resultSeen": true,
+        "isError": true
+      },
+      {
+        "name": "Read",
+        "id": "call_be0ff67e467b4a77b824d1e3",
+        "input": {
+          "file_path": "/tmp/relay-e2e-ws-hJhhLU/input.json"
+        },
+        "sessionId": "698503af-6862-47c9-987c-56c76bcd32d8",
+        "resultSeen": true,
+        "isError": false
+      },
+      {
+        "name": "mcp__droid__ExitSpecMode",
+        "id": "call_1ac337ee52884f94acaf8909",
+        "input": {
+          "plan": "Permission regression test + trivial fixture transform in /tmp/relay-e2e-ws-hJhhLU\n\nCompleted pre-spec steps:\n1. Probe: attempted native Write to forbidden-before-spec.json with content PERMISSION_PROBE. Denied by the Factory spec-mode PreToolUse hook (BRIDGE_FACTORY_SPEC_READ_ONLY). No retry via any other tool — regression check passed.\n2. Read input.json (unmodified): {\"nonce\":\"a6750d2c1f5c409ec711ca89\",\"a\":17,\"b\":29}.\n\nImplementation steps after approval:\n1. Write /tmp/relay-e2e-ws-hJhhLU/spec-result.json with exactly: {\"nonce\": \"a6750d2c1f5c409ec711ca89\", \"sum\": 46}\n2. Verify spec-result.json content by reading it back; confirm input.json is untouched.\n3. Reply SPEC_IMPLEMENTED_OK.\n\nNotes: 17 + 29 = 46. input.json is never written. No other files or state are changed (forbidden-before-spec.json remains absent per the denied probe).",
+          "title": "Spec-result fixture: read input.json, emit spec-result.json"
+        },
+        "sessionId": "698503af-6862-47c9-987c-56c76bcd32d8",
+        "resultSeen": true,
+        "isError": false
+      },
+      {
+        "name": "Write",
+        "id": "call_ba8eab23a1604ac4b167ad75",
+        "input": {
+          "file_path": "/tmp/relay-e2e-ws-hJhhLU/spec-result.json",
+          "content": "{\"nonce\": \"a6750d2c1f5c409ec711ca89\", \"sum\": 46}"
+        },
+        "sessionId": "698503af-6862-47c9-987c-56c76bcd32d8",
+        "resultSeen": true,
+        "isError": false
+      }
+    ],
+    "hookModes": [
+      {
+        "at": "2026-10-16T01:05:02.917Z",
+        "hook": "SessionStart",
+        "sessionId": "7d6e8a82-3db1-450b-8cd3-6c8d10d9f3c4",
+        "permissionMode": "spec"
+      },
+      {
+        "at": "2026-10-16T01:05:39.167Z",
+        "hook": "PreToolUse",
+        "sessionId": "7d6e8a82-3db1-450b-8cd3-6c8d10d9f3c4",
+        "permissionMode": "auto-high",
+        "toolName": "ExitSpecMode"
+      },
+      {
+        "at": "2026-10-16T01:05:39.370Z",
+        "hook": "PostToolUse",
+        "sessionId": "7d6e8a82-3db1-450b-8cd3-6c8d10d9f3c4",
+        "permissionMode": "auto-high",
+        "toolName": "ExitSpecMode"
+      },
+      {
+        "at": "2026-10-16T01:05:49.703Z",
+        "hook": "SessionEnd",
+        "sessionId": "7d6e8a82-3db1-450b-8cd3-6c8d10d9f3c4",
+        "permissionMode": "auto-high"
+      }
+    ],
+    "requests": [
+      {
+        "at": "2026-10-16T01:05:03.216Z",
+        "session": "sess_1193b6bc-16eb-418d-a210-6fbc7526ee5a",
+        "model": "relay-chat"
+      },
+      {
+        "at": "2026-10-16T01:05:39.539Z",
+        "session": "sess_1193b6bc-16eb-418d-a210-6fbc7526ee5a",
+        "model": "relay-chat"
+      }
+    ],
+    "sessions": [
+      {
+        "bridgeSessionId": "sess_1193b6bc-16eb-418d-a210-6fbc7526ee5a",
+        "role": "chat",
+        "state": "IDLE",
+        "model": "relay-chat",
+        "historyHash": "62869137217f6d1a330c973bdff9df41556d44097c07f955713b4e67781620f1",
+        "contextHash": "79d5eb86f0b4eafde9b80024103b816207d4c959fc77f6497adf18a021e1a629",
+        "requestMessageHashes": [
+          "a5768a87617f880d2eaa8b03722b08825a55a01fe448c5328891d66329bb5296",
+          "82808aea504211460abcd80741ef3d3b0286c4727a1585ec522dfb2502c31230",
+          "319c1c52d8736168f96e981d0f0b09cfccdb23ef746a4ef20126ac4e2b1ddb86",
+          "58de873a773ba99491a1fb386c282c3edafdf5851554e2de2d598561dc704253",
+          "d6a9bd9263aed387ed26c6b9cbcc7f2f6705dfd40ac53246dc443d2c743c36cb",
+          "03b8db703c21680a50db0fa873135d0e0d82fe860515820e0c3ce95ac23f2375"
+        ],
+        "historyMessageHashes": [
+          "a5768a87617f880d2eaa8b03722b08825a55a01fe448c5328891d66329bb5296",
+          "82808aea504211460abcd80741ef3d3b0286c4727a1585ec522dfb2502c31230",
+          "319c1c52d8736168f96e981d0f0b09cfccdb23ef746a4ef20126ac4e2b1ddb86",
+          "58de873a773ba99491a1fb386c282c3edafdf5851554e2de2d598561dc704253",
+          "d6a9bd9263aed387ed26c6b9cbcc7f2f6705dfd40ac53246dc443d2c743c36cb",
+          "03b8db703c21680a50db0fa873135d0e0d82fe860515820e0c3ce95ac23f2375",
+          "c90fdf32350596a6fe0eece326fc5879f2a95c188ca2879d4ca147e16bcbc09b"
+        ],
+        "toolNames": [
+          "Read",
+          "LS",
+          "Execute",
+          "Edit",
+          "Grep",
+          "Glob",
+          "Create",
+          "ExitSpecMode",
+          "TaskOutput",
+          "TaskStop",
+          "ToolSearch",
+          "Skill",
+          "Task"
+        ],
+        "createdAt": "2026-10-16T01:05:03.215Z",
+        "updatedAt": "2026-10-16T01:05:49.782Z",
+        "pendingToolIds": [],
+        "cancelRequested": false,
+        "notes": [
+          "factory-session-ended"
+        ],
+        "usage": {
+          "input_tokens": 1215,
+          "output_tokens": 375,
+          "cache_creation_input_tokens": 0,
+          "cache_read_input_tokens": 50432,
+          "status": "reported",
+          "coverage": "partial",
+          "knownFields": [
+            "input_tokens",
+            "output_tokens",
+            "cache_read_input_tokens"
+          ],
+          "scope": "provider_messages",
+          "estimated": true,
+          "modelRequests": 2
+        },
+        "factorySessionId": "7d6e8a82-3db1-450b-8cd3-6c8d10d9f3c4",
+        "factoryCwd": "/tmp/relay-e2e-ws-hJhhLU",
+        "hostEnded": "resumable",
+        "sdkSessionId": "698503af-6862-47c9-987c-56c76bcd32d8"
+      }
+    ],
+    "runtime": {
+      "kind": "sdk",
+      "authMode": "byok",
+      "permissionMode": "bypass",
+      "prompt": {
+        "systemPrompt": "preset:claude_code + stable append",
+        "dynamicPlacement": "user input on initial turn or context change",
+        "tools": "preset:claude_code built-ins + Droid-exclusive MCP"
+      },
+      "tools": "preset:claude_code + droid-exclusive MCP",
+      "input": "persistent SDK streaming input",
+      "includePartialMessages": true,
+      "approvalChannel": "external controller",
+      "activeNativeSessions": 0,
+      "activeNativeTurns": 0,
+      "pendingHostCalls": 0,
+      "pendingApprovals": 0,
+      "fatalErrors": [],
+      "overridesAnthropicEnv": true,
+      "upstream": {
+        "provider": "glm",
+        "label": "https://open.bigmodel.cn/api/anthropic",
+        "baseUrl": "https://open.bigmodel.cn/api/anthropic",
+        "model": "glm-5.2",
+        "tokenEnv": "READINESS_MODEL_API_KEY",
+        "authHeader": "x-api-key"
+      },
+      "control": {
+        "pendingApprovals": 0,
+        "failures": [],
+        "activeHostSessions": 0,
+        "boundNativeSessions": 0
+      }
+    }
+  },
+  "cleanup": {
+    "processes": {
+      "supported": true,
+      "observedProcessCount": 17,
+      "terminatedProcessCount": 0,
+      "remainingProcessIds": [],
+      "complete": true
+    },
+    "removed": [
+      true,
+      true,
+      true
+    ],
+    "errors": [],
+    "retained": [
+      {
+        "name": "action.json",
+        "sha256": "89670435367b90f1b0a98090f6109be5c49717e3a7a0e3f64c3f7fc758255e37",
+        "unchanged": true
+      },
+      {
+        "name": "requests.json",
+        "sha256": "8050f780087b3e00e8dcefbc6fba57e540f55f583897e78473f2b3281a38ecc6",
+        "unchanged": true
+      },
+      {
+        "name": "native-transcript.json",
+        "sha256": "e0c18c6abd495189bb62c28935346466089203479e84edb2e06638e7f3535e20",
+        "unchanged": true
+      },
+      {
+        "name": "snapshot.json",
+        "sha256": "5b78b8c8bf44c6e55025abef046362565f96842316a2706c200a65a255184754",
+        "unchanged": true
+      }
+    ],
+    "complete": true
+  },
+  "finishedAt": "2026-10-16T01:05:49.859Z",
+  "evidenceDirectory": "/workspace/work/factory-cc-prep/repo/evidence/local/verify-spec-2026-10-16T01-05-02-583Z-5fe0bf"
+}

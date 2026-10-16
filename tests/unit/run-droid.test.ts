@@ -4,7 +4,7 @@ import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSyn
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { parseDroidWrapperArgs, runDroid } from "../../scripts/run-droid.js";
+import { parseDroidWrapperArgs, prepareDroidExecArgs, runDroid } from "../../scripts/run-droid.js";
 
 const directories: string[] = [];
 const servers: Server[] = [];
@@ -59,6 +59,34 @@ function processRunning(pid: number): boolean {
 }
 
 describe("Droid launch wrapper", () => {
+  it("keeps the official spec approval transition available without changing unrelated tool restrictions", () => {
+    expect(prepareDroidExecArgs(["exec", "--use-spec", "--auto", "high", "make a plan"])).toEqual(["exec", "--add-tools", "ExitSpecMode", "--use-spec", "--auto", "high", "make a plan"]);
+    expect(prepareDroidExecArgs(["exec", "--spec-model=relay", "--add-tools=Read,Grep", "task"])).toContain("--add-tools=Read,Grep,ExitSpecMode");
+    expect(prepareDroidExecArgs(["exec", "--use-spec", "--disabled-tools", "Execute", "task"])).toEqual(["exec", "--additional-tools", "ExitSpecMode", "--use-spec", "--disabled-tools", "Execute", "task"]);
+    const explicit = ["exec", "--use-spec", "--only-tools", "Read,exit-spec-mode", "task"];
+    expect(prepareDroidExecArgs(explicit)).toEqual(explicit);
+    expect(() => prepareDroidExecArgs(["exec", "--use-spec", "--remove-tools", "ExitSpecMode", "task"])).toThrow("explicit removed-tools policy");
+    expect(() => prepareDroidExecArgs(["exec", "--use-spec", "--only-tools", "Read", "task"])).toThrow("explicit tool allowlist");
+  });
+
+  it("does not interpret literal prompt or option payloads as exec spec flags", () => {
+    for (const args of [
+      ["exec", "explain --use-spec"],
+      ["exec", "--", "--use-spec"],
+      ["exec", "--append-system-prompt", "--use-spec", "task"],
+      ["exec", "--settings", "--use-spec", "task"],
+      ["--use-spec"],
+      ["exec", "--input-format", "stream-jsonrpc", "--use-spec"],
+      ["exec", "--future-option", "payload", "--use-spec", "task"],
+    ]) expect(prepareDroidExecArgs(args)).toEqual(args);
+  });
+
+  it("rejects a spec allowlist conflict before lifecycle registration or process spawn", async () => {
+    const { env, requests } = await control();
+    await expect(runDroid(["--", "exec", "--use-spec", "--only-tools", "Read", "task"], { env, stdio: "ignore", handleProcessSignals: false })).rejects.toThrow("explicit tool allowlist");
+    expect(requests).toHaveLength(0);
+  });
+
   it("passes every argument after -- unchanged, preserving literal settings", () => {
     const args = ["exec", "--settings", '{"customModels":[{"apiKey":"literal-test-key"}]}', "--auto", "low", "say --exact"];
     expect(parseDroidWrapperArgs(["--home", "/tmp/test", "--airgap", "1", "--", ...args])).toMatchObject({ home: "/tmp/test", airgap: "1", args });

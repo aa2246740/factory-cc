@@ -40,7 +40,7 @@ Ready requires the expected runtime/auth configuration and a successful real Dro
 
 ## Doctor
 
-Use the helper's read-only instance doctor before driving and whenever a run looks wrong. Each live run captures its doctor report before the first action. It checks the owned URL/runtime, SDK/BYOK configuration, admin read access, and workspace/config isolation. It must not send a model prompt, approve a tool, or cancel a session.
+Use the chat helper's read-only instance doctor before driving and whenever its run looks wrong. Each live chat run captures this report before its first action. It checks the owned URL/runtime, SDK/BYOK configuration, admin read access, and workspace/config isolation. It must not send a model prompt, approve a tool, or cancel a session. Other dedicated drivers perform their own documented prerequisite/runtime checks.
 
 While the run is active, copy the private manifest path printed at launch into a second terminal:
 
@@ -57,7 +57,7 @@ If doctor fails, retain the failure evidence and run cleanup. Do not replace the
 
 ## Drive
 
-The currently automated mapped journey is [chat, native file work and session continuation](features/chat-and-resume.md):
+Start with [chat, native file work and session continuation](features/chat-and-resume.md):
 
 ```bash
 npm run verify:relay -- --feature chat
@@ -65,15 +65,22 @@ npm run verify:relay -- --feature chat
 
 The helper uses real `droid exec`, reads a fixture whose nonce is not supplied in the prompt, writes an output file through native Claude tools, then starts a second `droid exec --session-id` to recall the earlier value. It independently reads the file and compares session identities. Production entry points and their limitations are in each feature file; do not silently replace an unimplemented recipe with a unit test.
 
-For the separately maintained full Mission journey, use the repository's existing real harness with the same explicit upstream environment:
+Drive the other mapped surfaces through their dedicated helpers with the same explicit upstream environment. Every summary path below must be new:
 
 ```bash
-npm run test:e2e:mission
+npm run verify:spec -- --adversarial-spec --summary evidence/new-spec.json
+npm run verify:custom -- --read-only-custom --summary evidence/new-custom.json
+npm run verify:context -- --auto --same-worker-handoff --summary evidence/new-context.json
+npm run verify:native-schema -- --summary evidence/new-schema.json
+npm run verify:native-policy -- --summary evidence/new-policy.json
+npm run verify:auxiliary -- --summary evidence/new-auxiliary.json
+node --import tsx scripts/verify-interactive.ts --help
+npm run verify:mission -- --summary evidence/new-mission.json
 ```
 
-This is a distinct, longer run with a one-hour default deadline. Preserve an initial timeout as a failed/incomplete attempt even if later official session continuation succeeds. Read [Mission's feature recipe](features/mission.md) before running it.
+Mission is a distinct, longer run with a one-hour default deadline. Preserve an initial timeout as a failed/incomplete attempt even if later official session continuation succeeds. Read [Mission's feature recipe](features/mission.md) before running it. Its final verifier also fingerprints the actual runtime sources; do not edit them during acceptance.
 
-The mapped spec/review/auxiliary and browser paths have coverage gaps. Record `NOT_VERIFIED` or an exact unmet prerequisite instead of marking them passed through chat. Unknown private/hosted Factory paths remain outside the enumerated denominator.
+The native-schema helper exercises the real SDK with a synthetic host MCP fixture; it is not a Factory command. Context verification drives the real Factory JSON-RPC compaction methods and requires a separate post-boundary turn. Interactive verification uses the actual PTY entry points. Chat's manifest doctor is specific to its running instance; other drivers perform their own prerequisite and lifecycle checks. Read [the current scope](../../../docs/FACTORY-SURFACES.md), and record hosted prerequisites or unknown paths explicitly. Unknown private/server-side Factory paths remain outside an exhaustive denominator.
 
 ## Evidence
 
@@ -82,7 +89,7 @@ The helper prints a unique `evidence/local/verify-relay-*` directory. Retain its
 For a new, nonexisting shareable summary path, use:
 
 ```bash
-npm run verify:relay -- --feature chat --summary evidence/verification-skill-validation-2026-10-15.json
+npm run verify:relay -- --feature chat --summary evidence/new-chat.json
 ```
 
 Never overwrite an earlier attempt to turn a failure into a pass. If the dated summary already exists, use the command without `--summary`; its unique local directory still retains the new result.
@@ -109,7 +116,9 @@ If the entire supervisor is killed before `finally`, the run is interrupted, not
 ## Helpers
 
 - `scripts/verify-relay.ts` is the executable helper, invoked by `npm run verify:relay`. Use `--help` for its supported operations; `--offline-check` checks prerequisites without calling a model.
-- `scripts/e2e-mission.ts` is invoked by `npm run test:e2e:mission`; its reports distinguish genuine workflow completion from health-only or ledger-only success.
+- `scripts/verify-mission-final.ts` is invoked by `npm run verify:mission`; it wraps the real Mission driver and requires completed worker transcripts, validators, stable runtime sources and owned-process cleanup.
+- `scripts/verify-spec-custom.ts`, `verify-factory-context.ts`, `verify-native-schema.ts`, `verify-native-tool-policy.ts`, `verify-auxiliary.ts` and `verify-interactive.ts` provide the separate journeys above. Each retains unsuccessful attempts; passing one does not certify another.
+- `scripts/verify-browser-control.ts` drives actual Chromium approval controls and takes screenshots; its optional external browser dependencies and invocation are in [permissions and control](features/permissions-and-control.md).
 - `scripts/control.ts` is the production client: `npm run control -- approvals` and `npm run control -- sessions` are read-only; approve/deny/cancel mutate the selected live request.
 
 Keep the feature map current with `/maintain-verification-skill` when behavior changes. Updating an entry's status requires new evidence, not just editing its prose.

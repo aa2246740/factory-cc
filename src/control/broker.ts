@@ -18,6 +18,9 @@ interface HostBinding {
   ending?: Promise<void>;
   terminalResults: Map<string, { toolUseId: string; input: unknown; response: unknown; isError: boolean }>;
   launchId?: string;
+  permissionMode?: string;
+  /** Remains locked until the host confirms successful ExitSpecMode. */
+  specRestricted?: boolean;
 }
 interface PendingApproval {
   view: ObjectValue & { id: string; bridgeSessionId: string };
@@ -149,6 +152,14 @@ export class ControlBroker implements RuntimeControl {
 
   hostSessionId(token: string | undefined): string | undefined { return token ? this.tokens.get(token)?.sessionId : undefined; }
 
+  factoryPermissionMode(bridgeSessionId: string): string | undefined {
+    const session = this.store.get(bridgeSessionId);
+    if (!session?.factorySessionId || !session.factoryCwd) return undefined;
+    const host = this.hosts.get(`${session.factoryCwd}\0${session.factorySessionId}`);
+    if (!host || host.ended || !host.bridgeSessions.has(bridgeSessionId)) return undefined;
+    return host.specRestricted ? "spec" : host.permissionMode;
+  }
+
   hostEvent(input: unknown): Promise<ObjectValue> {
     if (this.closed) throw new BridgeError(503, "bridge_shutting_down", "Controller is closed.");
     const envelope = object(input);
@@ -185,6 +196,22 @@ export class ControlBroker implements RuntimeControl {
       const launch = typeof launchId === "string" ? this.launches.get(launchId) : undefined;
       if (launchId !== undefined && (!launch || launch.ended || launch.cwd !== cwd)) throw new BridgeError(409, "invalid_host_launch", "Factory launch is unknown, ended or uses another workspace.");
       if (host && !host.ended && launchId !== host.launchId) throw new BridgeError(409, "conflicting_host_launch", "Factory session is already owned by another launch.");
+      // Official compact/handoff SessionStart identifies its predecessor. Retire
+      // only that authenticated host generation, so copied transcript markers
+      // cannot bind the new session to its predecessor or cause ambiguity.
+      // Ordinary starts and same-session compaction do not end sibling sessions.
+      if (event.source === "compact" && typeof event.previous_session_id === "string"
+          && event.previous_session_id !== event.session_id) {
+        const previous = this.hosts.get(`${cwd}\0${event.previous_session_id}`);
+        if (previous && !previous.drained) {
+          if (previous.launchId !== launchId) throw new BridgeError(409, "conflicting_host_launch", "Factory handoff cannot end a session owned by another launch.");
+          await this.endHost(previous, false, "Factory compact handoff");
+          // Another authenticated start can complete while draining awaits.
+          host = this.hosts.get(key);
+          if (launch?.ended) throw new BridgeError(409, "invalid_host_launch", "Factory launch ended during handoff.");
+          if (host && !host.ended && launchId !== host.launchId) throw new BridgeError(409, "conflicting_host_launch", "Factory session is already owned by another launch.");
+        }
+      }
       if (host?.ended && !host.drained) throw new BridgeError(409, "host_session_closing", "The prior Factory session is still draining.");
       if (!host || host.ended) {
         host = { token: randomBytes(32).toString("hex"), sessionId: event.session_id, cwd, cwdAliases: new Set([cwd, resolve(event.cwd), ...(launch?.cwdAliases ?? [])]), bridgeSessions: new Set(), ended: false, terminalResults: new Map(), launchId: typeof launchId === "string" ? launchId : undefined };
@@ -193,6 +220,7 @@ export class ControlBroker implements RuntimeControl {
         launch?.hosts.add(host);
       }
       host.cwdAliases.add(resolve(event.cwd));
+      this.observePermissionMode(host, event);
       return { ok: true, bindingToken: host.token, additionalContext: `[factory-cc-session:${host.token}]` };
     }
     if (!host) throw new BridgeError(409, "host_not_registered", "SessionStart must register the Factory session first.");
@@ -200,6 +228,14 @@ export class ControlBroker implements RuntimeControl {
     if (host.ended) {
       if (!host.drained) await this.endHost(host, false, "Factory SessionEnd retry");
       return { ok: true, alreadyEnded: true };
+    }
+    this.observePermissionMode(host, event);
+
+    if (event.hook_event_name === "UserPromptSubmit") {
+      // Factory can discard the original SessionStart message during its own
+      // automatic compaction. Reattach the authenticated generation at each
+      // real user turn instead of inferring ownership from compacted text.
+      return { ok: true, additionalContext: `[factory-cc-session:${host.token}]` };
     }
 
     if (event.hook_event_name === "PostToolUse") {
@@ -212,6 +248,13 @@ export class ControlBroker implements RuntimeControl {
       const match = candidates[0];
       // Native/host-only tools that were never sent through this bridge are observational.
       if (!match) return { ok: true, observed: true, matched: false };
+      // Factory exec changes permission_mode *before* executing ExitSpecMode.
+      // That optimistic change is not approval. Unlock only after the exact
+      // pending host tool has a successful authenticated completion receipt.
+      if (event.tool_name === "ExitSpecMode" && !hostToolFailed(event)
+          && typeof event.permission_mode === "string" && event.permission_mode !== "spec") {
+        host.specRestricted = false;
+      }
       if (event.tool_name === "EndFeatureRun") {
         const response = event.tool_response;
         const structuredError = response && typeof response === "object" && !Array.isArray(response)
@@ -228,6 +271,12 @@ export class ControlBroker implements RuntimeControl {
       return { ok: true, ended: true, sessions: host.bridgeSessions.size };
     }
     return { ok: true, observed: true };
+  }
+
+  private observePermissionMode(host: HostBinding, event: ObjectValue): void {
+    if (typeof event.permission_mode !== "string") return;
+    host.permissionMode = event.permission_mode;
+    if (event.permission_mode === "spec") host.specRestricted = true;
   }
 
   private async endHost(host: HostBinding, cancelled: boolean, reason: string): Promise<void> {
@@ -284,6 +333,12 @@ export class ControlBroker implements RuntimeControl {
   describe(): ObjectValue {
     return { pendingApprovals: this.approvals.size, failures: [...this.failures], activeHostSessions: [...this.hosts.values()].filter((host) => !host.ended).length, boundNativeSessions: [...this.hosts.values()].filter((host) => !host.ended).reduce((n, host) => n + host.bridgeSessions.size, 0) };
   }
+}
+
+function hostToolFailed(event: ObjectValue): boolean {
+  const response = event.tool_response;
+  return event.is_error === true || Boolean(response && typeof response === "object" && !Array.isArray(response)
+    && ((response as ObjectValue).isError === true || (response as ObjectValue).is_error === true || (response as ObjectValue).error !== undefined));
 }
 
 function object(value: unknown): ObjectValue {

@@ -1,0 +1,31 @@
+{
+  "suite": "real-interactive-surfaces",
+  "status": "FAIL",
+  "startedAt": "2026-10-16T01:05:38.773Z",
+  "evidence": "/workspace/work/factory-cc-prep/repo/evidence/local/interactive-2026-10-16T01-05-38-772Z-d84071",
+  "authentication": "isolated explicit BYOK; no subscription credential access",
+  "allFactoryModelCallsitesCovered": false,
+  "error": "Timed out: generation command completion",
+  "processCleanup": {
+    "supported": true,
+    "observedProcessCount": 31,
+    "terminatedProcessCount": 0,
+    "remainingProcessIds": [],
+    "complete": true
+  },
+  "removedOwnedDirectories": [
+    {
+      "path": "/tmp/relay-e2e-home-QNJYDn",
+      "removed": true
+    },
+    {
+      "path": "/tmp/relay-e2e-ws-xsS91t",
+      "removed": true
+    },
+    {
+      "path": "/tmp/relay-verify-private-c12h3l",
+      "removed": true
+    }
+  ],
+  "finishedAt": "2026-10-16T01:16:17.888Z"
+}

@@ -1,0 +1,256 @@
+{
+  "feature": "spec",
+  "status": "PASS",
+  "startedAt": "2026-10-16T00:58:23.848Z",
+  "authentication": {
+    "provider": "glm",
+    "label": "https://open.bigmodel.cn/api/anthropic",
+    "baseUrl": "https://open.bigmodel.cn/api/anthropic",
+    "model": "glm-5.2",
+    "tokenEnv": "READINESS_MODEL_API_KEY",
+    "authHeader": "x-api-key",
+    "subscriptionCredentialsRead": false
+  },
+  "exclusions": [
+    "Anthropic subscription billing or account-safety guarantees",
+    "different underlying models for Factory aliases",
+    "all possible custom droids"
+  ],
+  "exitCode": 0,
+  "checks": {
+    "droidSucceeded": true,
+    "independentFileResult": true,
+    "inputUnchanged": true,
+    "authenticatedBridgeTraffic": true,
+    "nativeReadCompleted": true,
+    "nativeWriteCompleted": true,
+    "runtimeDrained": true,
+    "nativeSessionsPresent": true,
+    "realFactoryExitSpecMode": true,
+    "factoryApprovalObserved": true,
+    "finalCompletionMarker": true
+  },
+  "observations": {
+    "result": {
+      "type": "result",
+      "subtype": "success",
+      "is_error": false,
+      "duration_ms": 50264,
+      "num_turns": 2,
+      "result": "Plan approved. Writing the result file now.\n[Write] Write /tmp/relay-e2e-ws-AihsDd/spec-result.json\n\n[Bash] Bash python3 -I -c \"import json; d=json.load(open('/tmp/relay-e2e-ws-AihsDd/spec-result.json')); i=json.load(open('/tmp/relay-e2e-ws-AihsDd/input.json')); assert d=={'nonce':i['nonce'],\nSPEC_IMPLEMENTED_OK\n\n- Spec submitted via Factory ExitSpecMode and approved.\n- Wrote `/tmp/relay-e2e-ws-AihsDd/spec-result.json`: `{\"nonce\": \"d5debf742ed20c44e2ab0d9c\", \"sum\": 46}` (17 + 29).\n- Verified programmatically that the output matches the input nonce and a+b; `input.json` untouched.",
+      "session_id": "b7aa856c-be57-49fb-98b0-4bf4662e86b9",
+      "usage": {
+        "input_tokens": 0,
+        "output_tokens": 1188,
+        "cache_read_input_tokens": 109568,
+        "cache_creation_input_tokens": 0,
+        "factory_credits": 0,
+        "ttft_ms": 8045
+      }
+    },
+    "independentFileResult": {
+      "nonce": "d5debf742ed20c44e2ab0d9c",
+      "sum": 46
+    },
+    "tools": [
+      {
+        "name": "Read",
+        "id": "call_e44af449364a4a2f889ac4e2",
+        "input": {
+          "file_path": "/tmp/relay-e2e-ws-AihsDd/input.json"
+        },
+        "sessionId": "bea425e2-fe7e-4fa1-9f7f-e36c520b4a05",
+        "resultSeen": true,
+        "isError": false
+      },
+      {
+        "name": "mcp__droid__ExitSpecMode",
+        "id": "call_e16fdc98112d4f06a4db9113",
+        "input": {
+          "plan": "## Plan\n\n1. Read `/tmp/relay-e2e-ws-AihsDd/input.json` (done): `{\"nonce\":\"d5debf742ed20c44e2ab0d9c\",\"a\":17,\"b\":29}`.\n2. Compute sum: 17 + 29 = 46.\n3. Write `/tmp/relay-e2e-ws-AihsDd/spec-result.json` with exactly:\n   ```json\n   {\"nonce\": \"d5debf742ed20c44e2ab0d9c\", \"sum\": 46}\n   ```\n4. Do not modify `input.json` (no writes to it at any point).\n5. Verify the output file content after writing.\n\nNo other files or system state will be touched.",
+          "title": "Write spec-result.json from input.json fixture"
+        },
+        "sessionId": "bea425e2-fe7e-4fa1-9f7f-e36c520b4a05",
+        "resultSeen": true,
+        "isError": false
+      },
+      {
+        "name": "Write",
+        "id": "call_8c367a222aeb485a9bc16aa2",
+        "input": {
+          "file_path": "/tmp/relay-e2e-ws-AihsDd/spec-result.json",
+          "content": "{\"nonce\": \"d5debf742ed20c44e2ab0d9c\", \"sum\": 46}\n"
+        },
+        "sessionId": "bea425e2-fe7e-4fa1-9f7f-e36c520b4a05",
+        "resultSeen": true,
+        "isError": false
+      },
+      {
+        "name": "Bash",
+        "id": "call_0d2577b86e614346a8ae5bc8",
+        "input": {
+          "command": "python3 -I -c \"import json; d=json.load(open('/tmp/relay-e2e-ws-AihsDd/spec-result.json')); i=json.load(open('/tmp/relay-e2e-ws-AihsDd/input.json')); assert d=={'nonce':i['nonce'],'sum':i['a']+i['b']}, d; print('verified:', d)\"",
+          "description": "Verify spec-result.json matches expected values and input.json is intact"
+        },
+        "sessionId": "bea425e2-fe7e-4fa1-9f7f-e36c520b4a05",
+        "resultSeen": true,
+        "isError": false
+      }
+    ],
+    "requests": [
+      {
+        "at": "2026-10-16T00:58:24.459Z",
+        "session": "sess_28fe3b38-b937-4601-be13-959abfbecca2",
+        "model": "relay-chat"
+      },
+      {
+        "at": "2026-10-16T00:58:36.935Z",
+        "session": "sess_28fe3b38-b937-4601-be13-959abfbecca2",
+        "model": "relay-chat"
+      }
+    ],
+    "sessions": [
+      {
+        "bridgeSessionId": "sess_28fe3b38-b937-4601-be13-959abfbecca2",
+        "role": "chat",
+        "state": "IDLE",
+        "model": "relay-chat",
+        "historyHash": "937feb77d7ba953d75dc01920c227aa7d3864df4541de74d3e7712f6e67102a5",
+        "contextHash": "9f2adf53bb10a53708158e7c50935b28c7ab498d24df7d30114e530921948244",
+        "requestMessageHashes": [
+          "b49271a1447c113e8b1eaddc697850bc92367bc448c9c63804fc5c62fc46bc08",
+          "c3db183e6b9dde94e662fd21e2aaa83c77aab413ea86e666d04b04481f955f5a",
+          "319c1c52d8736168f96e981d0f0b09cfccdb23ef746a4ef20126ac4e2b1ddb86",
+          "b3b48565f98e3e97819d48c96d90b80e28331a244bea90e54a3fb105defb1d3d",
+          "4aac2b4c1ed03e900a699ff0731ceb405bdcc37790037cabb916058d894406b7",
+          "03b8db703c21680a50db0fa873135d0e0d82fe860515820e0c3ce95ac23f2375"
+        ],
+        "historyMessageHashes": [
+          "b49271a1447c113e8b1eaddc697850bc92367bc448c9c63804fc5c62fc46bc08",
+          "c3db183e6b9dde94e662fd21e2aaa83c77aab413ea86e666d04b04481f955f5a",
+          "319c1c52d8736168f96e981d0f0b09cfccdb23ef746a4ef20126ac4e2b1ddb86",
+          "b3b48565f98e3e97819d48c96d90b80e28331a244bea90e54a3fb105defb1d3d",
+          "4aac2b4c1ed03e900a699ff0731ceb405bdcc37790037cabb916058d894406b7",
+          "03b8db703c21680a50db0fa873135d0e0d82fe860515820e0c3ce95ac23f2375",
+          "bf32d66ae7f00e1ffd8172ebb2d355fee4adb2a1fc0cb850e191ea42fd99c335"
+        ],
+        "toolNames": [
+          "Read",
+          "LS",
+          "Execute",
+          "Edit",
+          "Grep",
+          "Glob",
+          "Create",
+          "ExitSpecMode",
+          "TaskOutput",
+          "TaskStop",
+          "ToolSearch",
+          "Skill",
+          "Task"
+        ],
+        "createdAt": "2026-10-16T00:58:24.458Z",
+        "updatedAt": "2026-10-16T00:59:14.628Z",
+        "pendingToolIds": [],
+        "cancelRequested": false,
+        "notes": [
+          "factory-session-ended"
+        ],
+        "usage": {
+          "input_tokens": 1206,
+          "output_tokens": 686,
+          "cache_creation_input_tokens": 0,
+          "cache_read_input_tokens": 71936,
+          "status": "reported",
+          "coverage": "partial",
+          "knownFields": [
+            "input_tokens",
+            "output_tokens",
+            "cache_read_input_tokens"
+          ],
+          "scope": "provider_messages",
+          "estimated": true,
+          "modelRequests": 3
+        },
+        "factorySessionId": "b7aa856c-be57-49fb-98b0-4bf4662e86b9",
+        "factoryCwd": "/tmp/relay-e2e-ws-AihsDd",
+        "hostEnded": "resumable",
+        "sdkSessionId": "bea425e2-fe7e-4fa1-9f7f-e36c520b4a05"
+      }
+    ],
+    "runtime": {
+      "kind": "sdk",
+      "authMode": "byok",
+      "permissionMode": "bypass",
+      "prompt": {
+        "systemPrompt": "preset:claude_code + stable append",
+        "dynamicPlacement": "user input on initial turn or context change",
+        "tools": "preset:claude_code built-ins + Droid-exclusive MCP"
+      },
+      "tools": "preset:claude_code + droid-exclusive MCP",
+      "input": "persistent SDK streaming input",
+      "includePartialMessages": true,
+      "approvalChannel": "external controller",
+      "activeNativeSessions": 0,
+      "activeNativeTurns": 0,
+      "pendingHostCalls": 0,
+      "pendingApprovals": 0,
+      "fatalErrors": [],
+      "overridesAnthropicEnv": true,
+      "upstream": {
+        "provider": "glm",
+        "label": "https://open.bigmodel.cn/api/anthropic",
+        "baseUrl": "https://open.bigmodel.cn/api/anthropic",
+        "model": "glm-5.2",
+        "tokenEnv": "READINESS_MODEL_API_KEY",
+        "authHeader": "x-api-key"
+      },
+      "control": {
+        "pendingApprovals": 0,
+        "failures": [],
+        "activeHostSessions": 0,
+        "boundNativeSessions": 0
+      }
+    }
+  },
+  "cleanup": {
+    "processes": {
+      "supported": true,
+      "observedProcessCount": 14,
+      "terminatedProcessCount": 0,
+      "remainingProcessIds": [],
+      "complete": true
+    },
+    "removed": [
+      true,
+      true,
+      true
+    ],
+    "errors": [],
+    "retained": [
+      {
+        "name": "action.json",
+        "sha256": "f494d91c44c043d5917cedb390da37be7455d55d0b2fc0abf2d0386f75d92d8a",
+        "unchanged": true
+      },
+      {
+        "name": "requests.json",
+        "sha256": "0b97efb196938abc8152649cdfbbbc103e6c57c8638f1f7b93d11cc3670e4444",
+        "unchanged": true
+      },
+      {
+        "name": "native-transcript.json",
+        "sha256": "6009d3119f8ffa7cd2e71fdd8c24d9f4dddbe48856f909a15046d5833f4f66ff",
+        "unchanged": true
+      },
+      {
+        "name": "snapshot.json",
+        "sha256": "cd0ea1e687c83927c927742c4414820e9f0bc27331e2cd4f353476c3090ef970",
+        "unchanged": true
+      }
+    ],
+    "complete": true
+  },
+  "finishedAt": "2026-10-16T00:59:14.718Z",
+  "evidenceDirectory": "/workspace/work/factory-cc-prep/repo/evidence/local/verify-spec-2026-10-16T00-58-23-847Z-e70633"
+}

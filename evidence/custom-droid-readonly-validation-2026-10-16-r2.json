@@ -1,0 +1,343 @@
+{
+  "feature": "custom",
+  "variant": "custom-readonly",
+  "status": "PASS",
+  "startedAt": "2026-10-16T01:06:05.903Z",
+  "authentication": {
+    "provider": "glm",
+    "label": "https://open.bigmodel.cn/api/anthropic",
+    "baseUrl": "https://open.bigmodel.cn/api/anthropic",
+    "model": "glm-5.2",
+    "tokenEnv": "READINESS_MODEL_API_KEY",
+    "authHeader": "x-api-key",
+    "subscriptionCredentialsRead": false
+  },
+  "exclusions": [
+    "Anthropic subscription billing or account-safety guarantees",
+    "different underlying models for Factory aliases",
+    "all possible custom droids"
+  ],
+  "exitCode": 0,
+  "checks": {
+    "droidSucceeded": true,
+    "forbiddenFilesAbsent": true,
+    "inputUnchanged": true,
+    "authenticatedBridgeTraffic": true,
+    "nativeReadCompleted": true,
+    "nativeWriteDenied": true,
+    "runtimeDrained": true,
+    "nativeSessionsPresent": true,
+    "actualCustomFactoryTask": true,
+    "bodyOnlyMarkerPreserved": true,
+    "customModelSelected": true,
+    "childNativeSession": true,
+    "parentDidNotReadOrWrite": true,
+    "markerNotInDelegatedPrompt": true,
+    "readOnlyResultFidelity": true,
+    "childNativeFileToolsReadOnly": true
+  },
+  "observations": {
+    "result": {
+      "type": "result",
+      "subtype": "success",
+      "is_error": false,
+      "duration_ms": 43825,
+      "num_turns": 2,
+      "result": "The relay-verifier Task (session `2b7bd4d8-8d0c-494a-ace0-6b6aee6daf0f`) completed successfully, invoked once with `await: true`. Per its report: its native Write permission probe was mechanically denied by the host as expected, it read `input.json` (`{\"nonce\":\"99b3346e8e35b54b50684b09\",\"a\":17,\"b\":29}`), and computed the sum. I did not read `input.json` or `.factory/droids` myself and wrote no files.\n\nFull JSON result returned by the Task:\n\n```json\n{\"nonce\": \"99b3346e8e35b54b50684b09\", \"sum\": 46, \"bodyMarker\": \"DROID_BODY_530e0d3b4bb381f06b21\"}\n```\n\n- **nonce**: `99b3346e8e35b54b50684b09`\n- **sum**: 46 (17 + 29)\n- **bodyMarker**: `DROID_BODY_530e0d3b4bb381f06b21`\n- Child terminated with: `CUSTOM_CHILD_OK`\n\nCUSTOM_PARENT_OK",
+      "session_id": "bf552cc2-6821-4d81-8ae7-12fa2b0b619f",
+      "usage": {
+        "input_tokens": 15460,
+        "output_tokens": 1605,
+        "cache_read_input_tokens": 92288,
+        "cache_creation_input_tokens": 0,
+        "factory_credits": 0,
+        "ttft_ms": 6961.5
+      }
+    },
+    "tools": [
+      {
+        "name": "mcp__droid__Task",
+        "id": "call_0cd7ba3b14b742e2aa76e2a5",
+        "input": {
+          "subagent_type": "relay-verifier",
+          "description": "Run relay-verifier verification task",
+          "await": true,
+          "prompt": "Execute your full verification task now, following all instructions you have been given. Complete every step, then return your result as JSON including your nonce, sum, and bodyMarker, ending with CUSTOM_CHILD_OK on its own final line."
+        },
+        "sessionId": "4d551129-58d2-4338-b8fa-678f10d5d7db",
+        "resultSeen": true,
+        "isError": false
+      },
+      {
+        "name": "Write",
+        "id": "call_d571f78385004cefa8ad9a50",
+        "input": {
+          "file_path": "/tmp/relay-e2e-ws-s1NUus/forbidden-custom-write.json",
+          "content": "PERMISSION_PROBE"
+        },
+        "sessionId": "f19cd065-8890-4d7d-8af9-6e27a073278c",
+        "resultSeen": true,
+        "isError": true
+      },
+      {
+        "name": "Read",
+        "id": "call_36b52159be6a4c848934604f",
+        "input": {
+          "file_path": "/tmp/relay-e2e-ws-s1NUus/input.json"
+        },
+        "sessionId": "f19cd065-8890-4d7d-8af9-6e27a073278c",
+        "resultSeen": true,
+        "isError": false
+      }
+    ],
+    "hookModes": [
+      {
+        "at": "2026-10-16T01:06:06.229Z",
+        "hook": "SessionStart",
+        "sessionId": "bf552cc2-6821-4d81-8ae7-12fa2b0b619f",
+        "permissionMode": "off"
+      },
+      {
+        "at": "2026-10-16T01:06:14.246Z",
+        "hook": "PreToolUse",
+        "sessionId": "bf552cc2-6821-4d81-8ae7-12fa2b0b619f",
+        "permissionMode": "auto-high",
+        "toolName": "Task"
+      },
+      {
+        "at": "2026-10-16T01:06:14.630Z",
+        "hook": "SessionStart",
+        "sessionId": "2b7bd4d8-8d0c-494a-ace0-6b6aee6daf0f",
+        "permissionMode": "auto-high"
+      },
+      {
+        "at": "2026-10-16T01:06:14.807Z",
+        "hook": "UserPromptSubmit",
+        "sessionId": "2b7bd4d8-8d0c-494a-ace0-6b6aee6daf0f",
+        "permissionMode": "auto-high"
+      },
+      {
+        "at": "2026-10-16T01:06:40.021Z",
+        "hook": "SessionEnd",
+        "sessionId": "2b7bd4d8-8d0c-494a-ace0-6b6aee6daf0f",
+        "permissionMode": "auto-high"
+      },
+      {
+        "at": "2026-10-16T01:06:40.338Z",
+        "hook": "PostToolUse",
+        "sessionId": "bf552cc2-6821-4d81-8ae7-12fa2b0b619f",
+        "permissionMode": "auto-high",
+        "toolName": "Task"
+      },
+      {
+        "at": "2026-10-16T01:06:50.189Z",
+        "hook": "SessionEnd",
+        "sessionId": "bf552cc2-6821-4d81-8ae7-12fa2b0b619f",
+        "permissionMode": "auto-high"
+      }
+    ],
+    "requests": [
+      {
+        "at": "2026-10-16T01:06:06.532Z",
+        "session": "sess_f00fcf3b-aacf-456f-b867-7e51e0c30dcc",
+        "model": "relay-chat"
+      },
+      {
+        "at": "2026-10-16T01:06:14.939Z",
+        "session": "sess_5d9b14c4-c719-474e-99c3-ed053724efcb",
+        "model": "relay-custom-child"
+      },
+      {
+        "at": "2026-10-16T01:06:40.453Z",
+        "session": "sess_f00fcf3b-aacf-456f-b867-7e51e0c30dcc",
+        "model": "relay-chat"
+      }
+    ],
+    "sessions": [
+      {
+        "bridgeSessionId": "sess_f00fcf3b-aacf-456f-b867-7e51e0c30dcc",
+        "role": "chat",
+        "state": "IDLE",
+        "model": "relay-chat",
+        "historyHash": "95336c6ace80ca6a20f9bd8bd14eebc167cf5fdc721cd4b319a7821d103986fe",
+        "contextHash": "dafcbd66ad9a20efed581d7db85b4796329972174a83310ea30826974190aec9",
+        "requestMessageHashes": [
+          "f42a1c2d603bb354df593e317816adcbd5bb65ac1ab4f67bbba84abd5c18f73f",
+          "4a3445750b21cb0de801c810d51a57a3a95bcce1e0b06bc7cbee716eabdc53dd",
+          "3a7bad902619e326fda51d5120866f46922ff5cf8bad254a7b2a09191ae57bb3",
+          "f0b3ee5530f25341df9cc4694d8d5c2a4cecbd6e3e3e561b6e17b44c9d1f158b"
+        ],
+        "historyMessageHashes": [
+          "f42a1c2d603bb354df593e317816adcbd5bb65ac1ab4f67bbba84abd5c18f73f",
+          "4a3445750b21cb0de801c810d51a57a3a95bcce1e0b06bc7cbee716eabdc53dd",
+          "3a7bad902619e326fda51d5120866f46922ff5cf8bad254a7b2a09191ae57bb3",
+          "f0b3ee5530f25341df9cc4694d8d5c2a4cecbd6e3e3e561b6e17b44c9d1f158b",
+          "526548c4aa94b096c448c80f7e5c57f161880fb0da0ecc5bc11b05c56dd2cf38"
+        ],
+        "toolNames": [
+          "Read",
+          "LS",
+          "Execute",
+          "Edit",
+          "Grep",
+          "Glob",
+          "Create",
+          "TaskOutput",
+          "TaskStop",
+          "ToolSearch",
+          "Skill",
+          "Task"
+        ],
+        "createdAt": "2026-10-16T01:06:06.531Z",
+        "updatedAt": "2026-10-16T01:06:50.284Z",
+        "pendingToolIds": [],
+        "cancelRequested": false,
+        "notes": [
+          "factory-session-ended"
+        ],
+        "usage": {
+          "input_tokens": 9053,
+          "output_tokens": 607,
+          "cache_creation_input_tokens": 0,
+          "cache_read_input_tokens": 37184,
+          "status": "reported",
+          "coverage": "partial",
+          "knownFields": [
+            "input_tokens",
+            "output_tokens",
+            "cache_read_input_tokens"
+          ],
+          "scope": "provider_messages",
+          "estimated": true,
+          "modelRequests": 1
+        },
+        "factorySessionId": "bf552cc2-6821-4d81-8ae7-12fa2b0b619f",
+        "factoryCwd": "/tmp/relay-e2e-ws-s1NUus",
+        "hostEnded": "resumable",
+        "sdkSessionId": "4d551129-58d2-4338-b8fa-678f10d5d7db"
+      },
+      {
+        "bridgeSessionId": "sess_5d9b14c4-c719-474e-99c3-ed053724efcb",
+        "role": "chat",
+        "state": "IDLE",
+        "model": "relay-custom-child",
+        "historyHash": "91bf7f0a73d8c605fbb0dcaf30c1341a57c18845750062c004ed2bcb377dfb19",
+        "contextHash": "6ed9334d6cc0db7a4bf303223d26c479c1d6e6301530da2e6356e1d24f36b8a6",
+        "requestMessageHashes": [
+          "8fb2e041afab6db6a7eeefac7097290b2a61e53efa36d43ed60ba07c7e3f1a9a",
+          "e1da240ba6ab96753e646bd205b05eb2d437c851da0b3f97cf2aba99f11a8d25"
+        ],
+        "historyMessageHashes": [
+          "8fb2e041afab6db6a7eeefac7097290b2a61e53efa36d43ed60ba07c7e3f1a9a",
+          "e1da240ba6ab96753e646bd205b05eb2d437c851da0b3f97cf2aba99f11a8d25",
+          "dad7b7be803c81385681541b6b8c27c73d0e1248ba78c99a7c8049cc5d3716d3"
+        ],
+        "toolNames": [
+          "Read",
+          "Skill"
+        ],
+        "createdAt": "2026-10-16T01:06:14.939Z",
+        "updatedAt": "2026-10-16T01:06:40.104Z",
+        "pendingToolIds": [],
+        "cancelRequested": false,
+        "notes": [
+          "factory-session-ended"
+        ],
+        "usage": {
+          "input_tokens": 6407,
+          "output_tokens": 998,
+          "cache_creation_input_tokens": 0,
+          "cache_read_input_tokens": 55104,
+          "status": "reported",
+          "coverage": "partial",
+          "knownFields": [
+            "input_tokens",
+            "output_tokens",
+            "cache_read_input_tokens"
+          ],
+          "scope": "provider_messages",
+          "estimated": true,
+          "modelRequests": 3
+        },
+        "factorySessionId": "2b7bd4d8-8d0c-494a-ace0-6b6aee6daf0f",
+        "factoryCwd": "/tmp/relay-e2e-ws-s1NUus",
+        "hostEnded": "resumable",
+        "sdkSessionId": "f19cd065-8890-4d7d-8af9-6e27a073278c"
+      }
+    ],
+    "runtime": {
+      "kind": "sdk",
+      "authMode": "byok",
+      "permissionMode": "bypass",
+      "prompt": {
+        "systemPrompt": "preset:claude_code + stable append",
+        "dynamicPlacement": "user input on initial turn or context change",
+        "tools": "preset:claude_code built-ins + Droid-exclusive MCP"
+      },
+      "tools": "preset:claude_code + droid-exclusive MCP",
+      "input": "persistent SDK streaming input",
+      "includePartialMessages": true,
+      "approvalChannel": "external controller",
+      "activeNativeSessions": 0,
+      "activeNativeTurns": 0,
+      "pendingHostCalls": 0,
+      "pendingApprovals": 0,
+      "fatalErrors": [],
+      "overridesAnthropicEnv": true,
+      "upstream": {
+        "provider": "glm",
+        "label": "https://open.bigmodel.cn/api/anthropic",
+        "baseUrl": "https://open.bigmodel.cn/api/anthropic",
+        "model": "glm-5.2",
+        "tokenEnv": "READINESS_MODEL_API_KEY",
+        "authHeader": "x-api-key"
+      },
+      "control": {
+        "pendingApprovals": 0,
+        "failures": [],
+        "activeHostSessions": 0,
+        "boundNativeSessions": 0
+      }
+    }
+  },
+  "cleanup": {
+    "processes": {
+      "supported": true,
+      "observedProcessCount": 30,
+      "terminatedProcessCount": 0,
+      "remainingProcessIds": [],
+      "complete": true
+    },
+    "removed": [
+      true,
+      true,
+      true
+    ],
+    "errors": [],
+    "retained": [
+      {
+        "name": "action.json",
+        "sha256": "96737328f27fdd324678f79140da3c10ed073770a206b1474eb29324a1fcc8b4",
+        "unchanged": true
+      },
+      {
+        "name": "requests.json",
+        "sha256": "829eb42ab204212c9d1782490b5a2208490fa47707c220732908c7f5ef620a4c",
+        "unchanged": true
+      },
+      {
+        "name": "native-transcript.json",
+        "sha256": "899de47076fb7acd426924dfc9b41132c00bf0fa62821bd86a8c289a7d42735d",
+        "unchanged": true
+      },
+      {
+        "name": "snapshot.json",
+        "sha256": "b20670d2e1ffdf66fbd8e17603fcc04e6f66882f947dc5709144fb52065aa776",
+        "unchanged": true
+      }
+    ],
+    "complete": true
+  },
+  "finishedAt": "2026-10-16T01:06:50.366Z",
+  "evidenceDirectory": "/workspace/work/factory-cc-prep/repo/evidence/local/verify-custom-2026-10-16T01-06-05-902Z-c3d4c4"
+}

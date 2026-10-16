@@ -1,0 +1,300 @@
+{
+  "suite": "real-interactive-surfaces",
+  "status": "PASS_CANCEL_ONLY",
+  "startedAt": "2026-10-16T01:17:05.407Z",
+  "evidence": "/workspace/work/factory-cc-prep/repo/evidence/local/interactive-2026-10-16T01-17-05-405Z-42b136",
+  "authentication": "isolated explicit BYOK; no subscription credential access",
+  "allFactoryModelCallsitesCovered": false,
+  "escapeCancellation": {
+    "status": "PASS",
+    "independentStartMarker": "started",
+    "nativeStoppedAfterMs": 3756,
+    "before": {
+      "kind": "sdk",
+      "authMode": "byok",
+      "permissionMode": "bypass",
+      "prompt": {
+        "systemPrompt": "preset:claude_code + stable append",
+        "dynamicPlacement": "user input on initial turn or context change",
+        "tools": "preset:claude_code built-ins + Droid-exclusive MCP"
+      },
+      "tools": "preset:claude_code + droid-exclusive MCP",
+      "input": "persistent SDK streaming input",
+      "includePartialMessages": true,
+      "approvalChannel": "external controller",
+      "activeNativeSessions": 2,
+      "activeNativeTurns": 2,
+      "pendingHostCalls": 0,
+      "pendingApprovals": 0,
+      "fatalErrors": [],
+      "overridesAnthropicEnv": true,
+      "upstream": {
+        "provider": "glm",
+        "label": "https://open.bigmodel.cn/api/anthropic",
+        "baseUrl": "https://open.bigmodel.cn/api/anthropic",
+        "model": "glm-5.2",
+        "tokenEnv": "READINESS_MODEL_API_KEY",
+        "authHeader": "x-api-key"
+      },
+      "control": {
+        "pendingApprovals": 0,
+        "failures": [],
+        "activeHostSessions": 1,
+        "boundNativeSessions": 1
+      }
+    },
+    "after": {
+      "kind": "sdk",
+      "authMode": "byok",
+      "permissionMode": "bypass",
+      "prompt": {
+        "systemPrompt": "preset:claude_code + stable append",
+        "dynamicPlacement": "user input on initial turn or context change",
+        "tools": "preset:claude_code built-ins + Droid-exclusive MCP"
+      },
+      "tools": "preset:claude_code + droid-exclusive MCP",
+      "input": "persistent SDK streaming input",
+      "includePartialMessages": true,
+      "approvalChannel": "external controller",
+      "activeNativeSessions": 1,
+      "activeNativeTurns": 0,
+      "pendingHostCalls": 0,
+      "pendingApprovals": 0,
+      "fatalErrors": [],
+      "overridesAnthropicEnv": true,
+      "upstream": {
+        "provider": "glm",
+        "label": "https://open.bigmodel.cn/api/anthropic",
+        "baseUrl": "https://open.bigmodel.cn/api/anthropic",
+        "model": "glm-5.2",
+        "tokenEnv": "READINESS_MODEL_API_KEY",
+        "authHeader": "x-api-key"
+      },
+      "control": {
+        "pendingApprovals": 0,
+        "failures": [],
+        "activeHostSessions": 1,
+        "boundNativeSessions": 1
+      }
+    },
+    "observedAfterMs": 47000,
+    "delayedFileExists": false
+  },
+  "command": {
+    "code": 0,
+    "stdout": "",
+    "stderr": "",
+    "timedOut": false,
+    "signal": null,
+    "processCleanup": {
+      "supported": true,
+      "observedProcessCount": 0,
+      "terminatedProcessCount": 0,
+      "remainingProcessIds": [],
+      "complete": true
+    }
+  },
+  "ptyExit": {
+    "exitStatus": 0,
+    "signalStatus": null
+  },
+  "requests": [
+    {
+      "at": "2026-10-16T01:17:09.873Z",
+      "method": "POST",
+      "path": "/v1/messages",
+      "role": "chat",
+      "authOk": true,
+      "sessionHint": "sess_2ffc5d8e-56b1-45ca-9aea-1fa614660d83",
+      "model": "relay-chat",
+      "stream": true,
+      "toolNames": [],
+      "messageCount": 1,
+      "notes": [
+        "new-session"
+      ]
+    },
+    {
+      "at": "2026-10-16T01:17:10.062Z",
+      "method": "POST",
+      "path": "/v1/messages",
+      "role": "chat",
+      "authOk": true,
+      "sessionHint": "sess_4c588ca0-2928-45cf-99af-2dcb8abc365e",
+      "model": "relay-chat",
+      "stream": true,
+      "toolNames": [
+        "Read",
+        "LS",
+        "Execute",
+        "Edit",
+        "Grep",
+        "Glob",
+        "Create",
+        "ExitSpecMode",
+        "AskUser",
+        "TodoWrite",
+        "TaskOutput",
+        "TaskStop",
+        "ToolSearch",
+        "Skill",
+        "Task"
+      ],
+      "messageCount": 2,
+      "notes": [
+        "new-session"
+      ]
+    }
+  ],
+  "sessions": [
+    {
+      "bridgeSessionId": "sess_2ffc5d8e-56b1-45ca-9aea-1fa614660d83",
+      "role": "chat",
+      "state": "IDLE",
+      "model": "relay-chat",
+      "historyHash": "a45b30435f0c4585c0685e69c9d0bf83b07e6cee9d730fd3d4ae1ada026f70e1",
+      "contextHash": "a14189144bf85b39e6f4c2386e4a5dc0a5a28e435c247cb6d412082ea54c6fd2",
+      "requestMessageHashes": [
+        "116c7fb8e8eae619d2c1b74788d1267d6ec58d16f52e15db4d679628424ba5ea"
+      ],
+      "historyMessageHashes": [
+        "116c7fb8e8eae619d2c1b74788d1267d6ec58d16f52e15db4d679628424ba5ea",
+        "9031a782b46f24606d7db7330566cf19e40e9ce1370d46bb1332f53608dd74cc"
+      ],
+      "toolNames": [],
+      "createdAt": "2026-10-16T01:17:09.872Z",
+      "updatedAt": "2026-10-16T01:17:23.568Z",
+      "pendingToolIds": [],
+      "cancelRequested": false,
+      "notes": [],
+      "usage": {
+        "input_tokens": 15586,
+        "output_tokens": 310,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 3328,
+        "status": "reported",
+        "coverage": "partial",
+        "knownFields": [
+          "input_tokens",
+          "output_tokens",
+          "cache_read_input_tokens"
+        ],
+        "scope": "provider_messages",
+        "estimated": true,
+        "modelRequests": 1
+      },
+      "sdkSessionId": "eaaee535-42f5-4509-9741-f0d9aeceacdc"
+    },
+    {
+      "bridgeSessionId": "sess_4c588ca0-2928-45cf-99af-2dcb8abc365e",
+      "role": "chat",
+      "state": "CANCELLED",
+      "model": "relay-chat",
+      "historyHash": "19eaf9fbc2183e7589db5eaee9b0a130032faa1b0746f310bb970ad7bfbb8127",
+      "contextHash": "a14189144bf85b39e6f4c2386e4a5dc0a5a28e435c247cb6d412082ea54c6fd2",
+      "requestMessageHashes": [
+        "0421f8513a7475451bd0b3242811e2116124db089c4f28ded9c3219daa6de72d",
+        "116c7fb8e8eae619d2c1b74788d1267d6ec58d16f52e15db4d679628424ba5ea"
+      ],
+      "toolNames": [
+        "Read",
+        "LS",
+        "Execute",
+        "Edit",
+        "Grep",
+        "Glob",
+        "Create",
+        "ExitSpecMode",
+        "AskUser",
+        "TodoWrite",
+        "TaskOutput",
+        "TaskStop",
+        "ToolSearch",
+        "Skill",
+        "Task"
+      ],
+      "createdAt": "2026-10-16T01:17:10.061Z",
+      "updatedAt": "2026-10-16T01:18:07.389Z",
+      "pendingToolIds": [],
+      "cancelRequested": true,
+      "notes": [
+        "factory-session-ended"
+      ],
+      "usage": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "estimated": true
+      },
+      "factorySessionId": "84085769-ceb0-42d2-a77c-9d831c0a6480",
+      "factoryCwd": "/tmp/relay-e2e-ws-wNiaM7",
+      "hostEnded": "interrupted",
+      "sdkSessionId": "d20a9558-5018-493a-a1cc-89d7eec098d1"
+    }
+  ],
+  "runtimeBeforeClose": {
+    "kind": "sdk",
+    "authMode": "byok",
+    "permissionMode": "bypass",
+    "prompt": {
+      "systemPrompt": "preset:claude_code + stable append",
+      "dynamicPlacement": "user input on initial turn or context change",
+      "tools": "preset:claude_code built-ins + Droid-exclusive MCP"
+    },
+    "tools": "preset:claude_code + droid-exclusive MCP",
+    "input": "persistent SDK streaming input",
+    "includePartialMessages": true,
+    "approvalChannel": "external controller",
+    "activeNativeSessions": 1,
+    "activeNativeTurns": 0,
+    "pendingHostCalls": 0,
+    "pendingApprovals": 0,
+    "fatalErrors": [],
+    "overridesAnthropicEnv": true,
+    "upstream": {
+      "provider": "glm",
+      "label": "https://open.bigmodel.cn/api/anthropic",
+      "baseUrl": "https://open.bigmodel.cn/api/anthropic",
+      "model": "glm-5.2",
+      "tokenEnv": "READINESS_MODEL_API_KEY",
+      "authHeader": "x-api-key"
+    },
+    "control": {
+      "pendingApprovals": 0,
+      "failures": [],
+      "activeHostSessions": 0,
+      "boundNativeSessions": 0
+    }
+  },
+  "interactiveTitles": {
+    "entries": [
+      {
+        "factorySessionId": "84085769-ceb0-42d2-a77c-9d831c0a6480",
+        "type": "session_start",
+        "title": "Test command cancellation with sleep"
+      }
+    ],
+    "scope": "Observed persisted interactive session titles; first-file-edit and fallback variants are not independently established."
+  },
+  "processCleanup": {
+    "supported": true,
+    "observedProcessCount": 23,
+    "terminatedProcessCount": 0,
+    "remainingProcessIds": [],
+    "complete": true
+  },
+  "removedOwnedDirectories": [
+    {
+      "path": "/tmp/relay-e2e-home-YQ6G0K",
+      "removed": true
+    },
+    {
+      "path": "/tmp/relay-e2e-ws-wNiaM7",
+      "removed": true
+    },
+    {
+      "path": "/tmp/relay-verify-private-Vkpfx9",
+      "removed": true
+    }
+  ],
+  "finishedAt": "2026-10-16T01:18:07.867Z"
+}
