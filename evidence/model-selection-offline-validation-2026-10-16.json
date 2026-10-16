@@ -1,0 +1,303 @@
+{
+  "scope": "offline actual-model catalog, routing, same-session switching and lifecycle guards",
+  "onlineClaudeSubscriptionUsed": false,
+  "productionSourceSha256": {
+    "src/models.ts": "f8a711c578da0331999a46d845ba29fa8540c1d46827d12ed968a68a1bcffb43",
+    "src/config.ts": "be4b05f6c56fce4075b7a21ccbf142050123e0e2e7f658bf689c4b0b0dab7a70",
+    "src/http/app.ts": "9ceb6d271082d4ad4c10c14b1c1966fb7fa5805c189d7d826fdae294ec4786a0",
+    "src/runtime/sdk-runtime.ts": "55afcda149d2c6d26799a5b15fee1afd381b852ef45ccaae1eee2e9264aa3084",
+    "src/sessions/correlate.ts": "b600fb9d48b4aedce6f07b105483774f135ad7d218835f15a9352e5eb12c394b",
+    "scripts/local.ts": "78c806b09fc4ee2e62f7213ab60a4ceca1655676f63d469d77ce58276759f19c",
+    "scripts/configure-droid.ts": "6b482be55ffa89b8112d1792c9fd323644b6d6f9dd5f89487379e23736e035de",
+    "scripts/generate-droid.ts": "68c53d1996f68ef8f6a86efc3f15deca2aa982307b6ac89c9c948ec4a11194f2"
+  },
+  "limits": [
+    "Offline subscription tests inject the SDK; they do not establish live Claude model availability or billing behavior.",
+    "Live BYOK evidence separately records its source snapshot and post-run offline configuration recheck."
+  ],
+  "recordedAt": "2026-10-16T04:12:27.258963+00:00",
+  "status": "PASS_FINAL_SOURCE",
+  "earlierResults": [
+    {
+      "command": "npm test",
+      "passed": 443,
+      "files": 46,
+      "scope": "full suite before final HTTP host-end race guard and Droid-derived-field signature patch"
+    },
+    {
+      "command": "npx vitest run tests/protocol/model-catalog.test.ts tests/protocol/lifecycle.test.ts",
+      "passed": 19,
+      "files": 2,
+      "scope": "final HTTP guard including host exit during refused switch"
+    },
+    {
+      "command": "npx vitest run tests/unit/configure-droid.test.ts tests/unit/local.test.ts",
+      "passed": 18,
+      "files": 2,
+      "scope": "final configuration signature normalization and local model catalog"
+    },
+    {
+      "command": "npx tsc --noEmit",
+      "status": "PASS",
+      "scope": "after final production fixes"
+    },
+    {
+      "command": "npm run build",
+      "status": "PASS",
+      "scope": "after final production fixes"
+    }
+  ],
+  "results": [
+    {
+      "command": "npm test -- --reporter=json --outputFile=<private-work>/model-selection-final-tests.json",
+      "status": "PASS",
+      "passed": 449,
+      "failed": 0,
+      "pending": 0,
+      "files": 46,
+      "scope": "final source including authenticated model/thinking transition, HTTP host-end guard and derived-field signature normalization"
+    },
+    {
+      "command": "npx tsc --noEmit",
+      "status": "PASS",
+      "scope": "final source; run by runtime verifier"
+    },
+    {
+      "command": "npm run build",
+      "status": "PASS",
+      "scope": "final source"
+    }
+  ],
+  "testFiles": [
+    {
+      "file": "tests/protocol/control.test.ts",
+      "status": "passed",
+      "tests": 2
+    },
+    {
+      "file": "tests/protocol/lifecycle.test.ts",
+      "status": "passed",
+      "tests": 11
+    },
+    {
+      "file": "tests/protocol/messages.test.ts",
+      "status": "passed",
+      "tests": 5
+    },
+    {
+      "file": "tests/protocol/model-catalog.test.ts",
+      "status": "passed",
+      "tests": 8
+    },
+    {
+      "file": "tests/protocol/output-contract.test.ts",
+      "status": "passed",
+      "tests": 2
+    },
+    {
+      "file": "tests/resilience/retry-and-images.test.ts",
+      "status": "passed",
+      "tests": 3
+    },
+    {
+      "file": "tests/sdk-probes/cross-request-relay.test.ts",
+      "status": "passed",
+      "tests": 3
+    },
+    {
+      "file": "tests/sdk-runtime/catalog.test.ts",
+      "status": "passed",
+      "tests": 10
+    },
+    {
+      "file": "tests/sdk-runtime/lifecycle.test.ts",
+      "status": "passed",
+      "tests": 58
+    },
+    {
+      "file": "tests/unit/auth-mode.test.ts",
+      "status": "passed",
+      "tests": 4
+    },
+    {
+      "file": "tests/unit/byok-environment-isolation.test.ts",
+      "status": "passed",
+      "tests": 3
+    },
+    {
+      "file": "tests/unit/byok-isolation.test.ts",
+      "status": "passed",
+      "tests": 9
+    },
+    {
+      "file": "tests/unit/configure-droid.test.ts",
+      "status": "passed",
+      "tests": 12
+    },
+    {
+      "file": "tests/unit/control-broker.test.ts",
+      "status": "passed",
+      "tests": 23
+    },
+    {
+      "file": "tests/unit/control.test.ts",
+      "status": "passed",
+      "tests": 8
+    },
+    {
+      "file": "tests/unit/droid-tools.test.ts",
+      "status": "passed",
+      "tests": 3
+    },
+    {
+      "file": "tests/unit/e2e-cleanup.test.ts",
+      "status": "passed",
+      "tests": 3
+    },
+    {
+      "file": "tests/unit/e2e-evidence.test.ts",
+      "status": "passed",
+      "tests": 2
+    },
+    {
+      "file": "tests/unit/e2e-resume.test.ts",
+      "status": "passed",
+      "tests": 2
+    },
+    {
+      "file": "tests/unit/factory-capabilities.test.ts",
+      "status": "passed",
+      "tests": 11
+    },
+    {
+      "file": "tests/unit/factory-context-verifier.test.ts",
+      "status": "passed",
+      "tests": 2
+    },
+    {
+      "file": "tests/unit/factory-hooks.test.ts",
+      "status": "passed",
+      "tests": 13
+    },
+    {
+      "file": "tests/unit/generate-droid.test.ts",
+      "status": "passed",
+      "tests": 13
+    },
+    {
+      "file": "tests/unit/interactive-proof.test.ts",
+      "status": "passed",
+      "tests": 12
+    },
+    {
+      "file": "tests/unit/local.test.ts",
+      "status": "passed",
+      "tests": 6
+    },
+    {
+      "file": "tests/unit/mailbox.test.ts",
+      "status": "passed",
+      "tests": 5
+    },
+    {
+      "file": "tests/unit/mission-final-evidence.test.ts",
+      "status": "passed",
+      "tests": 2
+    },
+    {
+      "file": "tests/unit/mission-spawn.test.ts",
+      "status": "passed",
+      "tests": 36
+    },
+    {
+      "file": "tests/unit/models.test.ts",
+      "status": "passed",
+      "tests": 6
+    },
+    {
+      "file": "tests/unit/native-tool-policy.test.ts",
+      "status": "passed",
+      "tests": 3
+    },
+    {
+      "file": "tests/unit/redact.test.ts",
+      "status": "passed",
+      "tests": 2
+    },
+    {
+      "file": "tests/unit/run-droid.test.ts",
+      "status": "passed",
+      "tests": 9
+    },
+    {
+      "file": "tests/unit/schema-to-zod.test.ts",
+      "status": "passed",
+      "tests": 17
+    },
+    {
+      "file": "tests/unit/session-history.test.ts",
+      "status": "passed",
+      "tests": 61
+    },
+    {
+      "file": "tests/unit/session-store.test.ts",
+      "status": "passed",
+      "tests": 7
+    },
+    {
+      "file": "tests/unit/session.test.ts",
+      "status": "passed",
+      "tests": 2
+    },
+    {
+      "file": "tests/unit/shutdown.test.ts",
+      "status": "passed",
+      "tests": 5
+    },
+    {
+      "file": "tests/unit/spec-custom.test.ts",
+      "status": "passed",
+      "tests": 3
+    },
+    {
+      "file": "tests/unit/sse-stream.test.ts",
+      "status": "passed",
+      "tests": 5
+    },
+    {
+      "file": "tests/unit/system-prompt.test.ts",
+      "status": "passed",
+      "tests": 20
+    },
+    {
+      "file": "tests/unit/upstream.test.ts",
+      "status": "passed",
+      "tests": 14
+    },
+    {
+      "file": "tests/unit/usage-ledger.test.ts",
+      "status": "passed",
+      "tests": 11
+    },
+    {
+      "file": "tests/unit/usage.test.ts",
+      "status": "passed",
+      "tests": 2
+    },
+    {
+      "file": "tests/unit/verification-args.test.ts",
+      "status": "passed",
+      "tests": 3
+    },
+    {
+      "file": "tests/unit/verify-relay.test.ts",
+      "status": "passed",
+      "tests": 5
+    },
+    {
+      "file": "tests/unit/workspace.test.ts",
+      "status": "passed",
+      "tests": 3
+    }
+  ]
+}

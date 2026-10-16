@@ -17,19 +17,31 @@ npm run local -- /你的项目路径
 
 按提示选择 Anthropic 兼容接口地址、模型和输入自己的 API Key，随后自动打开 Droid。国际 Z.AI 默认地址是 `https://api.z.ai/api/anthropic`，默认模型 `glm-5.2`；中国区智谱使用 `https://open.bigmodel.cn/api/anthropic`。Key 必须属于所选服务。Key 输入不回显、不保存在配置文件里，下次启动重新输入。
 
-这一个命令会启动 Bridge，配置独立的 Droid 数据目录、聊天和 Mission 各角色模型，安装生命周期 hooks 和 `relay-droid` skill。以后继续运行 `npm run local -- /你的项目路径` 即可。退出 Droid 时会停止本次服务并移除自己的 hooks，保留项目原有 hooks。
+这一个命令会启动 Bridge，配置独立的 Droid 数据目录和真实模型列表，安装生命周期 hooks 和 `relay-droid` skill。以后继续运行 `npm run local -- /你的项目路径` 即可。退出 Droid 时会停止本次服务并移除自己的 hooks，保留项目原有 hooks。
 
 当前入口仍由这个项目参数固定工作目录；Droid hook 报告的目录用于核对会话归属，尚未实现全局安装后自动跟随 Droid 的项目目录。
 
-`/model` 中的 Relay Chat、Orchestrator、Worker、Validator、Probe 是角色通道，共用启动时选定的一个 BYOK 模型。它们不是五个不同的模型，也不会自动读取 Claude Code 的模型列表。目前可通过启动参数 `--model <模型ID>` 更换上游；同一会话中自由切换不同上游模型尚未实现。本入口已实测 GLM-5.2，不能据此宣称 Sonnet、Opus 或其它模型已验证。
+`/model` 现在列真实模型，不再把 Relay Chat、Orchestrator、Worker 等内部角色当成模型。普通聊天在这里选模型；Mission 在自己的 Orchestrator、Worker、Validator 设置里，从同一列表分别选择。已经保存的不同角色选择会保留。
+
+例如让同一个 BYOK 端点提供两个实际模型：
+
+```bash
+npm run local -- /你的项目路径 --models glm-5.2,glm-4.7 --model glm-5.2
+```
+
+菜单显示 GLM-5.2、GLM-4.7，请求实际进入相应模型。模型清单会记住，下次无需重复输入。空闲时可在同一对话切换，使用官方 Claude SDK 的 `resume` 保留原生会话；有未完成工具、审批或后台任务时先完成当前工作。更换模型可能不能复用前一个模型的推理缓存，不保证跨模型缓存命中。
+
+Claude 接入使用 `sonnet`、`opus`、`haiku` 或有权限的具体版本 ID。显式 `subscription` 配置的默认显示名称为 Claude Sonnet、Claude Opus、Claude Haiku；别名由已安装的 Claude Code 解释。模型清单是明确配置的选项，不是自动枚举账号权益；不可用模型会返回实际错误，不会偷偷换成另一个模型。当前 `local` 入口仍只使用 BYOK，不读取订阅登录。
 
 需要允许原生工具操作时，打开启动时显示的控制页；管理员令牌保存在同时显示的私有文件中。默认仍逐次审批。接口地址和模型可记住，上游 Key 不落盘；不会使用你的 Claude 订阅登录。
 
 更多参数见 `npm run local -- --help`。首次不需要手工修改下面的环境变量或 settings。
 
-[入口实测记录](evidence/local-entry-validation-2026-10-16-r2.json)：真实 Linux PTY 从该命令启动、自动选择 Relay Chat、GLM BYOK 对话和正常退出均通过；本轮只核对 Mission 角色配置，没有重新运行完整 Mission。
+[历史入口实测记录](evidence/local-entry-validation-2026-10-16-r2.json)：旧版角色菜单时期的真实 Linux PTY、GLM BYOK 对话和正常退出记录。当前模型选择设计已按上述方式替换。
 
-[查看真实截图与文件读写验收](docs/LOCAL-VISUAL-PROOF.md)：包含 Droid 模型菜单、Claude Code 原生 Write 审批、磁盘结果和实际 BYOK 上游；同时说明当前目录与模型选择的边界。
+[查看当前模型选择设计与真实截图](docs/ACTUAL-MODEL-SELECTION.md)：真实模型菜单、同对话切换、Mission 各角色选择，以及保留的失败和修复记录。
+
+[历史文件读写截图](docs/LOCAL-VISUAL-PROOF.md)：旧菜单时期的 Claude Code 原生 Write 审批、磁盘结果和实际 BYOK 上游。
 
 ## 手工运行与诊断
 
@@ -44,8 +56,8 @@ mkdir -p tmp/relay-local
 export BRIDGE_CLIENT_TOKEN="$(openssl rand -hex 24)"
 export BRIDGE_ADMIN_TOKEN="$(openssl rand -hex 24)"
 printf 'export BRIDGE_CLIENT_TOKEN=%s\nexport BRIDGE_ADMIN_TOKEN=%s\n' "$BRIDGE_CLIENT_TOKEN" "$BRIDGE_ADMIN_TOKEN" > tmp/relay-local/tokens.env
-npm run configure-droid -- --settings "$PWD/tmp/relay-local/settings.json" --base-url http://127.0.0.1:18787
-BRIDGE_MODE=mock npm start
+npm run configure-droid -- --settings "$PWD/tmp/relay-local/settings.json" --base-url http://127.0.0.1:18787 --model glm-5.2
+BRIDGE_MODE=mock BRIDGE_MODELS=glm-5.2 npm start
 ```
 
 脚本将 token 的**真实字面值**写入 JSON，不使用 `${BRIDGE_CLIENT_TOKEN}` 占位符。配置和备份权限为 `0600`，缺少 token 时拒绝修改。默认监听 `http://127.0.0.1:18787`；`GET /healthz` 探活，`POST /v1/messages` 接收 JSON 或 SSE 请求。
@@ -54,7 +66,7 @@ BRIDGE_MODE=mock npm start
 
 ```bash
 source tmp/relay-local/tokens.env
-FACTORY_AIRGAP_ENABLED=1 droid exec --settings "$PWD/tmp/relay-local/settings.json" -m relay-probe "RELAY_TEXT_PROBE"
+FACTORY_AIRGAP_ENABLED=1 droid exec --settings "$PWD/tmp/relay-local/settings.json" -m glm-5.2 "RELAY_TEXT_PROBE"
 ```
 
 撤销配置：
@@ -74,11 +86,15 @@ export BRIDGE_PERMISSION=ask
 export BRIDGE_SDK_CWD="$PROJECT"
 export BRIDGE_UPSTREAM_BASE_URL=https://open.bigmodel.cn/api/anthropic
 export BRIDGE_UPSTREAM_MODEL=glm-5.2
+export BRIDGE_MODELS=glm-5.2
 export BRIDGE_UPSTREAM_TOKEN_ENV=GLM_CN_API_KEY
+export BRIDGE_MODEL_ID=glm-5.2
 npm start
 ```
 
 BYOK 的 endpoint、model、key 变量必须全部明确配置；缺失或错误时直接失败，不探测其他环境密钥。BYOK 子进程清除继承的 OAuth 和 Bedrock/Vertex/Foundry 路由选择，保留代理与 CA；subscription 环境不受此处理。
+
+手工配置 Claude 登录接入时，服务器明确设置 `BRIDGE_AUTH=subscription`、`BRIDGE_MODELS=sonnet,opus,haiku`，配置脚本使用 `--auth subscription --models sonnet,opus,haiku`。这只切换接入方式，不会为账号增加模型权限。该路径仅经过离线 SDK 参数测试，没有用真实订阅账号做线上验证。
 
 国际 Z.AI 对应 `https://api.z.ai/api/anthropic` 和 `ZAI_CODING_PLAN_KEY`；请同时更改端点和变量名，密钥必须属于对应服务。这里传给 `BRIDGE_UPSTREAM_TOKEN_ENV` 的是环境变量名，真实密钥留在该变量中。
 
@@ -91,7 +107,7 @@ BYOK 的 endpoint、model、key 变量必须全部明确配置；缺失或错误
 source tmp/relay-local/tokens.env
 export PROJECT=/absolute/path/to/project
 npm run configure-hooks -- --hooks "$PROJECT/.factory/hooks.json" --config "$PWD/tmp/relay-local/hooks-control.json"
-npm run run-droid -- --cwd "$PROJECT" --airgap 1 -- exec --settings "$PWD/tmp/relay-local/settings.json" -m relay-chat "检查这个项目"
+npm run run-droid -- --cwd "$PROJECT" --airgap 1 -- exec --settings "$PWD/tmp/relay-local/settings.json" -m glm-5.2 "检查这个项目"
 # 撤销只删除本 Bridge 的 hook，不覆盖后来添加的用户 hook。
 npm run configure-hooks -- --hooks "$PROJECT/.factory/hooks.json" --config "$PWD/tmp/relay-local/hooks-control.json" --remove
 ```
@@ -110,13 +126,16 @@ npm run generate-droid -- --cwd "$PROJECT" --install-command
 
 安装器可重复运行，也能为此前只安装了命令的项目补上 skill；不同内容的已有文件或符号链接会报错，不覆盖用户配置。命令引用当前仓库的位置，移动仓库后需检查安装路径。Factory 自带 `/droids` 管理菜单保持原样，手动进入其中的托管生成仍需要 Factory 授权；skill 不拦截该菜单。显式 `/relay-droid --name json-auditor --description "Read JSON fixtures"` 仍可使用。
 
+自然语言 skill 通过原生 Bash 调用生成器时，使用当前会话的实际模型。Factory 显式 `/relay-droid` shell 命令继承启动时的 `BRIDGE_MODEL_ID`，不会跟随之后的 `/model` 变化；手工 wrapper 启动也应在第二个终端设置该变量。生成器的 `--model` 参数指定的是新建 Agent 的模型，默认 `inherit`，不是生成本次定义所用的模型。
+
 [自然语言入口验收](evidence/relay-droid-discovery-validation-2026-10-16.json)记录了真实 Droid 无命令提示的创建、后续独立 Task 调用、普通聊天负例及正常退出；只使用隔离 BYOK，保留失败记录和修复后的证据。
 
 ## 会话与工具
 
 - 优先使用响应中的 `X-Bridge-Session`；也接受 `X-Session-Id` 或 metadata 的 `session_id` / `sessionId`。`user_id` 不作为会话 ID。
 - 未提供 ID 时，续接唯一完整历史前缀或所属 pending tool。Factory 压缩改写前缀时，还允许已认证的同一 Factory 会话、同一工作目录、无 pending 工具且最后完整 user/assistant 回合精确匹配的续接；重复短提示不会合并会话。
-- 同会话修改模型、角色配置标签、工作目录或执行策略返回 409，需新建会话。工具目录不属于会话身份：保留同一个 SDK MCP server 实例，按请求动态增删工具和更新 schema，并发送 `tools/list_changed`；等待 SDK `mcpServerStatus` 确认工具名称列表后再继续。schema 或描述改变时使用带版本的 MCP 名称，因此名称确认也确认了本次 schema 版本；JSON Schema 的完整约束经公开 MCP 接口提供，并由 Ajv 校验而不改写参数。真实 BYOK 同名 schema 更新后首次调用已通过。未变化的定义和恢复后的目录保持名称稳定，避免无谓破坏缓存；实际目录变化仍可能造成缓存 miss。
+- 配置 `BRIDGE_MODELS` 或使用 `local` 时，空闲会话支持真实模型切换：关闭旧 query、等待其消费循环退出，再用同一个 SDK session ID 恢复；只追加新输入，不回放完整历史。关闭持久化、缺少 checkpoint 或存在未完成工作时明确拒绝切换，旧会话可继续；无法安全关闭旧 query 则终止。未配置 catalog 的旧手工接入保留固定模型行为，`GET /v1/models` 不宣称其支持模型切换。
+- 角色配置标签、工作目录或执行策略改变仍返回 409，需新建会话。工具目录不属于会话身份：保留同一个 SDK MCP server 实例，按请求动态增删工具和更新 schema，并发送 `tools/list_changed`；等待 SDK `mcpServerStatus` 确认工具名称列表后再继续。schema 或描述改变时使用带版本的 MCP 名称，因此名称确认也确认了本次 schema 版本；JSON Schema 的完整约束经公开 MCP 接口提供，并由 Ajv 校验而不改写参数。真实 BYOK 同名 schema 更新后首次调用已通过。未变化的定义和恢复后的目录保持名称稳定，避免无谓破坏缓存；实际目录变化仍可能造成缓存 miss。
 - Droid host context 的变化进入 user input，不改写原生 system prefix。若请求同时带 `tool_result` 和补充文本/base64 图片，补充内容以 host continuation 标记并附入本批首个新工具结果，交还真实 MCP callback，不伪造额外用户轮次。混入 document 或其它不支持的 MCP 内容在提交前返回 422，不消耗 pending 工具结果。
 - 空闲 CLI 进程按 LRU 有界回收，保留官方 SDK session ID；有持久化 transcript 时使用 SDK `resume`。忙碌会话不会为腾位置而被驱逐。
 - 进程重启后，尚未完成的 MCP 工具往返返回 409。没有 native session 的历史导入仅作为参考重建，不等于完整恢复 Claude Code 的内部状态。

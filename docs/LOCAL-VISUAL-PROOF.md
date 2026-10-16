@@ -1,8 +1,10 @@
 # Droid → Claude Code → GLM BYOK：真实界面与文件操作
 
+> 本页保留旧版角色菜单时期的文件操作证据。当前产品已改为真实模型列表；本页的 Relay 菜单截图不是当前菜单，也不证明新版本的模型切换。
+
 2026-10-16，在现有 `npm run local` 入口上运行官方 Droid 和 Claude Code。运行时上游是 `https://open.bigmodel.cn/api/anthropic`、`glm-5.2`，权限保持 `ask`。本次没有使用 Claude 订阅。
 
-## 当前目录与模型的实际行为
+## 该次运行的目录与模型行为
 
 - 目录仍由 launcher 的项目参数固定。Droid 的 hook 报告实际目录并用于会话校验；当前没有实现安装一次后自动跟随所有 Droid 项目的全局入口。
 - 菜单里的五个 Relay 选项是角色通道，共用这次启动指定的一个 BYOK 模型。它们不是五个真实模型，不能通过该菜单直接切换到 Sonnet、Opus 或 Haiku。

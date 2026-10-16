@@ -1,0 +1,85 @@
+{
+  "status": "PASS_REAL_PERSISTED_SETTINGS_RECONFIGURATION",
+  "scope": "Offline production configureDroid applied to copied settings and ownership metadata actually persisted by official Droid after UI selected Mission Worker GLM-4.7. No model request or second CLI launch.",
+  "sourceSettings": "evidence/local/model-switch-2026-10-16T03-57-29-386Z-d035b0/final-settings.json",
+  "sourceMetadata": "evidence/local/model-switch-2026-10-16T03-57-29-386Z-d035b0/managed-model-metadata.json",
+  "configureSourceSha256": "6b482be55ffa89b8112d1792c9fd323644b6d6f9dd5f89487379e23736e035de",
+  "actualPersistedModels": [
+    {
+      "model": "glm-5.2",
+      "id": "custom:GLM-5.2-0",
+      "index": 0,
+      "baseUrl": "http://127.0.0.1:36027",
+      "authMode": "bearer",
+      "provider": "anthropic",
+      "displayName": "GLM-5.2",
+      "maxOutputTokens": 4096,
+      "noImageSupport": false
+    },
+    {
+      "model": "glm-4.7",
+      "id": "custom:GLM-4.7-0",
+      "index": 1,
+      "baseUrl": "http://127.0.0.1:36027",
+      "authMode": "bearer",
+      "provider": "anthropic",
+      "displayName": "GLM-4.7",
+      "maxOutputTokens": 4096,
+      "noImageSupport": false
+    }
+  ],
+  "modelsAfterReconfiguration": [
+    {
+      "model": "glm-5.2",
+      "displayName": "GLM-5.2",
+      "baseUrl": "http://127.0.0.1:1",
+      "provider": "anthropic",
+      "authMode": "bearer",
+      "maxOutputTokens": 4096
+    },
+    {
+      "model": "glm-4.7",
+      "displayName": "GLM-4.7",
+      "baseUrl": "http://127.0.0.1:1",
+      "provider": "anthropic",
+      "authMode": "bearer",
+      "maxOutputTokens": 4096
+    }
+  ],
+  "choicesBefore": {
+    "global": {
+      "model": "custom:GLM-5.2-0"
+    },
+    "orchestrator": "custom:GLM-5.2-0",
+    "mission": {
+      "skipScrutiny": false,
+      "skipUserTesting": false,
+      "workerModel": "custom:GLM-4.7-0",
+      "validationWorkerModel": "custom:GLM-5.2-0",
+      "workerReasoningEffort": "none"
+    }
+  },
+  "choicesAfter": {
+    "global": {
+      "model": "custom:GLM-5.2-0"
+    },
+    "orchestrator": "custom:GLM-5.2-0",
+    "mission": {
+      "skipScrutiny": false,
+      "skipUserTesting": false,
+      "workerModel": "custom:GLM-4.7-0",
+      "validationWorkerModel": "custom:GLM-5.2-0",
+      "workerReasoningEffort": "none"
+    }
+  },
+  "checks": {
+    "officialDerivedFieldsObserved": true,
+    "exactlyTwoModelsAfterReconfiguration": true,
+    "globalDefaultPreserved": true,
+    "workerUiChoicePreserved": true,
+    "orchestratorAndValidatorPreserved": true,
+    "allExistingMissionOptionsPreserved": true
+  },
+  "ownedCopyRemoved": true,
+  "recordedAt": "2026-10-16T04:08:03.660Z"
+}

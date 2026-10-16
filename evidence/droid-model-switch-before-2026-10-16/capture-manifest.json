@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "status": "REAL_SCREENSHOTS_OF_FAILED_NATIVE_CONTINUITY_RUN",
+  "createdAt": "2026-10-16T04:06:33.583317+00:00",
+  "sourceRun": "evidence/local/model-switch-2026-10-16T03-57-29-386Z-d035b0",
+  "captureMethod": "Original live PTY ANSI bytes streamed to xterm in Chromium; original Playwright page.screenshot PNG. No redraw, image editing, mock terminal, or image generation. Input actions were sent to the live original Droid PTY.",
+  "terminal": {
+    "columns": 132,
+    "rows": 42,
+    "droidVersion": "0.242.0"
+  },
+  "authenticationScope": "Isolated GLM BYOK via official Claude Code runtime; no real subscription credentials used. This is not Anthropic Claude model validation.",
+  "providerEndpoint": "https://open.bigmodel.cn/api/anthropic",
+  "functionalScope": "This pre-fix run changed the real model and recalled a code, but failed native SDK session continuity because history was replayed into a new SDK session. Mission captures prove only actual settings UI selection.",
+  "screenshots": [
+    {
+      "path": "01-actual-glm-model-menu.png",
+      "kind": "real_droid_terminal",
+      "description": "Actual /model menu offers GLM-5.2 and GLM-4.7.",
+      "capturedAt": "2026-10-16T03:58:13.153Z",
+      "bytes": 69274,
+      "sha256": "52744296876b45649bf2d6d8f8ae628f76aa5041a8af43b964f750d5207ea856",
+      "rawPtyBytesAtCapture": 175745,
+      "rawPtySha256AtCapture": "42357d4687bc8b72c1ca78c0f06b0afed3de9c5f8da7874006335000d32cd2b7",
+      "visuallyReviewedForSecrets": true
+    },
+    {
+      "path": "03-model-switch-recall-complete.png",
+      "kind": "real_droid_terminal",
+      "description": "Same Droid session visibly switches to GLM-4.7 and recalls code. Native continuity FAILED: independent run evidence finds a new SDK session and replayed history; this image does not prove native resume.",
+      "capturedAt": "2026-10-16T04:03:04.896Z",
+      "bytes": 96899,
+      "sha256": "616b93d1a2ed1504eb98a47855ea82ff7bd8da3f76d85d85e96ca0d56dd9837a",
+      "rawPtyBytesAtCapture": 483252,
+      "rawPtySha256AtCapture": "40a5f1aff897f15d9378d8bdd14d467e2e56346f9fdaa836de69804c0919e1fb",
+      "visuallyReviewedForSecrets": true
+    },
+    {
+      "path": "04-mission-worker-model-picker.png",
+      "kind": "real_droid_settings_terminal",
+      "description": "Actual Mission Defaults Worker model picker offers the two real GLM models.",
+      "capturedAt": "2026-10-16T04:04:57.273Z",
+      "bytes": 92760,
+      "sha256": "4c6bac6f17168ca9672dd7d013e579a7860366a48809f5b0258972f0a897b684",
+      "rawPtyBytesAtCapture": 502793,
+      "rawPtySha256AtCapture": "2a1c7c73f3d3033282e3d8518c120c8b9486ada3b50c3fcac6bd8991c318a826",
+      "visuallyReviewedForSecrets": true
+    },
+    {
+      "path": "05-mission-defaults-distinct-models.png",
+      "kind": "real_droid_settings_terminal",
+      "description": "Actual Mission Defaults after selecting GLM-4.7 for Worker; Orchestrator and Validator retain GLM-5.2. Settings UI only; no Mission execution in this run.",
+      "capturedAt": "2026-10-16T04:05:21.408Z",
+      "bytes": 102520,
+      "sha256": "a1cf8d8d25e858cfa8afaaaa5b3b8001651d6a5db370f7c9f65ef0d27119308b",
+      "rawPtyBytesAtCapture": 513313,
+      "rawPtySha256AtCapture": "9479592eeb92054fbbf78fe4f30c0b9e7b86307d83a58d8c0d4059b7054fb830",
+      "visuallyReviewedForSecrets": true
+    }
+  ],
+  "cleanup": {
+    "observedOwnedProcesses": 12,
+    "remainingLiveOwnedProcesses": 0,
+    "defunctOwnedProcessesAwaitingPid1Reap": 2,
+    "forcedTerminations": 0,
+    "daemonExitCode": 0,
+    "privateControlCopyRemoved": true
+  },
+  "privacy": "Private key/admin token and host binding absent from every screenshot. Raw PTY and actions remain ignored local evidence. Only this capture daemon private token copy was deleted here; runtime owner handles its own isolated configs."
+}

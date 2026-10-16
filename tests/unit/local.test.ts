@@ -77,15 +77,18 @@ describe("one-command isolated local launch", () => {
       expect(factoryHome).not.toBe(f.home);
       const settingsPath = join(factoryHome, ".factory/settings.json");
       const settings = JSON.parse(readFileSync(settingsPath, "utf8"));
-      expect(settings.model).toBe("custom:Relay-Chat-0");
-      expect(settings.missionOrchestratorModel).toBe("custom:Relay-Orchestrator-0");
+      expect(settings.sessionDefaultSettings.model).toBe("custom:offline-selected-model-0");
+      expect(settings.missionOrchestratorModel).toBe(settings.sessionDefaultSettings.model);
       expect(settings.missionModelSettings).toEqual({
-        workerModel: "custom:Relay-Worker-0", validationWorkerModel: "custom:Relay-Validator-0", skipScrutiny: false, skipUserTesting: false,
+        workerModel: settings.sessionDefaultSettings.model, validationWorkerModel: settings.sessionDefaultSettings.model, skipScrutiny: false, skipUserTesting: false,
       });
-      expect(settings.customModels.find((model: { model: string }) => model.model === "relay-chat")).toMatchObject({ baseUrl: url, apiKey: config.clientToken, provider: "anthropic" });
+      expect(settings.customModels).toHaveLength(1);
+      expect(settings.customModels[0]).toMatchObject({ model: "offline-selected-model", displayName: "offline-selected-model", baseUrl: url, apiKey: config.clientToken, provider: "anthropic" });
+      expect(config.models).toEqual([{ id: "offline-selected-model", model: "offline-selected-model", displayName: "offline-selected-model" }]);
+      expect(options.env.BRIDGE_MODEL_ID).toBe("offline-selected-model");
       expect(config.clientToken).not.toBe(providerKey);
       expect(statSync(settingsPath).mode & 0o077).toBe(0);
-      expect(readFileSync(join(f.state, "manifest.env"), "utf8")).toContain("DROID_CHAT_MODEL_ID=relay-chat");
+      expect(readFileSync(join(f.state, "manifest.env"), "utf8")).toContain("DROID_CHAT_MODEL_ID=custom:offline-selected-model-0");
       expect(existsSync(join(f.project, ".factory/commands/relay-droid.sh"))).toBe(true);
       expect(readFileSync(join(f.project, ".factory/skills/relay-droid/SKILL.md"), "utf8")).toContain("name: relay-droid");
       const hooks = JSON.parse(readFileSync(hooksPath, "utf8")); expect(hooks.Stop).toContainEqual(userHook);
@@ -171,9 +174,40 @@ describe("one-command isolated local launch", () => {
     expect(() => parseLocalArgs([f.project, "--api-key", providerKey])).toThrow();
     expect(() => parseLocalArgs([f.project, "--unknown"])).toThrow();
     expect(() => parseLocalArgs([f.project, "extra-project"])).toThrow();
+    expect(() => parseLocalArgs([f.project, "--models", "glm-5.2,glm-5.2"])).toThrow();
+    expect(() => parseLocalArgs([f.project, "--models", "glm-5.2", "--model", "glm-4.7"])).toThrow();
     const missing = { ...f.env }; delete missing.LOCAL_TEST_PROVIDER_KEY;
     await expect(runLocal(f.argv, missing)).rejects.toThrow();
     expect(observed.runDroid).not.toHaveBeenCalled(); expect(observed.apps).toHaveLength(0);
     expect(existsSync(f.state)).toBe(false); expect(existsSync(join(f.project, ".factory"))).toBe(false);
+  });
+
+  it("remembers real model choices and preserves different valid Mission selections on restart", async () => {
+    const f = fixture();
+    const argv = [f.project, "--base-url", "https://provider.invalid/anthropic", "--models", "glm-5.2,glm-4.7", "--model", "glm-5.2", "--key-env", "LOCAL_TEST_PROVIDER_KEY"];
+    observed.runDroid.mockImplementationOnce(async (droidArgs: string[]) => {
+      const path = argument(droidArgs, "--settings")!, settings = JSON.parse(readFileSync(path, "utf8"));
+      expect(settings.customModels.map((model: { displayName: string }) => model.displayName)).toEqual(["GLM-5.2", "GLM-4.7"]);
+      expect(settings.sessionDefaultSettings.model).toBe("custom:GLM-5.2-0");
+      settings.sessionDefaultSettings.model = "custom:GLM-4.7-0";
+      settings.missionOrchestratorModel = "custom:GLM-4.7-0";
+      settings.missionModelSettings.workerModel = "custom:GLM-5.2-0";
+      settings.missionModelSettings.validationWorkerModel = "custom:GLM-4.7-0";
+      settings.missionModelSettings.skipUserTesting = true;
+      writeFileSync(path, JSON.stringify(settings));
+      return 0;
+    });
+    expect(await runLocal(argv, f.env)).toBe(0);
+    expect(JSON.parse(readFileSync(join(f.state, "provider.json"), "utf8"))).toEqual({ baseUrl: "https://provider.invalid/anthropic", model: "glm-5.2", models: ["glm-5.2", "glm-4.7"] });
+    observed.runDroid.mockImplementationOnce(async (droidArgs: string[]) => {
+      const settings = JSON.parse(readFileSync(argument(droidArgs, "--settings")!, "utf8"));
+      expect(settings.customModels).toHaveLength(2);
+      expect(settings.sessionDefaultSettings.model).toBe("custom:GLM-4.7-0");
+      expect(settings.missionOrchestratorModel).toBe("custom:GLM-4.7-0");
+      expect(settings.missionModelSettings).toMatchObject({ workerModel: "custom:GLM-5.2-0", validationWorkerModel: "custom:GLM-4.7-0", skipUserTesting: true });
+      expect(observed.apps[1]!.config.models?.map((model) => model.model)).toEqual(["glm-5.2", "glm-4.7"]);
+      return 0;
+    });
+    expect(await runLocal([f.project, "--key-env", "LOCAL_TEST_PROVIDER_KEY"], f.env)).toBe(0);
   });
 });

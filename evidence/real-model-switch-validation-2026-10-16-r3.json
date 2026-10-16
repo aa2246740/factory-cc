@@ -1,0 +1,1126 @@
+{
+  "suite": "one-official-Droid-session-two-real-BYOK-models",
+  "status": "PASS_REAL_MODEL_SWITCH_WITH_CONTEXT",
+  "evidence": "/workspace/work/factory-cc-prep/repo/evidence/local/model-switch-2026-10-16T04-16-17-874Z-c4e00c",
+  "startedAt": "2026-10-16T04:16:17.885Z",
+  "endpoint": "https://open.bigmodel.cn/api/anthropic",
+  "credentialVariable": "READINESS_MODEL_API_KEY",
+  "scope": "One real PTY conversation, two actual upstream BYOK models, retained native context, visible real model menu, normal lifecycle. Mission role configuration is inspected; no Mission run.",
+  "sourceHashesAtStart": {
+    "package.json": "d6d4806ec8f68ffa4a39b9e60bafeccdb3e4f7e9c65a7e9ba118c0b642890c4b",
+    "scripts/configure-droid.ts": "6b482be55ffa89b8112d1792c9fd323644b6d6f9dd5f89487379e23736e035de",
+    "scripts/factory-hook.ts": "ac1a6e666989d15a8a60852e6df316168d5f9c3b9b2807a64ec1a1a8c9fd1336",
+    "scripts/generate-droid.ts": "68c53d1996f68ef8f6a86efc3f15deca2aa982307b6ac89c9c948ec4a11194f2",
+    "scripts/local.ts": "78c806b09fc4ee2e62f7213ab60a4ceca1655676f63d469d77ce58276759f19c",
+    "scripts/run-droid.ts": "3e93f7d95d74d3e8dd160a4ba1008f5b1e40b7320acff9191f531bc624d348f5",
+    "src/config.ts": "be4b05f6c56fce4075b7a21ccbf142050123e0e2e7f658bf689c4b0b0dab7a70",
+    "src/control/broker.ts": "6ffdcb56a44408efdd136b0351ac32e3e7cba627fb9ae2fc5e28f0a8f639296c",
+    "src/control/factory-hooks.ts": "0581a23488cf28615a8a124993784ff90914023ed0fd9b14f11b99d832a4f903",
+    "src/http/app.ts": "9ceb6d271082d4ad4c10c14b1c1966fb7fa5805c189d7d826fdae294ec4786a0",
+    "src/http/control-page.ts": "39d6a87e3ee020fbee919047cafce62d7a3a740230a0fef8f240d27cc2e92a66",
+    "src/http/sse-stream.ts": "7d167d6540c28b3ff705ee10e4b3e4f9a09be4389958e7f7470552aa534a02b0",
+    "src/http/sse.ts": "736b7e28d209d0ab6735b888bf2f1df02cea0cf5f4a5dd0c5e176c20947f9bfd",
+    "src/http/status-page.ts": "923b463d01293252c85b1eb7ba1dc4120f18e34e2dc7d6ef6f911f0ba0eabb46",
+    "src/index.ts": "3f0d52fbf96a7cdee18ef0fe432aa2b0f9c9be6eee9943b2d692c4b993f4e718",
+    "src/logging.ts": "e2c92fbb29d0d895b92717de6cdde44ece0ed6277dcdaa417d804c7ccb2675e8",
+    "src/models.ts": "f8a711c578da0331999a46d845ba29fa8540c1d46827d12ed968a68a1bcffb43",
+    "src/protocol/content.ts": "199656bed9ab99cc2180c8a69d5ba671287d0ddcdd9e91af44dd1fa09789b147",
+    "src/protocol/messages.ts": "1ad1e1feb631169277645f395d4e3d6f324e8dab7dc7832f3573353ea79b249b",
+    "src/protocol/schema-to-zod.ts": "7471c2a10432486026ccf2ca6587d0812d4252bd3df8af9eb733a54ebb37b8e8",
+    "src/protocol/tool-names.ts": "f4a5f0b14fa922dbfafef4158bce9444ae228d34b55e775568639c10d269904f",
+    "src/protocol/validate.ts": "dc6eb620522fd65e3e5aefc1398dcf273932af712561cf584d0220afeaa64dc9",
+    "src/relay/ids.ts": "2711da6afa47ea7e26d947d57517a251cd1d6a138b5045125d0edf06da48762e",
+    "src/relay/mailbox.ts": "a52a9d7bef0e00c73b0a6e55c8fc699dfc88899fb893fc799564ce7830e238e7",
+    "src/runtime/droid-mcp-catalog.ts": "bd6494fbebcda021b5afc0f03ce446641e40e227048fdea848053897d284db76",
+    "src/runtime/droid-tools.ts": "09781bc4bdf76761707afc9d6dab3e98d9629f6f4341ff10eb071cead8be0ea5",
+    "src/runtime/factory-capabilities.ts": "12d89a54eee639286fc36ffc8a51d2553e06a28b1d586bfbda13436b96312f32",
+    "src/runtime/factory.ts": "731ff989b00903445819acf61d8108bc80c43bd3c422393ad75eeed32f81d3f8",
+    "src/runtime/fake-runtime.ts": "da08586a2c97dac39a5e78c768910ade495de89fb409ba96a1ba8027ae1c2690",
+    "src/runtime/mission-tools.ts": "a1bc9b27954f79fb280e131e98779a3c28698ff9785d9e5ab35367b2472af623",
+    "src/runtime/mock-runtime.ts": "8299dc619ea7b9ec359d78c3a3035f8f6fcaad4bd48ba3893d756a5e855d3674",
+    "src/runtime/native-tool-policy.ts": "f78bdab44ae412897ee5bc1a9de0abac6facfd4e3deaca214ac80765c1d2fe5c",
+    "src/runtime/safe-tools.ts": "82a4122b1d98ede94337f8aa2393c37ab2db15844d5d62c100dd0ddf443e371b",
+    "src/runtime/sdk-runtime.ts": "55afcda149d2c6d26799a5b15fee1afd381b852ef45ccaae1eee2e9264aa3084",
+    "src/runtime/system-prompt.ts": "d30bbd9fc565361a1f6219c1f5195c3556b2d1da1536be58217ac2d2eacc67f8",
+    "src/runtime/types.ts": "f98038399c968f5a4add1fd2aa6db321f111e13c0ec7a0bf0f1de192bcdb1e07",
+    "src/runtime/usage.ts": "81b25a74b7a37c03f3b42a256099f1f64a35b9ccbef7d912359a771c0228f777",
+    "src/security/auth.ts": "28b3d0a62769f1501bb67d84dd9f252ee9d603929b28ee4de7da45e0bb363cd3",
+    "src/security/limits.ts": "f1c5a8b653a826ec257e691b4f48ecb34e75f6dbc232d4418945c7058621986e",
+    "src/security/redact.ts": "65514578ea87343e0891351966ceaae1e5deedac44d5d53679cf795214b3527f",
+    "src/sessions/correlate.ts": "b600fb9d48b4aedce6f07b105483774f135ad7d218835f15a9352e5eb12c394b",
+    "src/sessions/state.ts": "e4c75bcdeb2a6fdd1fe183c7ee8641226b8fd574afbdcc931302e2556159f1bf",
+    "src/sessions/store.ts": "4599fca2fa1369aa76b66cd439501570031dd967095509cb32c973a899176505",
+    "src/types.ts": "f98912af94b152bbeacd2ce69560855c7769f049c024115ef1199d9ba0b0e82a",
+    "src/upstream/providers.ts": "df130d84d5875909736498a4bb2d6de53c5dff640696fad7ca904dc463b80387",
+    "src/workspace.ts": "3f475d5a0ef32c690d3f335e1d4e307d7e95447fc5d8a3c1ddd958944bee1180"
+  },
+  "firstPrompt": "For this conversation, remember the verification code memory-fec3ec007d6a2d657ecd. Do not use any tools. Reply exactly STORED.",
+  "secondPrompt": "What verification code did I ask you to remember earlier in this conversation? Reply with that code only. Do not use any tools.",
+  "nonce": "memory-fec3ec007d6a2d657ecd",
+  "command": [
+    "npm",
+    "run",
+    "local",
+    "--",
+    "/workspace/work/factory-cc-prep/work/relay-model-switch-OwOu4F/project",
+    "--base-url",
+    "https://open.bigmodel.cn/api/anthropic",
+    "--model",
+    "glm-5.2",
+    "--models",
+    "glm-5.2,glm-4.7",
+    "--key-env",
+    "READINESS_MODEL_API_KEY"
+  ],
+  "managedModelMetadataAtStart": {
+    "version": 1,
+    "models": [
+      {
+        "id": "glm-5.2",
+        "signature": "42d38b5527bf24c0a88dd27856d606f70563e7efe147fe1a4e9daf246aeee4de"
+      },
+      {
+        "id": "glm-4.7",
+        "signature": "3e25ab85ee3d43a608f4fb672a61ba07ed11cbf59f240e1b29fa607a727853db"
+      }
+    ]
+  },
+  "initialConfiguration": {
+    "models": [
+      {
+        "model": "glm-5.2",
+        "id": "custom:GLM-5.2-0",
+        "index": 0,
+        "baseUrl": "http://127.0.0.1:36959",
+        "authMode": "bearer",
+        "provider": "anthropic",
+        "displayName": "GLM-5.2",
+        "maxOutputTokens": 4096,
+        "noImageSupport": false
+      },
+      {
+        "model": "glm-4.7",
+        "id": "custom:GLM-4.7-0",
+        "index": 1,
+        "baseUrl": "http://127.0.0.1:36959",
+        "authMode": "bearer",
+        "provider": "anthropic",
+        "displayName": "GLM-4.7",
+        "maxOutputTokens": 4096,
+        "noImageSupport": false
+      }
+    ],
+    "missionOrchestratorModel": "custom:GLM-5.2-0",
+    "missionModelSettings": {
+      "skipScrutiny": false,
+      "skipUserTesting": false,
+      "workerModel": "custom:GLM-5.2-0",
+      "validationWorkerModel": "custom:GLM-5.2-0"
+    }
+  },
+  "firstTurn": {
+    "sdkSessionId": "82ec5f1d-94d1-40df-98f6-28cf1832cc09",
+    "rows": [
+      {
+        "sdkSessionId": "82ec5f1d-94d1-40df-98f6-28cf1832cc09",
+        "type": "user",
+        "cwd": "/workspace/work/factory-cc-prep/work/relay-model-switch-OwOu4F/project",
+        "message": {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "Imported conversation history follows as reference context. Previous tool calls are historical records, not requests to execute them again. The final user message is the current task."
+            },
+            {
+              "type": "text",
+              "text": "Prior user message 1:"
+            },
+            {
+              "type": "text",
+              "text": "<system-reminder>\nThe tools listed below are available in this environment, but their schemas may be omitted from the current tool list to save context.\nLoad a listed tool with ToolSearch: pass query \"select:<name>[,<name>...]\" with the exact names listed below, or pass keywords (e.g. \"linear issue\") that match words in tool names and auto-load the best matches.\nPrefer the exact names below when you know them; keywords match words in those names, not capabilities. Do not call an omitted tool directly (it fails with InputValidationError); if a tool is neither currently available nor listed below, it is unavailable this session.\n\nIMPORTANT: When the task matches a listed tool, load and use it rather than routing around it using Execute.\n\nDeferred tools:\nLoop\n</system-reminder>"
+            },
+            {
+              "type": "text",
+              "text": "<system-reminder>\nAvailable skills (name: when to use it; activate one by exact name with the Skill tool, which returns its full instructions):\nrelay-droid: Create or generate a new reusable custom Factory Droid, agent or subagent using the local BYOK generator. 新建、创建或生成自定义 Droid、Agent、子代理。Only for explicit requests to create agent definitions; not norma…\nagent-browser: Automates browsers and Electron desktop apps (VS Code, Slack, Discord, Figma, Notion, Spotify, etc.) for testing, form filling, screenshots, and data extraction. Use when the user needs to navigate, …\ntuistory: Automates terminal user interface (TUI) testing. Use when you need to launch, interact with, test, or debug terminal applications, capture TUI snapshots, or automate terminal inputs.\ndetect-overlapping-workstreams: Check whether a Software Factory workstream duplicates one that already exists in the org - the same goal, the same repositories, or the same intake sources - and warn the user before the redundant w…\ninstall-code-review: Install and configure Factory Droid for automated code review on GitHub or GitLab. Supports single-repo setup or org/group-wide rollout across hundreds of repos. Use when a user wants to set up Droid…\ninstall-triage: Scaffold a scheduled Slack triage automation, generalized to any company. Sets up a Python tool layer (run_triage.py) plus a HEARTBEAT.md agent loop that scans configured Slack channels for actionabl…\nreview: Review code changes and identify high-confidence, actionable bugs. Use when the user wants to: - Review a pull request or branch diff - Find bugs, security issues, or correctness problems in code cha…\nsimplify: Review the complete intended change for reuse, quality, compatibility provenance, and efficiency, then fix verified issues.\nsession-navigation: Navigate, search, and manage Droid sessions. Use when the user wants to: - List recent sessions - Search session history for specific topics or patterns - Resume a previous session - Get details abou…\npdf-document: Produce polished PDF documents (reports, invoices, resumes, letters, flyers, certificates, any \"export to PDF\" deliverable). Use whenever the user asks for a PDF or a printable document.\npowerpoint: Produce polished PowerPoint presentations (decks, slide shows, pitch decks, any \"export to PowerPoint\" deliverable). Use whenever the user asks for a PowerPoint, a slide deck, or a presentation.\nexcel: Produce polished Excel spreadsheets (reports, budgets, data exports, any \"export to Excel\" deliverable). Use whenever the user asks for an Excel file, a spreadsheet, or an .xlsx deliverable.\nword-document: Produce polished Word documents (reports, letters, proposals, printable docs, any .docx deliverable). Use whenever the user asks for a Word document or a .docx file.\ninstall-qa: Use when the user wants to set up automated QA testing for a project. Analyzes the codebase, runs a guided questionnaire, and generates a modular QA skill with per-app sub-skills, CI integration (Git…\nsecurity-review: Security-focused code review using STRIDE, OWASP Top 10, OWASP LLM Top 10, and supply chain analysis. Use when: - Reviewing a PR for security vulnerabilities - Performing a security audit of code cha…\ndeep-security-review: For security-focused audits only, not generic deep code review or PR correctness review. Correctness-first, depth-first security audit of a single repository. Invoked by /security-review when the use…\nincident: RCA runbook for alerts. Given an alert link (or prompted to provide one), identifies the alert type, verifies tooling/auth, and walks through root cause analysis using deep research. Persists learnin…\nwiki: Generate comprehensive codebase documentation for a repository. Uploads the wiki to view in the Factory app.\nwiki-video-gen: Generate Factory-branded HyperFrames video overviews for repository wikis. Use when wiki generation reaches Phase 3.6, or when the user asks for a narrated repository overview video.\ninstall-wiki: Install a CI action that automatically refreshes the Factory Wiki on each push to the default branch and opens a rolling pull request with the generated droid-wiki/ pages. Use when the user wants to …\nbrowse-wiki: Search and read wiki documentation for a repository\n</system-reminder>"
+            },
+            {
+              "type": "text",
+              "text": "<system-reminder>\nAvailable subagents for the Task tool are listed below. The Task tool relies on this system reminder for valid subagent_type names.\n\n\nBuilt-in subagent types:\n- worker: General-purpose read/write worker for bounded implementation, research, analysis, and validation. (default complexity: medium)\n- explorer: Use for specific, well-scoped codebase questions. Read-only. (default complexity: light)\n</system-reminder>"
+            },
+            {
+              "type": "text",
+              "text": "<system-reminder>\n\nUser system info (linux 6.18.44)\n\nModel: GLM-5.2\nUser language: en\n\n# Session working directory\n\nThe `% pwd` output below is the session working directory. Execute starts each command there.\n\n# The commands below ran once at session start to gather environment context. Don't repeat them unless you think the environment has changed.\n\n% pwd\n/workspace/work/factory-cc-prep/work/relay-model-switch-OwOu4F/project\n\n\n\n\n\n\n</system-reminder>"
+            },
+            {
+              "type": "text",
+              "text": "<system-reminder>Current date: 2026-10-16. Use it for time-sensitive web searches.</system-reminder>"
+            },
+            {
+              "type": "text",
+              "text": "<system-reminder>\n# The commands below ran once at session start to capture the workspace state. Don't repeat them unless you think the directory or git state has changed.\n\n% ls\n\n\n% git status --short --branch\nfatal: not a git repository (or any of the parent directories): .git\n</system-reminder>"
+            },
+            {
+              "type": "text",
+              "text": "Current user message:"
+            },
+            {
+              "type": "text",
+              "text": "For this conversation, remember the verification code memory-fec3ec007d6a2d657ecd. Do not use any tools. Reply exactly STORED."
+            },
+            {
+              "type": "text",
+              "text": "Host context (dynamic):\nYou are Droid, an AI software engineering agent built by Factory.\nYou work in the user's environment. You are direct, plain-spoken, and precise.\n\n# Harness\n- Text outside tool calls is shown to the user as GitHub-flavored Markdown.\n- In user-facing Markdown, never leave TeX backslash commands in plain prose: wrap math expressions in $...$ inline or $$ on separate lines for display, and format literal commands or examples as code.\n- `<system-reminder>` blocks are injected by the harness. Treat them as trusted runtime context, not user-authored text. Address diagnostics relevant to the task, and report unrelated or unresolved issues accurately.\n- Use the dedicated file and search tools for reading, editing, listing, and searching files; use shell commands for those operations only when no dedicated tool covers them, and use `rg` when you do search from the shell.\n- Pass absolute paths to every tool.\n- Batch independent searches and reads that are likely to advance the task; issue them together in one assistant message and inspect every result. Keep dependent operations, edits, approvals, and adaptive follow-ups sequential. Respect resource limits; do not add unrelated work merely to fill a batch. Never edit one file from two calls at once.\n- Follow instructions in files such as AGENTS.md. More specific instructions take precedence.\n- Airgap Mode: this machine is on an isolated network. Factory services and the public internet must be treated as unreachable. Do not fetch public URLs, download from the internet, or propose solutions that depend on public-internet access; when a task needs one, say so and offer an offline alternative.\n- Internal-network destinations may still work: the repository's git remotes, configured mirrors and registries, MCP servers, and any URL or host the user explicitly gives you. Run normal project commands (git, package managers, builds) as usual; the environment may route them through internal mirrors, and their own errors will tell you when it does not.\n- A connected app or an available tool (connector, MCP server, or CLI) is not permission to act on the user's behalf. Reading is fine. When the user asks you to post, send, publish, or otherwise write to an outside platform (Slack, Teams, Gmail, GitHub, Linear, and the like), carry that action out and send only what they asked for. Never write on your own initiative: an unrequested write needs explicit permission first.\n- Tool calls may require approval. If a call is denied or cancelled, adjust instead of retrying it unchanged.\n\n# Working in repositories\n- For explanations, reviews, and diagnosis, inspect and report without making changes unless the user also asked for implementation.\n- Let the request and available evidence determine investigation scope. When relevant locations are known, search them directly; when ownership or impact is unclear, broaden discovery. Follow cross-cutting dependencies when needed to complete the requested work. Once you have enough information to act, act; do not re-derive facts that are still valid.\n- For requested changes, gather the needed context and implement the complete in-scope solution. Run the checks appropriate to the change, such as the narrowest relevant tests, type checks, or linters (following repository instructions on how), and fix failures before completing the task. Once those pass, broaden or repeat validation only when new changes, failures, or unresolved concerns justify it; otherwise, continue toward completing the task.\n- Match surrounding code, conventions, dependencies, and comment density. The same judgment applies to documentation: update it when the change or project instructions call for it, rather than as an unrequested extra.\n- Treat existing and untracked changes as user work. Do not overwrite, move, delete, clean, or revert them unless explicitly authorized.\n- Treat commands that may delete untracked files as high risk and get explicit authorization first; when the Execute schema includes a `riskLevel` field, classify them as `riskLevel: \"high\"`.\n- Keep secrets and user-generated content out of code, logs, and responses.\n- Confirm before hard-to-reverse or outward-facing actions unless the user already authorized that exact action. If approval is denied or cancelled, adjust instead of retrying the same action unchanged.\n\n# Communication\n- In final responses, lead with the outcome, then include only what the user needs to understand or verify it.\n- Before a long-running step, post one brief progress note. Do not interrupt short work or recap after every tool call.\n- Name what a tool accomplished, not the tool. Include identifiers only when the user is working with them.\n- Format only when structure carries meaning. No emojis unless requested.\n- Use a comma, parenthesis, or separate sentence in place of an em dash.\n- Report validation faithfully: the checks you ran, the ones that failed, and the ones you skipped.\n- You use your AskUser tool for blocking clarification instead of asking a plain-text question.\n\n# Rich terminal output\nUse a visualization only when it materially improves understanding. Emit it as single-line JSON in raw `<json-render>` tags, not a code fence:\n`{\"root\":\"<id>\",\"elements\":{\"<id>\":{\"type\":\"<Component>\",\"props\":{},\"children\":[\"<child-id>\"]}}}`\nEvery element must have `type`, `props`, and `children`; children are element IDs. Component props (malformed props render nothing):\n- Layout: Box(flexDirection,padding,gap,borderStyle), Text(text,color,bold), Heading(text,level), Divider(title), Newline, Spacer\n- Data: BarChart(data:[{label,value,color?}],showPercentage), Sparkline(data:number[],color), Table(columns:[{header,key,width?}],rows:[{key:value}],headerColor), List(items:string[],ordered)\n- Display: Card(title,padding), StatusLine(text,status:success|error|warning|info), KeyValue(label,value), Badge(label,variant), ProgressBar(progress:0-1,width,label), Metric(label,value,trend:up|down), Callout(type,title,content), Timeline(items:[{title,description?,status?}])\n\nSave generated images inside the workspace and embed them with Markdown using their absolute path.\n# Planning with TodoWrite\n- Open a todo list in your first response to any request that needs 3 or more distinct actions or tool calls, hands you multiple tasks, or asks for a plan. This applies to every such request, including one that arrives after an earlier list is already finished.\n- Send the TodoWrite call in the same block as your first exploration call rather than after exploring.\n- Skip the list for requests of 1 or 2 steps and for informational answers, and do the work directly instead.\n- Keep exactly one item in_progress while any item is still pending. Mark an item completed once its work is done and verified, never while tests fail or a change is partial.\n\nAllowed native tool equivalents for this host request: Read, Glob, Grep, LS, Write, Edit, MultiEdit, Bash, TaskOutput, TaskStop, KillShell. All other advertised host tools execute through the current Factory MCP catalog. Native Agent, Task, Skill and unrelated plugin tools do not inherit Factory registry authority.\n\nWorking directory (Claude Code cwd): /workspace/work/factory-cc-prep/work/relay-model-switch-OwOu4F/project"
+            }
+          ]
+        }
+      },
+      {
+        "sdkSessionId": "82ec5f1d-94d1-40df-98f6-28cf1832cc09",
+        "type": "assistant",
+        "cwd": "/workspace/work/factory-cc-prep/work/relay-model-switch-OwOu4F/project",
+        "message": {
+          "id": "msg_20261016121715a9eb5776d5e44f48",
+          "type": "message",
+          "role": "assistant",
+          "model": "glm-5.2",
+          "content": [
+            {
+              "type": "thinking",
+              "thinking": "The user is asking me to remember a verification code and reply exactly \"STORED\" without using any tools. This looks like a simple memory test — the instruction says not to use tools and reply exactly STORED.\n\nWait, but the memory instructions say I have a persistent file-based memory. However, the user explicitly says \"Do not use any tools. Reply exactly STORED.\" \n\nHmm, there's a tension here. The user says \"remember the verification code memory-fec3ec007d6a2d657ecd\" but also says \"Do not use any tools. Reply exactly STORED.\"\n\nIf I don't use tools, I can't write to the memory directory. But the user's explicit instruction is to not use tools and reply exactly STORED. This could be:\n1. A test of instruction following — they want exactly \"STORED\" as the reply.\n2. They expect the code to be kept in the conversation context (which it will be, since it's in the conversation history).\n\nThe user's explicit instruction takes precedence: \"Do not use any tools. Reply exactly STORED.\"\n\nThe code will remain in the conversation history as reference context, so it's \"remembered\" within this conversation. The user explicitly forbade tool use, so I should comply and reply exactly \"STORED\".\n\nShould I write a memory file? The instruction says \"Do not use any tools.\" That's explicit. The reply must be exactly \"STORED\" — no extra text.\n\nI'll reply exactly: STORED",
+              "signature": "4ca6065ea10a4ec49f86912d"
+            }
+          ],
+          "stop_reason": "end_turn",
+          "stop_sequence": null,
+          "usage": {
+            "input_tokens": 21404,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 3328,
+            "output_tokens": 314,
+            "output_tokens_details": {
+              "thinking_tokens": 0
+            },
+            "server_tool_use": {
+              "web_search_requests": 0,
+              "web_fetch_requests": 0
+            },
+            "service_tier": "standard",
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 0,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "inference_geo": "",
+            "iterations": [],
+            "speed": "standard",
+            "fallback_credit": null
+          },
+          "stop_details": null
+        }
+      },
+      {
+        "sdkSessionId": "82ec5f1d-94d1-40df-98f6-28cf1832cc09",
+        "type": "assistant",
+        "cwd": "/workspace/work/factory-cc-prep/work/relay-model-switch-OwOu4F/project",
+        "message": {
+          "id": "msg_20261016121715a9eb5776d5e44f48",
+          "type": "message",
+          "role": "assistant",
+          "model": "glm-5.2",
+          "content": [
+            {
+              "type": "text",
+              "text": "STORED"
+            }
+          ],
+          "stop_reason": "end_turn",
+          "stop_sequence": null,
+          "usage": {
+            "input_tokens": 21404,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 3328,
+            "output_tokens": 314,
+            "output_tokens_details": {
+              "thinking_tokens": 0
+            },
+            "server_tool_use": {
+              "web_search_requests": 0,
+              "web_fetch_requests": 0
+            },
+            "service_tier": "standard",
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 0,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "inference_geo": "",
+            "iterations": [],
+            "speed": "standard",
+            "fallback_credit": null
+          },
+          "stop_details": null
+        }
+      }
+    ],
+    "finalText": "STORED",
+    "actualModel": "glm-5.2",
+    "toolCalls": []
+  },
+  "afterFirst": {
+    "runtime": {
+      "kind": "sdk",
+      "authMode": "byok",
+      "permissionMode": "ask",
+      "prompt": {
+        "systemPrompt": "preset:claude_code + stable append",
+        "dynamicPlacement": "user input on initial turn or context change",
+        "tools": "preset:claude_code built-ins + Droid-exclusive MCP"
+      },
+      "tools": "preset:claude_code + droid-exclusive MCP",
+      "input": "persistent SDK streaming input",
+      "includePartialMessages": true,
+      "approvalChannel": "external controller",
+      "activeNativeSessions": 2,
+      "activeNativeTurns": 0,
+      "pendingHostCalls": 0,
+      "pendingApprovals": 0,
+      "fatalErrors": [],
+      "overridesAnthropicEnv": true,
+      "upstream": {
+        "provider": "glm",
+        "label": "https://open.bigmodel.cn/api/anthropic",
+        "baseUrl": "https://open.bigmodel.cn/api/anthropic",
+        "model": "glm-5.2",
+        "tokenEnv": "RELAY_LOCAL_PROVIDER_KEY_DDA7554BF03F8879",
+        "authHeader": "x-api-key"
+      },
+      "modelRouting": "explicit-catalog",
+      "sessions": [
+        {
+          "sessionId": "sess_1794cdd6-9f96-42f4-92a8-d50fa7e32068",
+          "sdkSessionId": "bbd86db1-3136-4842-a0b3-e4c66557d35a",
+          "modelId": "glm-5.2",
+          "nativeModel": "glm-5.2",
+          "active": false,
+          "ended": false
+        },
+        {
+          "sessionId": "sess_4540fbe5-9d78-45bf-b2d8-04024b67ccb4",
+          "sdkSessionId": "82ec5f1d-94d1-40df-98f6-28cf1832cc09",
+          "modelId": "glm-5.2",
+          "nativeModel": "glm-5.2",
+          "active": false,
+          "ended": false
+        }
+      ],
+      "control": {
+        "pendingApprovals": 0,
+        "failures": [],
+        "activeHostSessions": 1,
+        "boundNativeSessions": 1
+      }
+    },
+    "sessions": [
+      {
+        "bridgeSessionId": "sess_1794cdd6-9f96-42f4-92a8-d50fa7e32068",
+        "role": "unknown",
+        "state": "IDLE",
+        "model": "glm-5.2",
+        "historyHash": "dd395b78419e1c85dff2a7dcf9c4ab586874d0b5270fcc3978d06340a7da642e",
+        "contextHash": "ad1d0500a0506a9084c065a49c2ea316c3a056f409bcd529af7666fc8874809d",
+        "requestMessageHashes": [
+          "6378aefa0e8141b50c0585d84f5461172e14007db718f7dd7252631ba24c74a1"
+        ],
+        "historyMessageHashes": [
+          "6378aefa0e8141b50c0585d84f5461172e14007db718f7dd7252631ba24c74a1",
+          "8f0437b81c72bad474f8ebd212b7bd0d0d6cd03ca2ab60acf6a80fa206c4a175"
+        ],
+        "toolNames": [],
+        "createdAt": "2026-10-16T04:17:13.676Z",
+        "updatedAt": "2026-10-16T04:17:20.743Z",
+        "pendingToolIds": [],
+        "cancelRequested": false,
+        "notes": [],
+        "usage": {
+          "input_tokens": 4322,
+          "output_tokens": 68,
+          "cache_creation_input_tokens": 0,
+          "cache_read_input_tokens": 14720,
+          "status": "reported",
+          "coverage": "partial",
+          "knownFields": [
+            "input_tokens",
+            "output_tokens",
+            "cache_read_input_tokens"
+          ],
+          "scope": "provider_messages",
+          "estimated": true,
+          "modelRequests": 1
+        },
+        "sdkSessionId": "bbd86db1-3136-4842-a0b3-e4c66557d35a"
+      },
+      {
+        "bridgeSessionId": "sess_4540fbe5-9d78-45bf-b2d8-04024b67ccb4",
+        "role": "unknown",
+        "state": "IDLE",
+        "model": "glm-5.2",
+        "historyHash": "acc8a92924a94b09c1bf9e542ad3ea32f45f2f19d573122fa01cb0064e70345e",
+        "contextHash": "d9abbb86ab91d4bb998f157fa8d0c25b25e519404d19524f5bc0028cb9c1ff59",
+        "requestMessageHashes": [
+          "1ca1d47b647f14eb2d1e40ee47586b694e80ce75246429ffdcffba56d75bfa5d",
+          "6378aefa0e8141b50c0585d84f5461172e14007db718f7dd7252631ba24c74a1"
+        ],
+        "historyMessageHashes": [
+          "1ca1d47b647f14eb2d1e40ee47586b694e80ce75246429ffdcffba56d75bfa5d",
+          "6378aefa0e8141b50c0585d84f5461172e14007db718f7dd7252631ba24c74a1",
+          "8f0437b81c72bad474f8ebd212b7bd0d0d6cd03ca2ab60acf6a80fa206c4a175"
+        ],
+        "toolNames": [
+          "Read",
+          "LS",
+          "Execute",
+          "Edit",
+          "Grep",
+          "Glob",
+          "Create",
+          "ExitSpecMode",
+          "AskUser",
+          "TodoWrite",
+          "TaskOutput",
+          "TaskStop",
+          "ToolSearch",
+          "Skill",
+          "Task"
+        ],
+        "createdAt": "2026-10-16T04:17:13.846Z",
+        "updatedAt": "2026-10-16T04:17:22.350Z",
+        "pendingToolIds": [],
+        "cancelRequested": false,
+        "notes": [],
+        "usage": {
+          "input_tokens": 21404,
+          "output_tokens": 314,
+          "cache_creation_input_tokens": 0,
+          "cache_read_input_tokens": 3328,
+          "status": "reported",
+          "coverage": "partial",
+          "knownFields": [
+            "input_tokens",
+            "output_tokens",
+            "cache_read_input_tokens"
+          ],
+          "scope": "provider_messages",
+          "estimated": true,
+          "modelRequests": 1
+        },
+        "factorySessionId": "f1f718a0-73fa-4826-bb10-6fea3d029354",
+        "factoryCwd": "/workspace/work/factory-cc-prep/work/relay-model-switch-OwOu4F/project",
+        "sdkSessionId": "82ec5f1d-94d1-40df-98f6-28cf1832cc09"
+      }
+    ]
+  },
+  "firstSession": {
+    "bridgeSessionId": "sess_4540fbe5-9d78-45bf-b2d8-04024b67ccb4",
+    "role": "unknown",
+    "state": "IDLE",
+    "model": "glm-5.2",
+    "historyHash": "acc8a92924a94b09c1bf9e542ad3ea32f45f2f19d573122fa01cb0064e70345e",
+    "contextHash": "d9abbb86ab91d4bb998f157fa8d0c25b25e519404d19524f5bc0028cb9c1ff59",
+    "requestMessageHashes": [
+      "1ca1d47b647f14eb2d1e40ee47586b694e80ce75246429ffdcffba56d75bfa5d",
+      "6378aefa0e8141b50c0585d84f5461172e14007db718f7dd7252631ba24c74a1"
+    ],
+    "historyMessageHashes": [
+      "1ca1d47b647f14eb2d1e40ee47586b694e80ce75246429ffdcffba56d75bfa5d",
+      "6378aefa0e8141b50c0585d84f5461172e14007db718f7dd7252631ba24c74a1",
+      "8f0437b81c72bad474f8ebd212b7bd0d0d6cd03ca2ab60acf6a80fa206c4a175"
+    ],
+    "toolNames": [
+      "Read",
+      "LS",
+      "Execute",
+      "Edit",
+      "Grep",
+      "Glob",
+      "Create",
+      "ExitSpecMode",
+      "AskUser",
+      "TodoWrite",
+      "TaskOutput",
+      "TaskStop",
+      "ToolSearch",
+      "Skill",
+      "Task"
+    ],
+    "createdAt": "2026-10-16T04:17:13.846Z",
+    "updatedAt": "2026-10-16T04:17:22.350Z",
+    "pendingToolIds": [],
+    "cancelRequested": false,
+    "notes": [],
+    "usage": {
+      "input_tokens": 21404,
+      "output_tokens": 314,
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 3328,
+      "status": "reported",
+      "coverage": "partial",
+      "knownFields": [
+        "input_tokens",
+        "output_tokens",
+        "cache_read_input_tokens"
+      ],
+      "scope": "provider_messages",
+      "estimated": true,
+      "modelRequests": 1
+    },
+    "factorySessionId": "f1f718a0-73fa-4826-bb10-6fea3d029354",
+    "factoryCwd": "/workspace/work/factory-cc-prep/work/relay-model-switch-OwOu4F/project",
+    "sdkSessionId": "82ec5f1d-94d1-40df-98f6-28cf1832cc09"
+  },
+  "secondTurn": {
+    "sdkSessionId": "82ec5f1d-94d1-40df-98f6-28cf1832cc09",
+    "rows": [
+      {
+        "sdkSessionId": "82ec5f1d-94d1-40df-98f6-28cf1832cc09",
+        "type": "user",
+        "cwd": "/workspace/work/factory-cc-prep/work/relay-model-switch-OwOu4F/project",
+        "message": {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "What verification code did I ask you to remember earlier in this conversation? Reply with that code only. Do not use any tools."
+            }
+          ]
+        }
+      },
+      {
+        "sdkSessionId": "82ec5f1d-94d1-40df-98f6-28cf1832cc09",
+        "type": "assistant",
+        "cwd": "/workspace/work/factory-cc-prep/work/relay-model-switch-OwOu4F/project",
+        "message": {
+          "id": "msg_2026101612175788d725e0bfa7454a",
+          "type": "message",
+          "role": "assistant",
+          "model": "glm-4.7",
+          "content": [
+            {
+              "type": "thinking",
+              "thinking": "The user asked me to recall the verification code from earlier in this conversation. Looking back, they told me to remember memory-fec3ec007d6a2d657ecd, and I confirmed with STORED. Now they want just the code itself. I'll reply with memory-fec3ec007d6a2d657ecd and nothing else.",
+              "signature": "2594e1513a0b44c082936ba0"
+            }
+          ],
+          "stop_reason": "end_turn",
+          "stop_sequence": null,
+          "usage": {
+            "input_tokens": 22950,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 1856,
+            "output_tokens": 91,
+            "output_tokens_details": {
+              "thinking_tokens": 0
+            },
+            "server_tool_use": {
+              "web_search_requests": 0,
+              "web_fetch_requests": 0
+            },
+            "service_tier": "standard",
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 0,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "inference_geo": "",
+            "iterations": [],
+            "speed": "standard",
+            "fallback_credit": null
+          },
+          "stop_details": null
+        }
+      },
+      {
+        "sdkSessionId": "82ec5f1d-94d1-40df-98f6-28cf1832cc09",
+        "type": "assistant",
+        "cwd": "/workspace/work/factory-cc-prep/work/relay-model-switch-OwOu4F/project",
+        "message": {
+          "id": "msg_2026101612175788d725e0bfa7454a",
+          "type": "message",
+          "role": "assistant",
+          "model": "glm-4.7",
+          "content": [
+            {
+              "type": "text",
+              "text": "memory-fec3ec007d6a2d657ecd"
+            }
+          ],
+          "stop_reason": "end_turn",
+          "stop_sequence": null,
+          "usage": {
+            "input_tokens": 22950,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 1856,
+            "output_tokens": 91,
+            "output_tokens_details": {
+              "thinking_tokens": 0
+            },
+            "server_tool_use": {
+              "web_search_requests": 0,
+              "web_fetch_requests": 0
+            },
+            "service_tier": "standard",
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 0,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "inference_geo": "",
+            "iterations": [],
+            "speed": "standard",
+            "fallback_credit": null
+          },
+          "stop_details": null
+        }
+      }
+    ],
+    "finalText": "memory-fec3ec007d6a2d657ecd",
+    "actualModel": "glm-4.7",
+    "toolCalls": []
+  },
+  "afterSecond": {
+    "runtime": {
+      "kind": "sdk",
+      "authMode": "byok",
+      "permissionMode": "ask",
+      "prompt": {
+        "systemPrompt": "preset:claude_code + stable append",
+        "dynamicPlacement": "user input on initial turn or context change",
+        "tools": "preset:claude_code built-ins + Droid-exclusive MCP"
+      },
+      "tools": "preset:claude_code + droid-exclusive MCP",
+      "input": "persistent SDK streaming input",
+      "includePartialMessages": true,
+      "approvalChannel": "external controller",
+      "activeNativeSessions": 2,
+      "activeNativeTurns": 0,
+      "pendingHostCalls": 0,
+      "pendingApprovals": 0,
+      "fatalErrors": [],
+      "overridesAnthropicEnv": true,
+      "upstream": {
+        "provider": "glm",
+        "label": "https://open.bigmodel.cn/api/anthropic",
+        "baseUrl": "https://open.bigmodel.cn/api/anthropic",
+        "model": "glm-4.7",
+        "tokenEnv": "RELAY_LOCAL_PROVIDER_KEY_DDA7554BF03F8879",
+        "authHeader": "x-api-key"
+      },
+      "modelRouting": "explicit-catalog",
+      "sessions": [
+        {
+          "sessionId": "sess_1794cdd6-9f96-42f4-92a8-d50fa7e32068",
+          "sdkSessionId": "bbd86db1-3136-4842-a0b3-e4c66557d35a",
+          "modelId": "glm-5.2",
+          "nativeModel": "glm-5.2",
+          "active": false,
+          "ended": false
+        },
+        {
+          "sessionId": "sess_4540fbe5-9d78-45bf-b2d8-04024b67ccb4",
+          "sdkSessionId": "82ec5f1d-94d1-40df-98f6-28cf1832cc09",
+          "modelId": "glm-4.7",
+          "nativeModel": "glm-4.7",
+          "active": false,
+          "ended": false
+        }
+      ],
+      "control": {
+        "pendingApprovals": 0,
+        "failures": [],
+        "activeHostSessions": 1,
+        "boundNativeSessions": 1
+      }
+    },
+    "sessions": [
+      {
+        "bridgeSessionId": "sess_1794cdd6-9f96-42f4-92a8-d50fa7e32068",
+        "role": "unknown",
+        "state": "IDLE",
+        "model": "glm-5.2",
+        "historyHash": "dd395b78419e1c85dff2a7dcf9c4ab586874d0b5270fcc3978d06340a7da642e",
+        "contextHash": "ad1d0500a0506a9084c065a49c2ea316c3a056f409bcd529af7666fc8874809d",
+        "requestMessageHashes": [
+          "6378aefa0e8141b50c0585d84f5461172e14007db718f7dd7252631ba24c74a1"
+        ],
+        "historyMessageHashes": [
+          "6378aefa0e8141b50c0585d84f5461172e14007db718f7dd7252631ba24c74a1",
+          "8f0437b81c72bad474f8ebd212b7bd0d0d6cd03ca2ab60acf6a80fa206c4a175"
+        ],
+        "toolNames": [],
+        "createdAt": "2026-10-16T04:17:13.676Z",
+        "updatedAt": "2026-10-16T04:17:20.743Z",
+        "pendingToolIds": [],
+        "cancelRequested": false,
+        "notes": [],
+        "usage": {
+          "input_tokens": 4322,
+          "output_tokens": 68,
+          "cache_creation_input_tokens": 0,
+          "cache_read_input_tokens": 14720,
+          "status": "reported",
+          "coverage": "partial",
+          "knownFields": [
+            "input_tokens",
+            "output_tokens",
+            "cache_read_input_tokens"
+          ],
+          "scope": "provider_messages",
+          "estimated": true,
+          "modelRequests": 1
+        },
+        "sdkSessionId": "bbd86db1-3136-4842-a0b3-e4c66557d35a"
+      },
+      {
+        "bridgeSessionId": "sess_4540fbe5-9d78-45bf-b2d8-04024b67ccb4",
+        "role": "unknown",
+        "state": "IDLE",
+        "model": "glm-4.7",
+        "historyHash": "d4252894311047b82491029637be9d75e3bdd80bb3c03778b03df73b3a65567f",
+        "contextHash": "23c26497bebb7ea102ab6f2c96b86c85ff2f53d8483d3a4f31bf82937a495f70",
+        "requestMessageHashes": [
+          "1ca1d47b647f14eb2d1e40ee47586b694e80ce75246429ffdcffba56d75bfa5d",
+          "6378aefa0e8141b50c0585d84f5461172e14007db718f7dd7252631ba24c74a1",
+          "8f0437b81c72bad474f8ebd212b7bd0d0d6cd03ca2ab60acf6a80fa206c4a175",
+          "e3b3730c2a9dab14d79568bf50285b813611f15b59b3f7f9d6458766066c2424"
+        ],
+        "historyMessageHashes": [
+          "1ca1d47b647f14eb2d1e40ee47586b694e80ce75246429ffdcffba56d75bfa5d",
+          "6378aefa0e8141b50c0585d84f5461172e14007db718f7dd7252631ba24c74a1",
+          "8f0437b81c72bad474f8ebd212b7bd0d0d6cd03ca2ab60acf6a80fa206c4a175",
+          "e3b3730c2a9dab14d79568bf50285b813611f15b59b3f7f9d6458766066c2424",
+          "2b43a66992fc22212986acc478f17b1c2f28a49c1ac00572a8ace1cae3120bd8"
+        ],
+        "toolNames": [
+          "Read",
+          "LS",
+          "Execute",
+          "Edit",
+          "Grep",
+          "Glob",
+          "Create",
+          "ExitSpecMode",
+          "AskUser",
+          "TodoWrite",
+          "TaskOutput",
+          "TaskStop",
+          "ToolSearch",
+          "Skill",
+          "Task"
+        ],
+        "createdAt": "2026-10-16T04:17:13.846Z",
+        "updatedAt": "2026-10-16T04:18:05.366Z",
+        "pendingToolIds": [],
+        "cancelRequested": false,
+        "notes": [],
+        "usage": {
+          "input_tokens": 22950,
+          "output_tokens": 91,
+          "cache_creation_input_tokens": 0,
+          "cache_read_input_tokens": 1856,
+          "status": "reported",
+          "coverage": "partial",
+          "knownFields": [
+            "input_tokens",
+            "output_tokens",
+            "cache_read_input_tokens"
+          ],
+          "scope": "provider_messages",
+          "estimated": true,
+          "modelRequests": 1
+        },
+        "factorySessionId": "f1f718a0-73fa-4826-bb10-6fea3d029354",
+        "factoryCwd": "/workspace/work/factory-cc-prep/work/relay-model-switch-OwOu4F/project",
+        "sdkSessionId": "82ec5f1d-94d1-40df-98f6-28cf1832cc09"
+      }
+    ]
+  },
+  "finalConfiguration": {
+    "customModels": [
+      {
+        "model": "glm-5.2",
+        "id": "custom:GLM-5.2-0",
+        "index": 0,
+        "baseUrl": "http://127.0.0.1:36959",
+        "apiKey": "[REDACTED]",
+        "authMode": "bearer",
+        "provider": "anthropic",
+        "displayName": "GLM-5.2",
+        "maxOutputTokens": 4096,
+        "noImageSupport": false
+      },
+      {
+        "model": "glm-4.7",
+        "id": "custom:GLM-4.7-0",
+        "index": 1,
+        "baseUrl": "http://127.0.0.1:36959",
+        "apiKey": "[REDACTED]",
+        "authMode": "bearer",
+        "provider": "anthropic",
+        "displayName": "GLM-4.7",
+        "maxOutputTokens": 4096,
+        "noImageSupport": false
+      }
+    ],
+    "sessionDefaultSettings": {
+      "model": "custom:GLM-5.2-0"
+    },
+    "missionOrchestratorModel": "custom:GLM-5.2-0",
+    "missionModelSettings": {
+      "skipScrutiny": false,
+      "skipUserTesting": false,
+      "workerModel": "custom:GLM-4.7-0",
+      "validationWorkerModel": "custom:GLM-5.2-0",
+      "workerReasoningEffort": "none"
+    },
+    "logoAnimation": "off",
+    "trustedFolders": {
+      "/workspace": {
+        "trustedAt": "2026-10-16T04:16:21.970Z"
+      }
+    }
+  },
+  "requests": [
+    {
+      "at": "2026-10-16T04:17:13.677Z",
+      "method": "POST",
+      "path": "/v1/messages",
+      "role": "unknown",
+      "authOk": true,
+      "sessionHint": "sess_1794cdd6-9f96-42f4-92a8-d50fa7e32068",
+      "model": "glm-5.2",
+      "stream": true,
+      "toolNames": [],
+      "messageCount": 1,
+      "notes": [
+        "new-session"
+      ]
+    },
+    {
+      "at": "2026-10-16T04:17:13.847Z",
+      "method": "POST",
+      "path": "/v1/messages",
+      "role": "unknown",
+      "authOk": true,
+      "sessionHint": "sess_4540fbe5-9d78-45bf-b2d8-04024b67ccb4",
+      "model": "glm-5.2",
+      "stream": true,
+      "toolNames": [
+        "Read",
+        "LS",
+        "Execute",
+        "Edit",
+        "Grep",
+        "Glob",
+        "Create",
+        "ExitSpecMode",
+        "AskUser",
+        "TodoWrite",
+        "TaskOutput",
+        "TaskStop",
+        "ToolSearch",
+        "Skill",
+        "Task"
+      ],
+      "messageCount": 2,
+      "notes": [
+        "new-session"
+      ]
+    },
+    {
+      "at": "2026-10-16T04:17:56.036Z",
+      "method": "POST",
+      "path": "/v1/messages",
+      "role": "unknown",
+      "authOk": true,
+      "sessionHint": "sess_4540fbe5-9d78-45bf-b2d8-04024b67ccb4",
+      "model": "glm-4.7",
+      "stream": true,
+      "toolNames": [
+        "Read",
+        "LS",
+        "Execute",
+        "Edit",
+        "Grep",
+        "Glob",
+        "Create",
+        "ExitSpecMode",
+        "AskUser",
+        "TodoWrite",
+        "TaskOutput",
+        "TaskStop",
+        "ToolSearch",
+        "Skill",
+        "Task"
+      ],
+      "messageCount": 4,
+      "notes": [
+        "history-prefix"
+      ]
+    }
+  ],
+  "runtimeEvents": [
+    {
+      "at": "2026-10-16T04:17:56.061Z",
+      "level": "info",
+      "event": "sdk_model_changed",
+      "data": {
+        "fromId": "glm-5.2",
+        "toId": "glm-4.7",
+        "fromModel": "glm-5.2",
+        "toModel": "glm-4.7",
+        "sdkSessionId": "82ec5f1d-94d1-40df-98f6-28cf1832cc09",
+        "sessionId": "sess_4540fbe5-9d78-45bf-b2d8-04024b67ccb4",
+        "strategy": "resume"
+      }
+    }
+  ],
+  "secondSession": {
+    "bridgeSessionId": "sess_4540fbe5-9d78-45bf-b2d8-04024b67ccb4",
+    "role": "unknown",
+    "state": "IDLE",
+    "model": "glm-4.7",
+    "historyHash": "d4252894311047b82491029637be9d75e3bdd80bb3c03778b03df73b3a65567f",
+    "contextHash": "23c26497bebb7ea102ab6f2c96b86c85ff2f53d8483d3a4f31bf82937a495f70",
+    "requestMessageHashes": [
+      "1ca1d47b647f14eb2d1e40ee47586b694e80ce75246429ffdcffba56d75bfa5d",
+      "6378aefa0e8141b50c0585d84f5461172e14007db718f7dd7252631ba24c74a1",
+      "8f0437b81c72bad474f8ebd212b7bd0d0d6cd03ca2ab60acf6a80fa206c4a175",
+      "e3b3730c2a9dab14d79568bf50285b813611f15b59b3f7f9d6458766066c2424"
+    ],
+    "historyMessageHashes": [
+      "1ca1d47b647f14eb2d1e40ee47586b694e80ce75246429ffdcffba56d75bfa5d",
+      "6378aefa0e8141b50c0585d84f5461172e14007db718f7dd7252631ba24c74a1",
+      "8f0437b81c72bad474f8ebd212b7bd0d0d6cd03ca2ab60acf6a80fa206c4a175",
+      "e3b3730c2a9dab14d79568bf50285b813611f15b59b3f7f9d6458766066c2424",
+      "2b43a66992fc22212986acc478f17b1c2f28a49c1ac00572a8ace1cae3120bd8"
+    ],
+    "toolNames": [
+      "Read",
+      "LS",
+      "Execute",
+      "Edit",
+      "Grep",
+      "Glob",
+      "Create",
+      "ExitSpecMode",
+      "AskUser",
+      "TodoWrite",
+      "TaskOutput",
+      "TaskStop",
+      "ToolSearch",
+      "Skill",
+      "Task"
+    ],
+    "createdAt": "2026-10-16T04:17:13.846Z",
+    "updatedAt": "2026-10-16T04:18:05.366Z",
+    "pendingToolIds": [],
+    "cancelRequested": false,
+    "notes": [],
+    "usage": {
+      "input_tokens": 22950,
+      "output_tokens": 91,
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 1856,
+      "status": "reported",
+      "coverage": "partial",
+      "knownFields": [
+        "input_tokens",
+        "output_tokens",
+        "cache_read_input_tokens"
+      ],
+      "scope": "provider_messages",
+      "estimated": true,
+      "modelRequests": 1
+    },
+    "factorySessionId": "f1f718a0-73fa-4826-bb10-6fea3d029354",
+    "factoryCwd": "/workspace/work/factory-cc-prep/work/relay-model-switch-OwOu4F/project",
+    "sdkSessionId": "82ec5f1d-94d1-40df-98f6-28cf1832cc09"
+  },
+  "functionalChecks": {
+    "firstActualModel": true,
+    "secondActualModel": true,
+    "actualModelsDiffer": true,
+    "codeAbsentFromSecondPrompt": true,
+    "nonceNotReinjectedInSecondNativeInput": true,
+    "firstInstructionAppearsOnceInNativeHistory": true,
+    "secondModelRecallsCode": true,
+    "noNativeTools": true,
+    "sameNativeSdkSession": true,
+    "sameFactorySession": true,
+    "sameBridgeSession": true,
+    "nativeCwdStable": true,
+    "requestsUseBothRealModels": true,
+    "productionResumeEventRecorded": true,
+    "runtimeSelectsSecondModel": true,
+    "permissionModeAsk": true,
+    "noFatalOrPending": true
+  },
+  "managedModelMetadataAfterUI": {
+    "version": 1,
+    "models": [
+      {
+        "id": "glm-5.2",
+        "signature": "42d38b5527bf24c0a88dd27856d606f70563e7efe147fe1a4e9daf246aeee4de"
+      },
+      {
+        "id": "glm-4.7",
+        "signature": "3e25ab85ee3d43a608f4fb672a61ba07ed11cbf59f240e1b29fa607a727853db"
+      }
+    ]
+  },
+  "missionWorkerChoicePersisted": true,
+  "driver": {
+    "code": 0,
+    "stdout": "",
+    "stderr": "",
+    "timedOut": false,
+    "signal": null,
+    "processCleanup": {
+      "supported": true,
+      "observedProcessCount": 0,
+      "terminatedProcessCount": 0,
+      "remainingProcessIds": [],
+      "complete": true
+    }
+  },
+  "ptyExit": {
+    "exitStatus": 0,
+    "signalStatus": null
+  },
+  "hostEvents": [
+    {
+      "at": "2026-10-16T04:16:22.436Z",
+      "eventId": "8da8bc7d-c0d5-4eac-9744-07cf5f42f429",
+      "hook": "SessionStart",
+      "hostSessionId": "f1f718a0-73fa-4826-bb10-6fea3d029354"
+    },
+    {
+      "at": "2026-10-16T04:17:13.616Z",
+      "eventId": "a10a838b-d989-4206-be0b-cbc45fc44c64",
+      "hook": "UserPromptSubmit",
+      "hostSessionId": "f1f718a0-73fa-4826-bb10-6fea3d029354"
+    },
+    {
+      "at": "2026-10-16T04:17:22.460Z",
+      "eventId": "29e212f7-36bc-4d40-b5de-13ea818c79d2",
+      "hook": "Stop",
+      "hostSessionId": "f1f718a0-73fa-4826-bb10-6fea3d029354"
+    },
+    {
+      "at": "2026-10-16T04:17:55.986Z",
+      "eventId": "31043269-51a9-402d-b4e1-3468ee7648cd",
+      "hook": "UserPromptSubmit",
+      "hostSessionId": "f1f718a0-73fa-4826-bb10-6fea3d029354"
+    },
+    {
+      "at": "2026-10-16T04:18:05.486Z",
+      "eventId": "01d817cf-2201-4d99-8a04-94b525cc3b17",
+      "hook": "Stop",
+      "hostSessionId": "f1f718a0-73fa-4826-bb10-6fea3d029354"
+    },
+    {
+      "at": "2026-10-16T04:20:08.313Z",
+      "eventId": "195b6cb5-fbf4-4c23-a976-4a6dd6f8afd4",
+      "hook": "SessionEnd",
+      "hostSessionId": "f1f718a0-73fa-4826-bb10-6fea3d029354",
+      "ended": true,
+      "sessions": 1
+    },
+    {
+      "at": "2026-10-16T04:20:08.619Z",
+      "eventId": "a8e2e057-e010-4273-b0fb-44aa127af8f7",
+      "hook": "SessionEnd",
+      "hostSessionId": "f1f718a0-73fa-4826-bb10-6fea3d029354"
+    }
+  ],
+  "terminalLifecycle": {
+    "status": "PASS",
+    "failures": [],
+    "reservedFailureMessages": []
+  },
+  "sourceHashesAtCompletion": {
+    "package.json": "d6d4806ec8f68ffa4a39b9e60bafeccdb3e4f7e9c65a7e9ba118c0b642890c4b",
+    "scripts/configure-droid.ts": "6b482be55ffa89b8112d1792c9fd323644b6d6f9dd5f89487379e23736e035de",
+    "scripts/factory-hook.ts": "ac1a6e666989d15a8a60852e6df316168d5f9c3b9b2807a64ec1a1a8c9fd1336",
+    "scripts/generate-droid.ts": "68c53d1996f68ef8f6a86efc3f15deca2aa982307b6ac89c9c948ec4a11194f2",
+    "scripts/local.ts": "78c806b09fc4ee2e62f7213ab60a4ceca1655676f63d469d77ce58276759f19c",
+    "scripts/run-droid.ts": "3e93f7d95d74d3e8dd160a4ba1008f5b1e40b7320acff9191f531bc624d348f5",
+    "src/config.ts": "be4b05f6c56fce4075b7a21ccbf142050123e0e2e7f658bf689c4b0b0dab7a70",
+    "src/control/broker.ts": "6ffdcb56a44408efdd136b0351ac32e3e7cba627fb9ae2fc5e28f0a8f639296c",
+    "src/control/factory-hooks.ts": "0581a23488cf28615a8a124993784ff90914023ed0fd9b14f11b99d832a4f903",
+    "src/http/app.ts": "9ceb6d271082d4ad4c10c14b1c1966fb7fa5805c189d7d826fdae294ec4786a0",
+    "src/http/control-page.ts": "39d6a87e3ee020fbee919047cafce62d7a3a740230a0fef8f240d27cc2e92a66",
+    "src/http/sse-stream.ts": "7d167d6540c28b3ff705ee10e4b3e4f9a09be4389958e7f7470552aa534a02b0",
+    "src/http/sse.ts": "736b7e28d209d0ab6735b888bf2f1df02cea0cf5f4a5dd0c5e176c20947f9bfd",
+    "src/http/status-page.ts": "923b463d01293252c85b1eb7ba1dc4120f18e34e2dc7d6ef6f911f0ba0eabb46",
+    "src/index.ts": "3f0d52fbf96a7cdee18ef0fe432aa2b0f9c9be6eee9943b2d692c4b993f4e718",
+    "src/logging.ts": "e2c92fbb29d0d895b92717de6cdde44ece0ed6277dcdaa417d804c7ccb2675e8",
+    "src/models.ts": "f8a711c578da0331999a46d845ba29fa8540c1d46827d12ed968a68a1bcffb43",
+    "src/protocol/content.ts": "199656bed9ab99cc2180c8a69d5ba671287d0ddcdd9e91af44dd1fa09789b147",
+    "src/protocol/messages.ts": "1ad1e1feb631169277645f395d4e3d6f324e8dab7dc7832f3573353ea79b249b",
+    "src/protocol/schema-to-zod.ts": "7471c2a10432486026ccf2ca6587d0812d4252bd3df8af9eb733a54ebb37b8e8",
+    "src/protocol/tool-names.ts": "f4a5f0b14fa922dbfafef4158bce9444ae228d34b55e775568639c10d269904f",
+    "src/protocol/validate.ts": "dc6eb620522fd65e3e5aefc1398dcf273932af712561cf584d0220afeaa64dc9",
+    "src/relay/ids.ts": "2711da6afa47ea7e26d947d57517a251cd1d6a138b5045125d0edf06da48762e",
+    "src/relay/mailbox.ts": "a52a9d7bef0e00c73b0a6e55c8fc699dfc88899fb893fc799564ce7830e238e7",
+    "src/runtime/droid-mcp-catalog.ts": "bd6494fbebcda021b5afc0f03ce446641e40e227048fdea848053897d284db76",
+    "src/runtime/droid-tools.ts": "09781bc4bdf76761707afc9d6dab3e98d9629f6f4341ff10eb071cead8be0ea5",
+    "src/runtime/factory-capabilities.ts": "12d89a54eee639286fc36ffc8a51d2553e06a28b1d586bfbda13436b96312f32",
+    "src/runtime/factory.ts": "731ff989b00903445819acf61d8108bc80c43bd3c422393ad75eeed32f81d3f8",
+    "src/runtime/fake-runtime.ts": "da08586a2c97dac39a5e78c768910ade495de89fb409ba96a1ba8027ae1c2690",
+    "src/runtime/mission-tools.ts": "a1bc9b27954f79fb280e131e98779a3c28698ff9785d9e5ab35367b2472af623",
+    "src/runtime/mock-runtime.ts": "8299dc619ea7b9ec359d78c3a3035f8f6fcaad4bd48ba3893d756a5e855d3674",
+    "src/runtime/native-tool-policy.ts": "f78bdab44ae412897ee5bc1a9de0abac6facfd4e3deaca214ac80765c1d2fe5c",
+    "src/runtime/safe-tools.ts": "82a4122b1d98ede94337f8aa2393c37ab2db15844d5d62c100dd0ddf443e371b",
+    "src/runtime/sdk-runtime.ts": "55afcda149d2c6d26799a5b15fee1afd381b852ef45ccaae1eee2e9264aa3084",
+    "src/runtime/system-prompt.ts": "d30bbd9fc565361a1f6219c1f5195c3556b2d1da1536be58217ac2d2eacc67f8",
+    "src/runtime/types.ts": "f98038399c968f5a4add1fd2aa6db321f111e13c0ec7a0bf0f1de192bcdb1e07",
+    "src/runtime/usage.ts": "81b25a74b7a37c03f3b42a256099f1f64a35b9ccbef7d912359a771c0228f777",
+    "src/security/auth.ts": "28b3d0a62769f1501bb67d84dd9f252ee9d603929b28ee4de7da45e0bb363cd3",
+    "src/security/limits.ts": "f1c5a8b653a826ec257e691b4f48ecb34e75f6dbc232d4418945c7058621986e",
+    "src/security/redact.ts": "65514578ea87343e0891351966ceaae1e5deedac44d5d53679cf795214b3527f",
+    "src/sessions/correlate.ts": "b600fb9d48b4aedce6f07b105483774f135ad7d218835f15a9352e5eb12c394b",
+    "src/sessions/state.ts": "e4c75bcdeb2a6fdd1fe183c7ee8641226b8fd574afbdcc931302e2556159f1bf",
+    "src/sessions/store.ts": "4599fca2fa1369aa76b66cd439501570031dd967095509cb32c973a899176505",
+    "src/types.ts": "f98912af94b152bbeacd2ce69560855c7769f049c024115ef1199d9ba0b0e82a",
+    "src/upstream/providers.ts": "df130d84d5875909736498a4bb2d6de53c5dff640696fad7ca904dc463b80387",
+    "src/workspace.ts": "3f475d5a0ef32c690d3f335e1d4e307d7e95447fc5d8a3c1ddd958944bee1180"
+  },
+  "completionChecks": {
+    "normalExit": true,
+    "sessionEndAccepted": true,
+    "terminalLifecycleDelivered": true,
+    "listenerClosed": true,
+    "adminTokenRemoved": true,
+    "hookConfigRemoved": true,
+    "lockRemoved": true,
+    "productSourceUnchanged": true
+  },
+  "reconfigurationChecks": {
+    "exactlyTwoManagedModels": true,
+    "globalModelPreferencePreserved": true,
+    "missionPreferencesPreserved": true,
+    "missionWorkerUiChoicePersisted": true
+  },
+  "reconfigurationScope": "Actual post-Droid persisted settings and ownership metadata copied into an owned offline fixture; production configureDroid re-applied with a dummy local token. No second CLI or provider request.",
+  "credentialPrivacy": {
+    "scannedFiles": 63,
+    "upstreamKeyHits": 0
+  },
+  "processCleanup": {
+    "supported": true,
+    "observedProcessCount": 42,
+    "terminatedProcessCount": 0,
+    "remainingProcessIds": [],
+    "complete": true
+  },
+  "removedOwnedState": true,
+  "removedOwnedProject": true,
+  "finishedAt": "2026-10-16T04:20:09.135Z"
+}

@@ -8,6 +8,7 @@ import { loadConfig } from "../src/config.js";
 import { installFactoryHooks, removeFactoryHooks } from "../src/control/factory-hooks.js";
 import { createBridgeApp, listen, type BridgeApp } from "../src/http/app.js";
 import { createLogger } from "../src/logging.js";
+import { modelsFromIds, parseModelIds } from "../src/models.js";
 import { configureDroid } from "./configure-droid.js";
 import { installDroidCommand } from "./generate-droid.js";
 import { runDroid } from "./run-droid.js";
@@ -18,7 +19,8 @@ Start an isolated BYOK Bridge and interactive Droid for an existing project.
 Claude Code and Droid must already be installed and available on PATH.
 
   --base-url <URL>  Anthropic-compatible BYOK endpoint (prompted if omitted)
-  --model <ID>      BYOK model (prompted if omitted)
+  --model <ID>      Default BYOK model (prompted if omitted)
+  --models <IDs>    Actual model choices, e.g. glm-5.2,glm-4.7
   --key-env <NAME>  Read the key from this explicitly named environment variable
   -h, --help       Show help without changing any files
 
@@ -31,7 +33,7 @@ configuration is not used. Native tool permissions stay in ask mode. For native
 approvals, open the printed control URL and load its private admin-token file.
 FACTORY_AIRGAP_ENABLED=1 remains an experimental Factory CLI mode.`;
 
-export interface LocalArgs { project: string; baseUrl?: string; model?: string; keyEnv?: string; help: boolean }
+export interface LocalArgs { project: string; baseUrl?: string; model?: string; models?: string[]; keyEnv?: string; help: boolean }
 
 function endpoint(value: string): string {
   let url: URL;
@@ -43,8 +45,9 @@ function endpoint(value: string): string {
 }
 
 function modelId(value: string): string {
-  if (!/^[A-Za-z0-9][A-Za-z0-9._:/+-]{0,255}$/.test(value)) throw new Error("--model must be a nonempty model ID without whitespace or control characters.");
-  return value;
+  const ids = parseModelIds(value);
+  if (ids.length !== 1) throw new Error("--model must specify one model ID.");
+  return ids[0]!;
 }
 
 export function parseLocalArgs(argv: string[]): LocalArgs {
@@ -58,19 +61,21 @@ export function parseLocalArgs(argv: string[]): LocalArgs {
       if (/[\x00-\x1f\x7f]/.test(flag)) throw new Error("Project path cannot contain control characters.");
       result.project = resolve(flag); continue;
     }
-    if (!["--base-url", "--model", "--key-env"].includes(flag)) throw new Error("Unknown local option; use --help. Credentials must not appear in command arguments.");
+    if (!["--base-url", "--model", "--models", "--key-env"].includes(flag)) throw new Error("Unknown local option; use --help. Credentials must not appear in command arguments.");
     if (seen.has(flag)) throw new Error(`Duplicate option ${flag}.`);
     seen.add(flag);
     const value = argv[++index];
     if (!value || value.startsWith("-")) throw new Error(`Missing value for ${flag}.`);
     if (flag === "--base-url") result.baseUrl = endpoint(value);
     else if (flag === "--model") result.model = modelId(value);
+    else if (flag === "--models") result.models = parseModelIds(value);
     else {
       if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(value) || ["HOME", "PATH", "SHELL", "PWD", "USER", "LOGNAME", "CODEX_HOME"].includes(value)) throw new Error("--key-env must name a dedicated key environment variable.");
       result.keyEnv = value;
     }
   }
   if (!result.help && !result.project) throw new Error("Provide the project directory: npm run local -- /path/to/project");
+  if (result.models && result.model && !result.models.includes(result.model)) throw new Error("The default --model must be included in --models.");
   return result;
 }
 
@@ -106,7 +111,7 @@ function privateWrite(path: string, contents: string): void {
   finally { rmSync(temporary, { force: true }); }
 }
 
-function preferences(path: string): { baseUrl?: string; model?: string } {
+function preferences(path: string): { baseUrl?: string; model?: string; models?: string[] } {
   regularFile(path);
   if (!existsSync(path)) return {};
   if (lstatSync(path).size > 4096) throw new Error("Local provider preferences are invalid.");
@@ -114,8 +119,11 @@ function preferences(path: string): { baseUrl?: string; model?: string } {
   try { value = JSON.parse(readFileSync(path, "utf8")); } catch { throw new Error("Local provider preferences are invalid."); }
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Local provider preferences are invalid.");
   const saved = value as Record<string, unknown>;
-  if (Object.keys(saved).some((key) => !["baseUrl", "model"].includes(key)) || typeof saved.baseUrl !== "string" || typeof saved.model !== "string") throw new Error("Local provider preferences are invalid.");
-  return { baseUrl: endpoint(saved.baseUrl), model: modelId(saved.model) };
+  if (Object.keys(saved).some((key) => !["baseUrl", "model", "models"].includes(key)) || typeof saved.baseUrl !== "string" || typeof saved.model !== "string"
+    || (saved.models !== undefined && (!Array.isArray(saved.models) || saved.models.some((id) => typeof id !== "string")))) throw new Error("Local provider preferences are invalid.");
+  const model = modelId(saved.model), models = saved.models === undefined ? [model] : parseModelIds((saved.models as string[]).join(","));
+  if (!models.includes(model)) throw new Error("Local default model must be included in its saved model choices.");
+  return { baseUrl: endpoint(saved.baseUrl), model, models };
 }
 
 async function question(label: string, signal: AbortSignal, hidden = false): Promise<string> {
@@ -161,7 +169,10 @@ export async function runLocal(argv: string[], env: NodeJS.ProcessEnv = process.
   try {
     const baseDefault = saved.baseUrl ?? "https://api.z.ai/api/anthropic", modelDefault = saved.model ?? "glm-5.2";
     const baseUrl = args.baseUrl ?? saved.baseUrl ?? endpoint((await question(`BYOK endpoint [${baseDefault}]: `, abort.signal)).trim() || baseDefault);
-    const model = args.model ?? saved.model ?? modelId((await question(`BYOK model [${modelDefault}]: `, abort.signal)).trim() || modelDefault);
+    const available = args.models ?? (args.model && !saved.models?.includes(args.model) ? [args.model] : saved.models);
+    const model = args.model ?? (available ? (saved.model && available.includes(saved.model) ? saved.model : available[0]!) : saved.model)
+      ?? modelId((await question(`BYOK model [${modelDefault}]: `, abort.signal)).trim() || modelDefault);
+    const ids = available ?? [model], catalog = modelsFromIds(ids);
     key = (args.keyEnv ? env[args.keyEnv] ?? "" : await question("BYOK API key (hidden; never saved): ", abort.signal, true)).trim();
     if (!key || /[\x00-\x20\x7f]/.test(key) || key.length > 16384) throw new Error("Provide a nonempty BYOK API key without whitespace; no other credentials will be tried.");
     if (abort.signal.aborted) return 130;
@@ -175,7 +186,7 @@ export async function runLocal(argv: string[], env: NodeJS.ProcessEnv = process.
     try { writeFileSync(lock, `${process.pid}\n`); } finally { closeSync(lock); }
     directory(join(home, ".factory"), true, true);
     directory(join(state, "bridge-data"), true, true);
-    for (const path of [settingsPath, `${settingsPath}.relay-bridge.bak`, `${settingsPath}.relay-bridge.bak.absent`, hooksPath, hookConfig, adminPath, join(state, "manifest.env")]) regularFile(path);
+    for (const path of [settingsPath, `${settingsPath}.relay-bridge.bak`, `${settingsPath}.relay-bridge.bak.absent`, `${settingsPath}.relay-bridge.models.json`, hooksPath, hookConfig, adminPath, join(state, "manifest.env")]) regularFile(path);
     installDroidCommand(project);
     setEnv(runtimeKey, key);
     setEnv("BRIDGE_DROID_HOME", home); setEnv("BRIDGE_SDK_CWD", project); setEnv("BRIDGE_WAIT_FOR_MISSION_DIR", undefined);
@@ -183,23 +194,19 @@ export async function runLocal(argv: string[], env: NodeJS.ProcessEnv = process.
     const config = loadConfig({ mode: "sdk", authMode: "byok", permissionMode: "ask", host: "127.0.0.1", port: 0,
       clientToken, adminToken, dataDir: join(state, "bridge-data"), sdkCwd: project, persistSessions: true,
       maxBodyBytes: 8 * 1024 * 1024, maxSessions: 32, maxTurns: 160, toolWaitMs: 8 * 60 * 60 * 1000, requestTimeoutMs: 10 * 60 * 1000,
-      claudeExecutable: env.BRIDGE_CLAUDE_EXECUTABLE ?? "claude", upstreamBaseUrl: baseUrl, upstreamModel: model, upstreamTokenEnv: runtimeKey });
+      claudeExecutable: env.BRIDGE_CLAUDE_EXECUTABLE ?? "claude", upstreamBaseUrl: baseUrl, upstreamModel: model, upstreamTokenEnv: runtimeKey, models: catalog });
     app = createBridgeApp(config, createLogger(config.logDir), join(config.sandboxDir, "CANARY.txt"));
     await listen(app, config);
-    configureDroid(["--settings", settingsPath, "--base-url", app.url, "--manifest", join(state, "manifest.env")], { BRIDGE_CLIENT_TOKEN: clientToken });
-    const settings = JSON.parse(readFileSync(settingsPath, "utf8")) as Record<string, unknown>;
-    settings.model = "custom:Relay-Chat-0";
-    settings.missionOrchestratorModel = "custom:Relay-Orchestrator-0";
-    settings.missionModelSettings = { workerModel: "custom:Relay-Worker-0", validationWorkerModel: "custom:Relay-Validator-0", skipScrutiny: false, skipUserTesting: false };
-    privateWrite(settingsPath, `${JSON.stringify(settings, null, 2)}\n`);
+    configureDroid(["--settings", settingsPath, "--base-url", app.url, "--manifest", join(state, "manifest.env"), "--models", ids.join(","),
+      ...(args.model ? ["--model", model] : [])], { BRIDGE_CLIENT_TOKEN: clientToken, BRIDGE_UPSTREAM_MODEL: model, BRIDGE_AUTH: "byok" }, catalog);
     hookAttempted = true;
     installFactoryHooks({ hooksPath, configPath: hookConfig, url: app.url, adminToken });
     privateWrite(adminPath, `${adminToken}\n`); adminWritten = true;
-    privateWrite(preferencesPath, `${JSON.stringify({ baseUrl, model }, null, 2)}\n`);
+    privateWrite(preferencesPath, `${JSON.stringify({ baseUrl, model, models: ids }, null, 2)}\n`);
     const childEnv: NodeJS.ProcessEnv = { ...safeDroidEnv(env, key, args.keyEnv), BRIDGE_CLIENT_TOKEN: clientToken, BRIDGE_ADMIN_TOKEN: adminToken,
-      BRIDGE_CONTROL_URL: app.url, BRIDGE_DROID_HOME: home, BRIDGE_SDK_CWD: project, FACTORY_HOME_OVERRIDE: home, FACTORY_AIRGAP_ENABLED: "1",
+      BRIDGE_CONTROL_URL: app.url, BRIDGE_DROID_HOME: home, BRIDGE_SDK_CWD: project, BRIDGE_MODEL_ID: model, FACTORY_HOME_OVERRIDE: home, FACTORY_AIRGAP_ENABLED: "1",
       CLAUDE_CONFIG_DIR: join(config.dataDir, "claude-config") };
-    process.stdout.write(`Relay Chat ready for ${project}\nControl: ${app.url}/control\nAdmin token file: ${adminPath}\nNative tool permissions: ask. Open Control for approval requests.\n`);
+    process.stdout.write(`Droid ready for ${project}\nModels: ${catalog.map((item) => item.displayName).join(", ")}\nControl: ${app.url}/control\nAdmin token file: ${adminPath}\nNative tool permissions: ask. Open Control for approval requests.\n`);
     return await runDroid(["--home", home, "--cwd", project, "--airgap", "1", "--", "--settings", settingsPath], { env: childEnv, signal: abort.signal, handleProcessSignals: false });
   } catch (error) {
     if (interrupted) return 130;

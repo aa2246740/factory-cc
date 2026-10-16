@@ -59,17 +59,73 @@ export function resolveSession(
   sessions: SessionRecord[],
   headers: Headers,
   request: MessagesRequest,
-  options: { cwd?: string; hostSessionId?: string } = {},
+  options: { cwd?: string; hostSessionId?: string; allowModelSwitch?: boolean } = {},
 ): { match?: SessionRecord; reason: string } {
   const explicit = explicitSessionId(headers, request);
   const contextHash = sessionContextHash(headers, request, options.cwd);
+  const switchingModel = (session: SessionRecord): boolean => options.allowModelSwitch === true && session.model !== request.model;
+  // Keep the persisted fingerprint format: old checkpoints include their model.
+  // Substitute only that field when checking a requested switch, so role,
+  // workspace and thinking configuration remain part of session identity.
+  const compatibleContextHash = (session: SessionRecord): string => switchingModel(session)
+    ? sessionContextHash(headers, { ...request, model: session.model }, options.cwd)
+    : contextHash;
+  const assertSelectedContext = (session: SessionRecord, authenticatedThinkingChange = false): void => {
+    if (!authenticatedThinkingChange) assertContext(session, compatibleContextHash(session), headers, request);
+    if (!switchingModel(session)) return;
+    if (session.state === "FAILED" || session.state === "CANCELLED" || session.hostEnded === "terminal" || session.hostEnded === "interrupted") {
+      throw new BridgeError(409, "session_unavailable", "This session has ended; start a new session.");
+    }
+    if (session.state !== "IDLE" || session.pendingToolIds.length > 0 || session.cancelRequested) {
+      throw new BridgeError(409, "model_switch_busy", "Model changes require an idle session with no pending tool calls; finish the current turn first.");
+    }
+  };
   const results = collectToolResults(request.messages);
   const owners = sessions.filter((session) => results.some((result) => session.pendingToolIds.includes(result.tool_use_id)));
+  const incoming = historyMessageHashes(request.messages);
   const workspace = options.cwd ? canonicalWorkspacePath(options.cwd) : undefined;
+  // Factory changes its request-side thinking default when a model is selected.
+  // The native runtime does not forward that host setting. Permit this metadata
+  // difference only after a complete history or authenticated retained turn
+  // proves continuity, and independently prove every other fingerprint field.
+  // Explicit IDs alone and tool-free auxiliary requests do not get this exception.
+  // contextHash currently contains only model/role/cwd/thinking. Any future
+  // execution field added there must also be checked here before this exception.
+  const canChangeHostThinking = (session: SessionRecord): boolean => switchingModel(session)
+    && Boolean(session.contextHash) && Boolean(options.hostSessionId) && Boolean(workspace)
+    && session.factorySessionId === options.hostSessionId && session.factoryCwd !== undefined
+    && canonicalWorkspacePath(session.factoryCwd) === workspace
+    && session.role === roleFromHeaders(headers)
+    && session.toolNames.length > 0 && Boolean(request.tools?.length);
+  const historyContextMatches = (session: SessionRecord): boolean => session.contextHash === compatibleContextHash(session)
+    || canChangeHostThinking(session);
   const inHostScope = (session: SessionRecord): boolean => !options.hostSessionId || !session.factorySessionId
     || (session.factorySessionId === options.hostSessionId && (!workspace || (session.factoryCwd !== undefined && canonicalWorkspacePath(session.factoryCwd) === workspace)));
   const assertHostScope = (session: SessionRecord): void => {
     if (!inHostScope(session)) throw new BridgeError(409, "cross_host_session", "The native session belongs to another Factory session.");
+  };
+  const hasCompleteHistory = (session: SessionRecord): boolean => {
+    const completed = session.historyMessageHashes;
+    // A common opening prompt cannot identify a conversation: require its
+    // completed response too, followed by a new user turn.
+    return Boolean(completed && completed.length > 0 && completed.length < incoming.length
+      && request.messages[completed.length]?.role === "user"
+      && completed.every((fingerprint, index) => incoming[index] === fingerprint));
+  };
+  const tail = incoming.slice(-3);
+  const tailMessages = request.messages.slice(-3);
+  const hasAuthenticatedTail = (session: SessionRecord): boolean => {
+    const completed = session.historyMessageHashes;
+    return Boolean(options.hostSessionId && workspace && request.tools?.length
+      && tail.length === 3 && tailMessages[0]?.role === "user" && tailMessages[1]?.role === "assistant"
+      && tailMessages[2]?.role === "user"
+      && !asBlocks(tailMessages[2].content).some((block) => block.type === "tool_result")
+      && session.factorySessionId === options.hostSessionId && session.factoryCwd !== undefined
+      && canonicalWorkspacePath(session.factoryCwd) === workspace
+      && session.sdkSessionId && session.toolNames.length > 0
+      && completed !== undefined && completed.length >= 2
+      && session.requestMessageHashes?.at(-1) === completed.at(-2)
+      && completed.at(-2) === tail[0] && completed.at(-1) === tail[1]);
   };
 
   if (explicit) {
@@ -81,7 +137,7 @@ export function resolveSession(
     }
     if (hit) {
       assertHostScope(hit);
-      assertContext(hit, contextHash, headers, request);
+      assertSelectedContext(hit, canChangeHostThinking(hit) && (hasCompleteHistory(hit) || hasAuthenticatedTail(hit)));
       return { match: hit, reason: "explicit-id" };
     }
     // An explicit new conversation may intentionally share the same prompt.
@@ -91,55 +147,45 @@ export function resolveSession(
   if (owners.length > 1) throw ambiguous("tool results belong to multiple sessions");
   if (owners[0]) {
     assertHostScope(owners[0]);
-    assertContext(owners[0], contextHash, headers, request);
+    assertSelectedContext(owners[0]);
     return { match: owners[0], reason: "tool-use-id" };
   }
 
-  const incoming = historyMessageHashes(request.messages);
   const candidates = sessions.filter((session) => {
     if (!inHostScope(session)) return false;
     if (session.state === "CANCELLED" || session.state === "FAILED" || session.hostEnded === "terminal" || session.hostEnded === "interrupted") return false;
-    if (session.contextHash !== contextHash) return false;
-    const completed = session.historyMessageHashes;
-    // Require the actual previous response as well as its request. Matching a
-    // common opening user prompt alone can attach a new conversation to another
-    // user's active process. Appended messages must start a user turn.
-    return completed && completed.length > 0 && completed.length < incoming.length
-      && request.messages[completed.length]?.role === "user"
-      && completed.every((fingerprint, index) => incoming[index] === fingerprint);
+    if (!historyContextMatches(session)) return false;
+    return hasCompleteHistory(session);
   });
   if (candidates.length > 1) throw ambiguous("multiple transcripts match this history; supply X-Bridge-Session");
-  if (candidates[0]) return { match: candidates[0], reason: "history-prefix" };
+  if (candidates[0]) {
+    assertSelectedContext(candidates[0], canChangeHostThinking(candidates[0]));
+    return { match: candidates[0], reason: "history-prefix" };
+  }
 
   // Factory compaction rewrites the prefix but retains the last complete turn.
   // Reuse native history only with both authenticated host ownership and an
   // exact user/assistant tail, followed by exactly one new user message. Neither
   // a summary-looking prompt nor a host ID alone can establish continuity.
   // Tool-free auxiliary requests remain independent, even if they copy context.
-  const tail = incoming.slice(-3);
-  const tailMessages = request.messages.slice(-3);
-  const authenticatedTail = options.hostSessionId && workspace && request.tools?.length
-    && tail.length === 3 && tailMessages[0]?.role === "user" && tailMessages[1]?.role === "assistant"
-    && tailMessages[2]?.role === "user"
-    && !asBlocks(tailMessages[2].content).some((block) => block.type === "tool_result")
-    ? sessions.filter((session) => {
-      const completed = session.historyMessageHashes;
-      return session.factorySessionId === options.hostSessionId && session.factoryCwd !== undefined
-        && canonicalWorkspacePath(session.factoryCwd) === workspace
-        && session.contextHash === contextHash && session.state === "IDLE" && !session.cancelRequested
-        && session.hostEnded !== "terminal" && session.hostEnded !== "interrupted"
-        && Boolean(session.sdkSessionId) && session.pendingToolIds.length === 0 && session.toolNames.length > 0
-        && completed !== undefined && completed.length >= 2
-        && session.requestMessageHashes?.at(-1) === completed.at(-2)
-        && completed.at(-2) === tail[0] && completed.at(-1) === tail[1];
-    }) : [];
+  const authenticatedTail = sessions.filter((session) => {
+      return hasAuthenticatedTail(session) && historyContextMatches(session)
+        // Identify a genuine model-switch continuation before rejecting busy
+        // state; filtering it out would silently fork the native conversation.
+        && (switchingModel(session) || (session.state === "IDLE" && !session.cancelRequested && session.pendingToolIds.length === 0))
+        && session.state !== "FAILED" && session.state !== "CANCELLED"
+        && session.hostEnded !== "terminal" && session.hostEnded !== "interrupted";
+    });
   if (authenticatedTail.length > 1) throw ambiguous("multiple authenticated Factory transcripts match the retained turn; supply X-Bridge-Session");
-  if (authenticatedTail[0]) return { match: authenticatedTail[0], reason: "authenticated-history-tail" };
+  if (authenticatedTail[0]) {
+    assertSelectedContext(authenticatedTail[0], canChangeHostThinking(authenticatedTail[0]));
+    return { match: authenticatedTail[0], reason: "authenticated-history-tail" };
+  }
 
   const activeDuplicates = sessions.filter((session) => {
     if (!inHostScope(session)) return false;
     if (session.state !== "NEW" && session.state !== "GENERATING" && session.state !== "RESUMING") return false;
-    if (session.contextHash && session.contextHash !== contextHash) return false;
+    if (session.contextHash && session.contextHash !== compatibleContextHash(session)) return false;
     const pending = session.requestMessageHashes;
     return pending
       ? pending.length === incoming.length && pending.every((fingerprint, index) => incoming[index] === fingerprint)

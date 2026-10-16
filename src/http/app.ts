@@ -18,6 +18,7 @@ import { statusPageHtml } from "./status-page.js";
 import { messageId } from "../protocol/messages.js";
 import { ControlBroker } from "../control/broker.js";
 import { controlPageHtml, controlPageHeaders } from "./control-page.js";
+import { configuredModels, resolveRequestModel } from "../models.js";
 
 export interface BridgeApp {
   server: Server;
@@ -147,6 +148,13 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
       json(res, 501, apiError(501, "not_supported_error", "token counting is estimated-only; refusing to fake exact counts").error);
       return;
     }
+    if (req.method === "GET" && (path === "/v1/models" || path === "/v1/models/")) {
+      requireClientToken(req.headers, config.clientToken);
+      const data = (config.models === undefined ? [] : configuredModels(config))
+        .map((model) => ({ id: model.id, display_name: model.displayName, type: "model" }));
+      json(res, 200, { data, has_more: false, first_id: data[0]?.id ?? null, last_id: data.at(-1)?.id ?? null });
+      return;
+    }
     if (req.method === "POST" && (path === "/v1/messages" || path === "/v1/messages/")) {
       await handleMessages(req, res);
       return;
@@ -172,12 +180,21 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
       throw new BridgeError(503, "bridge_shutting_down", "bridge is shutting down");
     }
     const parsed = parseMessagesRequest(raw);
+    // Reject stale menu entries before binding a host or creating a session.
+    if (config.models !== undefined) {
+      if (!configuredModels(config).some((model) => model.id === parsed.model)) {
+        throw new BridgeError(400, "unknown_model", "This model is not configured. Select a model from this Bridge's model list.");
+      }
+      if (config.mode === "sdk") resolveRequestModel(config, parsed.model);
+    }
     const role = roleFromHeaders(headers);
     const cwd = process.env.BRIDGE_SDK_CWD || header(headers, "x-bridge-cwd") || config.sdkCwd;
     const prepared = control.prepareRequest(parsed, cwd);
     const request = prepared.request;
     const contextHash = sessionContextHash(headers, request, cwd);
-    const resolved = resolveSession(store.list(), headers, request, { cwd, hostSessionId: control.hostSessionId(prepared.binding) });
+    const resolved = resolveSession(store.list(), headers, request, {
+      cwd, hostSessionId: control.hostSessionId(prepared.binding), allowModelSwitch: config.models !== undefined,
+    });
     const session = resolved.match
       ?? store.create({
         role,
@@ -198,6 +215,7 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
       throw new BridgeError(409, "session_unavailable", "this session has ended; start a new session");
     }
     const owner = Symbol(sessionId);
+    const previous = structuredClone(session);
     activeRequests.set(sessionId, owner);
     try {
       store.setState(sessionId, session.state === "WAITING_DROID_TOOL" ? "RESUMING" : "GENERATING");
@@ -295,7 +313,18 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
       else json(res, 200, turn.response);
     } catch (error) {
       completed = true;
-      if (store.get(sessionId)?.state !== "CANCELLED" && !(error instanceof BridgeError && error.code === "host_session_ended")) store.setState(sessionId, "FAILED");
+      const current = store.get(sessionId);
+      const recoverableSwitch = error instanceof BridgeError && error.status === 409
+        && ["model_switch_busy", "model_switch_requires_persistence", "model_switch_unavailable"].includes(error.code);
+      if (recoverableSwitch) {
+        if (!cancellationRequested && current && !current.cancelRequested && current.hostEnded === undefined
+          && (current.state === "GENERATING" || current.state === "RESUMING")) {
+          // Restore only our pending request, never a later host lifecycle event.
+          store.update(sessionId, { ...previous, hostEnded: previous.hostEnded });
+        }
+      } else if (current?.state !== "CANCELLED" && !(error instanceof BridgeError && error.code === "host_session_ended")) {
+        store.setState(sessionId, "FAILED");
+      }
       if (writer) writer.fail(error);
       else throw error;
     } finally {
