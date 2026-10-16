@@ -4,7 +4,7 @@ import { dirname, isAbsolute, join, resolve } from "node:path";
 import { createRequire } from "node:module";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-export const FACTORY_HOOK_EVENTS = ["SessionStart", "PostToolUse", "SessionEnd", "Notification", "Stop", "SubagentStop"] as const;
+export const FACTORY_HOOK_EVENTS = ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "SessionEnd", "Notification", "Stop", "SubagentStop"] as const;
 const MAX_HOOK_BYTES = 4 * 1024 * 1024;
 const CONFIG_FLAG = "--factory-cc-hook-config";
 
@@ -157,7 +157,9 @@ export async function forwardFactoryHook(
       if (!object(result) || result.ok !== true || (result.additionalContext !== undefined && typeof result.additionalContext !== "string")) throw new HookRejectedError();
       if (result.bindingToken !== undefined && (typeof result.bindingToken !== "string" || !/^[a-f0-9]{64}$/.test(result.bindingToken))) throw new HookRejectedError();
       return event.hook_event_name === "SessionStart"
-        ? { ...(typeof result.additionalContext === "string" ? { additionalContext: result.additionalContext } : {}), ...(typeof result.bindingToken === "string" ? { bindingToken: result.bindingToken } : {}) } : {};
+        ? { ...(typeof result.additionalContext === "string" ? { additionalContext: result.additionalContext } : {}), ...(typeof result.bindingToken === "string" ? { bindingToken: result.bindingToken } : {}) }
+        : event.hook_event_name === "UserPromptSubmit" && typeof result.additionalContext === "string"
+          ? { additionalContext: result.additionalContext } : {};
     } catch (error) {
       if (error instanceof HookRejectedError || attempt === 2) throw new Error("Factory lifecycle event was not accepted by the bridge");
     }
@@ -201,7 +203,7 @@ export async function factoryHookMain(argv = process.argv.slice(2)): Promise<voi
     if (!result.bindingToken || !result.additionalContext) throw new Error("Factory SessionStart received no generation binding");
     persistFactoryBinding(event, result.bindingToken);
   }
-  if (result.additionalContext) process.stdout.write(`${JSON.stringify({ hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: result.additionalContext }, suppressOutput: true })}\n`);
+  if (result.additionalContext) process.stdout.write(`${JSON.stringify({ hookSpecificOutput: { hookEventName: object(event) ? event.hook_event_name : "SessionStart", additionalContext: result.additionalContext }, suppressOutput: true })}\n`);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {

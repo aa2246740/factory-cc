@@ -1,0 +1,267 @@
+{
+  "suite": "verification-skill-chat",
+  "status": "PASS",
+  "startedAt": "2026-10-15T23:16:59.055Z",
+  "feature": "chat",
+  "scope": [
+    "official Droid production wrapper",
+    "native Read/Write",
+    "official --session-id resume",
+    "native usage",
+    "owned cleanup"
+  ],
+  "exclusions": [
+    "every Factory model-using path",
+    "Mission",
+    "real Anthropic subscription",
+    "provider billing",
+    "compaction"
+  ],
+  "authentication": {
+    "mode": "isolated BYOK",
+    "subscriptionCredentialsRead": false,
+    "provider": "glm",
+    "label": "https://open.bigmodel.cn/api/anthropic",
+    "baseUrl": "https://open.bigmodel.cn/api/anthropic",
+    "model": "glm-5.2",
+    "tokenEnv": "READINESS_MODEL_API_KEY",
+    "authHeader": "x-api-key"
+  },
+  "versions": {
+    "sdk": "0.3.300",
+    "node": "v24.19.0",
+    "droid": "0.242.0",
+    "claude": "2.1.300 (Claude Code)"
+  },
+  "actions": [
+    {
+      "action": "chat-turn-1",
+      "startedAt": "2026-10-15T23:16:59.190Z",
+      "completedAt": "2026-10-15T23:17:17.396Z",
+      "command": [
+        "npm",
+        "run",
+        "run-droid",
+        "--",
+        "--home",
+        "/tmp/relay-e2e-home-JBNfb3",
+        "--cwd",
+        "/tmp/relay-e2e-ws-rJexxP",
+        "--airgap",
+        "1",
+        "--timeout",
+        "600000",
+        "--out",
+        "/tmp/relay-verify-private-iplAhj/wrapper-turn-1.json",
+        "--",
+        "exec",
+        "--settings",
+        "/tmp/relay-e2e-home-JBNfb3/.factory/settings.json",
+        "--output-format",
+        "json",
+        "-m",
+        "relay-chat",
+        "--auto",
+        "high",
+        "Use native Read to read input.json in the current directory. Use native Write to create result.json with exactly the JSON object {\"nonce\": <nonce read from input.json>, \"sum\": <a+b from input.json>}. Do not modify input.json. Remember the phrase RELAY_MEMORY_7d8e38b883c3e795feb6 for the next message; do not put that phrase in any file. After the file is written reply exactly VERIFY_WRITE_OK."
+      ],
+      "stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"duration_ms\":17716,\"num_turns\":1,\"result\":\"[Read] Read /tmp/relay-e2e-ws-rJexxP/input.json\\n\\n[Write] Write /tmp/relay-e2e-ws-rJexxP/result.json\\nVERIFY_WRITE_OK\",\"session_id\":\"dd40b4b4-b7f3-4108-a6d5-2d6c02f08529\",\"usage\":{\"input_tokens\":0,\"output_tokens\":302,\"cache_read_input_tokens\":47104,\"cache_creation_input_tokens\":0,\"factory_credits\":0,\"ttft_ms\":7529}}\n",
+      "stderr": "",
+      "exitCode": 0
+    },
+    {
+      "action": "chat-turn-2",
+      "startedAt": "2026-10-15T23:17:17.400Z",
+      "completedAt": "2026-10-15T23:17:23.521Z",
+      "command": [
+        "npm",
+        "run",
+        "run-droid",
+        "--",
+        "--home",
+        "/tmp/relay-e2e-home-JBNfb3",
+        "--cwd",
+        "/tmp/relay-e2e-ws-rJexxP",
+        "--airgap",
+        "1",
+        "--timeout",
+        "600000",
+        "--out",
+        "/tmp/relay-verify-private-iplAhj/wrapper-turn-2.json",
+        "--",
+        "exec",
+        "--settings",
+        "/tmp/relay-e2e-home-JBNfb3/.factory/settings.json",
+        "--output-format",
+        "json",
+        "-m",
+        "relay-chat",
+        "--auto",
+        "high",
+        "--session-id",
+        "dd40b4b4-b7f3-4108-a6d5-2d6c02f08529",
+        "What exact phrase did I ask you to remember in the previous message? Reply with only that phrase. Do not use tools or read files."
+      ],
+      "stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"duration_ms\":5546,\"num_turns\":2,\"result\":\"RELAY_MEMORY_7d8e38b883c3e795feb6\",\"session_id\":\"dd40b4b4-b7f3-4108-a6d5-2d6c02f08529\",\"usage\":{\"input_tokens\":0,\"output_tokens\":367,\"cache_read_input_tokens\":70080,\"cache_creation_input_tokens\":0,\"factory_credits\":0,\"ttft_ms\":5135}}\n",
+      "stderr": "",
+      "exitCode": 0
+    }
+  ],
+  "doctor": {
+    "at": "2026-10-15T23:16:59.189Z",
+    "status": "PASS",
+    "readOnly": true,
+    "modelAvailability": "NOT_TESTED_BY_DOCTOR",
+    "checks": {
+      "healthIsSdk": true,
+      "authenticatedSdkByokRuntime": true,
+      "adminReadWorks": true,
+      "unauthenticatedAdminReadDenied": true,
+      "ownedDirectoriesMatch": true,
+      "privateFactorySettings": true,
+      "privateHookCredential": true,
+      "isolatedClaudeConfig": true
+    },
+    "runtime": {
+      "kind": "sdk",
+      "authMode": "byok",
+      "permissionMode": "bypass",
+      "prompt": {
+        "systemPrompt": "preset:claude_code + stable append",
+        "dynamicPlacement": "user input on initial turn or context change",
+        "tools": "preset:claude_code built-ins + Droid-exclusive MCP"
+      },
+      "tools": "preset:claude_code + droid-exclusive MCP",
+      "input": "persistent SDK streaming input",
+      "includePartialMessages": true,
+      "approvalChannel": "external controller",
+      "activeNativeSessions": 0,
+      "activeNativeTurns": 0,
+      "pendingHostCalls": 0,
+      "pendingApprovals": 0,
+      "fatalErrors": [],
+      "overridesAnthropicEnv": true,
+      "upstream": {
+        "selected": false,
+        "authMode": "byok"
+      },
+      "control": {
+        "pendingApprovals": 0,
+        "failures": [],
+        "activeHostSessions": 0,
+        "boundNativeSessions": 0
+      }
+    },
+    "sessionCount": 0
+  },
+  "checks": {
+    "firstDroidSucceeded": true,
+    "independentFileResult": true,
+    "inputUnchanged": true,
+    "nativeReadCompleted": true,
+    "nativeWriteCompleted": true,
+    "secondDroidSucceeded": true,
+    "sameFactorySession": true,
+    "sameNativeSession": true,
+    "bothHostSessionsEndedResumably": true,
+    "providerUsageReported": true,
+    "continuationUsageReported": true,
+    "runtimeDrainedBeforeCleanup": true,
+    "noPendingStoredTools": true
+  },
+  "nativeUsage": {
+    "input_tokens": 21277,
+    "output_tokens": 367,
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 70080,
+    "cache_hit_ratio": null,
+    "requests": 4,
+    "requestCountKnown": true,
+    "status": "reported",
+    "source": "provider_messages",
+    "coverage": "partial",
+    "eventRows": 17
+  },
+  "continuationUsage": {
+    "input_tokens": 56,
+    "output_tokens": 65,
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 22976,
+    "status": "reported",
+    "coverage": "partial",
+    "knownFields": [
+      "input_tokens",
+      "output_tokens",
+      "cache_read_input_tokens"
+    ],
+    "scope": "provider_messages",
+    "estimated": true,
+    "modelRequests": 1
+  },
+  "cacheInterpretation": "Provider-message counters inside native Claude Code; missing fields remain unknown. A cache read is evidence of reuse, not an Anthropic subscription billing guarantee.",
+  "sessionIds": {
+    "factory": "dd40b4b4-b7f3-4108-a6d5-2d6c02f08529",
+    "bridge": "sess_ed24d43e-8b27-467b-8855-656a14da28bc",
+    "native": "bf1b4869-5235-43b1-ad54-59b434fed47e"
+  },
+  "cleanup": {
+    "at": "2026-10-15T23:17:23.530Z",
+    "processes": {
+      "supported": true,
+      "observedProcessCount": 17,
+      "terminatedProcessCount": 0,
+      "remainingProcessIds": [],
+      "complete": true
+    },
+    "removed": [
+      {
+        "kind": "relay-e2e-home-<run>",
+        "removed": true
+      },
+      {
+        "kind": "relay-e2e-ws-<run>",
+        "removed": true
+      },
+      {
+        "kind": "relay-verify-private-<run>",
+        "removed": true
+      }
+    ],
+    "errors": [],
+    "evidenceRetention": [
+      {
+        "artifact": "doctor.json",
+        "exists": true,
+        "sha256": "b4aa12569f62617ac8c79cf2e47928dbc0a2f0fff962f25e8329efa3ca48bd37",
+        "unchangedAfterCleanup": true
+      },
+      {
+        "artifact": "action-1.json",
+        "exists": true,
+        "sha256": "268206a0cfea6d1a01c779c0e962823a38c99e986273c901b2d97f6013a6bd1e",
+        "unchangedAfterCleanup": true
+      },
+      {
+        "artifact": "after-first.json",
+        "exists": true,
+        "sha256": "9c6d004c3246a26c5d63d78a1e613cee59acf86074c5687ebd8cf511ad8e511c",
+        "unchangedAfterCleanup": true
+      },
+      {
+        "artifact": "action-2.json",
+        "exists": true,
+        "sha256": "438b92c15831ce987cde7d1d58b2aa00519f6e6f5fcf0d23fa9366067a0fc8f7",
+        "unchangedAfterCleanup": true
+      },
+      {
+        "artifact": "snapshot.json",
+        "exists": true,
+        "sha256": "40da75a987d6c7076e1833f8cc4e0e44a22283594b4c4a5343294171f68203e8",
+        "unchangedAfterCleanup": true
+      }
+    ],
+    "complete": true
+  },
+  "finishedAt": "2026-10-15T23:17:23.530Z",
+  "evidenceDirectory": "/workspace/work/factory-cc-prep/repo/evidence/local/verify-relay-2026-10-15T23-16-59-054Z-3f4cca"
+}

@@ -1,0 +1,1070 @@
+{
+  "suite": "native-schema-revision",
+  "status": "FAIL",
+  "startedAt": "2026-10-16T01:03:01.632Z",
+  "scope": "Real unmodified Claude Code and official SDK with isolated BYOK; synthetic host MCP fixture, not a real Factory command",
+  "authentication": {
+    "mode": "isolated BYOK",
+    "subscriptionCredentialsRead": false,
+    "provider": "glm",
+    "label": "https://open.bigmodel.cn/api/anthropic",
+    "baseUrl": "https://open.bigmodel.cn/api/anthropic",
+    "model": "glm-5.2",
+    "tokenEnv": "READINESS_MODEL_API_KEY",
+    "authHeader": "x-api-key"
+  },
+  "checks": {
+    "turn1ExactHostArguments": true,
+    "turn1Completion": true,
+    "turn1FirstInvocationCorrectRevision": true,
+    "turn2ExactHostArguments": true,
+    "turn2Completion": true,
+    "turn2FirstInvocationCorrectRevision": true,
+    "turn3ExactHostArguments": false,
+    "turn3Completion": true,
+    "turn3FirstInvocationCorrectRevision": true,
+    "sameNativeSession": true,
+    "oneNativeQuery": false,
+    "schemaRevisionVisibilityConfirmed": true,
+    "noUnnecessaryCatalogRefresh": false,
+    "stableTurnReportsCacheReads": true,
+    "noPendingHostCalls": true
+  },
+  "turn1NativeCalls": [
+    {
+      "name": "mcp__droid__FactoryRevisionProbe",
+      "id": "call_0bb15297e1ad4bb4a3dd843b",
+      "input": {
+        "value": "before"
+      }
+    }
+  ],
+  "turn2NativeCalls": [
+    {
+      "name": "mcp__droid__droid_revision_FactoryRevisionP_7c871423e01b805bdffbd5ba8f893a50",
+      "id": "call_11eae9076e9a4b24969b2f61",
+      "input": {
+        "value": 137,
+        "items": [
+          "a",
+          "b"
+        ]
+      }
+    }
+  ],
+  "turn3NativeCalls": [
+    {
+      "name": "mcp__droid__droid_revision_FactoryRevisionP_7c871423e01b805bdffbd5ba8f893a50",
+      "id": "call_6e081755da62411d8e1273f3",
+      "input": {
+        "items": [
+          "a",
+          "b"
+        ],
+        "value": 138
+      }
+    }
+  ],
+  "usage": {
+    "input_tokens": 9410,
+    "output_tokens": 434,
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 104512,
+    "cache_hit_ratio": null,
+    "requests": 6,
+    "requestCountKnown": true,
+    "status": "reported",
+    "source": "provider_messages",
+    "coverage": "partial",
+    "eventRows": 23
+  },
+  "runtimeBeforeCleanup": {
+    "kind": "sdk",
+    "authMode": "byok",
+    "permissionMode": "bypass",
+    "prompt": {
+      "systemPrompt": "preset:claude_code + stable append",
+      "dynamicPlacement": "user input on initial turn or context change",
+      "tools": "preset:claude_code built-ins + Droid-exclusive MCP"
+    },
+    "tools": "preset:claude_code + droid-exclusive MCP",
+    "input": "persistent SDK streaming input",
+    "includePartialMessages": true,
+    "approvalChannel": "unavailable: fail closed",
+    "activeNativeSessions": 1,
+    "activeNativeTurns": 0,
+    "pendingHostCalls": 0,
+    "pendingApprovals": 0,
+    "fatalErrors": [],
+    "overridesAnthropicEnv": true,
+    "upstream": {
+      "provider": "glm",
+      "label": "https://open.bigmodel.cn/api/anthropic",
+      "baseUrl": "https://open.bigmodel.cn/api/anthropic",
+      "model": "glm-5.2",
+      "tokenEnv": "READINESS_MODEL_API_KEY",
+      "authHeader": "x-api-key"
+    }
+  },
+  "cleanup": {
+    "processes": {
+      "supported": true,
+      "observedProcessCount": 1,
+      "terminatedProcessCount": 0,
+      "remainingProcessIds": [],
+      "complete": true
+    },
+    "directoriesRemoved": [
+      true,
+      true
+    ]
+  },
+  "runtimeAfterCleanup": {
+    "kind": "sdk",
+    "authMode": "byok",
+    "permissionMode": "bypass",
+    "prompt": {
+      "systemPrompt": "preset:claude_code + stable append",
+      "dynamicPlacement": "user input on initial turn or context change",
+      "tools": "preset:claude_code built-ins + Droid-exclusive MCP"
+    },
+    "tools": "preset:claude_code + droid-exclusive MCP",
+    "input": "persistent SDK streaming input",
+    "includePartialMessages": true,
+    "approvalChannel": "unavailable: fail closed",
+    "activeNativeSessions": 0,
+    "activeNativeTurns": 0,
+    "pendingHostCalls": 0,
+    "pendingApprovals": 0,
+    "fatalErrors": [],
+    "overridesAnthropicEnv": true,
+    "upstream": {
+      "provider": "glm",
+      "label": "https://open.bigmodel.cn/api/anthropic",
+      "baseUrl": "https://open.bigmodel.cn/api/anthropic",
+      "model": "glm-5.2",
+      "tokenEnv": "READINESS_MODEL_API_KEY",
+      "authHeader": "x-api-key"
+    }
+  },
+  "finishedAt": "2026-10-16T01:03:43.609Z",
+  "evidenceFormat": "native-schema-summary-v1",
+  "rawEvidence": {
+    "path": "evidence/local/native-schema/native-schema-validation-2026-10-16.json",
+    "sha256": "613b88c094a1793950aa14e24f8b34c46bb41906f4c74d29254ad5e452cc8f6d",
+    "bytes": 765244,
+    "lines": 26106,
+    "gitIgnored": true,
+    "availableInThisWorkspace": true
+  },
+  "fixtureCatalog": {
+    "source": "scripts/verify-native-schema.ts",
+    "sourceSha256": "6186942467f9014aaf33972b85dde2be1cd4246419a7642362925f94a8a35ff2",
+    "provenance": "Fixture definitions from the runner source; native call names/arguments and visibility events below are recorded run observations. This is not an upstream wire capture.",
+    "v1": {
+      "name": "FactoryRevisionProbe",
+      "description": "FactoryRevisionProbe version one: accepts a string value and returns a fixture receipt. Call only once per user request.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "value"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "v2": {
+      "name": "FactoryRevisionProbe",
+      "description": "FactoryRevisionProbe version two: the original string version is retired. Accepts an integer value at least 100 and exactly two items. Call only once per user request.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "value": {
+            "type": "integer",
+            "minimum": 100
+          },
+          "items": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 2
+          }
+        },
+        "required": [
+          "value",
+          "items"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "turns": [
+    {
+      "label": "turn-1-tool",
+      "sdkSessionId": "ba313851-c7cd-4cbe-952d-a57796a1b7d6",
+      "response": {
+        "id": "msg_bc7327df4f5e4bdea8c3997538151af5",
+        "type": "message",
+        "role": "assistant",
+        "model": "relay-chat",
+        "content": [
+          {
+            "type": "tool_use",
+            "id": "call_0bb15297e1ad4bb4a3dd843b",
+            "name": "FactoryRevisionProbe",
+            "input": {
+              "value": "before"
+            }
+          }
+        ],
+        "stop_reason": "tool_use",
+        "stop_sequence": null,
+        "usage": {
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cache_creation_input_tokens": 0,
+          "cache_read_input_tokens": 0,
+          "status": "reported",
+          "coverage": "partial",
+          "knownFields": [
+            "input_tokens",
+            "output_tokens"
+          ],
+          "scope": "provider_messages",
+          "estimated": true,
+          "modelRequests": 1
+        }
+      },
+      "fixtureSchemaVersion": "v1",
+      "catalogChangeExpected": false,
+      "nativeToolNamesObserved": [
+        "mcp__droid__FactoryRevisionProbe"
+      ],
+      "eventDelta": {
+        "cumulativeEventCount": 149,
+        "newEventCount": 149,
+        "countsByType": {
+          "sdk_query_start": 1,
+          "command_lifecycle": 2,
+          "system": 66,
+          "stream_event": 75,
+          "usage": 3,
+          "assistant": 2
+        },
+        "omittedMetadataOnlyEventCount": 145,
+        "events": [
+          {
+            "at": "2026-10-16T01:03:01.814Z",
+            "type": "sdk_query_start",
+            "data": {
+              "resumed": false,
+              "droidMcp": [
+                "FactoryRevisionProbe"
+              ]
+            }
+          },
+          {
+            "at": "2026-10-16T01:03:02.888Z",
+            "type": "usage",
+            "data": {
+              "source": "provider_message",
+              "eventType": "stream:message_start",
+              "sdkSessionId": "ba313851-c7cd-4cbe-952d-a57796a1b7d6",
+              "messageId": "msg_2026101609030215356e47465c46f0",
+              "model": "glm-5.2",
+              "usage": {
+                "input_tokens": 0,
+                "output_tokens": 0
+              },
+              "status": "reported",
+              "sessionId": "sess_fe9e4801-9911-422c-99b0-209047059b62"
+            }
+          },
+          {
+            "at": "2026-10-16T01:03:07.468Z",
+            "type": "usage",
+            "data": {
+              "source": "provider_message",
+              "eventType": "assistant",
+              "sdkSessionId": "ba313851-c7cd-4cbe-952d-a57796a1b7d6",
+              "messageId": "msg_2026101609030215356e47465c46f0",
+              "model": "glm-5.2",
+              "usage": {
+                "input_tokens": 0,
+                "output_tokens": 0
+              },
+              "status": "reported",
+              "sessionId": "sess_fe9e4801-9911-422c-99b0-209047059b62"
+            }
+          },
+          {
+            "at": "2026-10-16T01:03:07.511Z",
+            "type": "usage",
+            "data": {
+              "source": "provider_message",
+              "eventType": "assistant",
+              "sdkSessionId": "ba313851-c7cd-4cbe-952d-a57796a1b7d6",
+              "messageId": "msg_2026101609030215356e47465c46f0",
+              "model": "glm-5.2",
+              "usage": {
+                "input_tokens": 0,
+                "output_tokens": 0
+              },
+              "status": "reported",
+              "sessionId": "sess_fe9e4801-9911-422c-99b0-209047059b62"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "label": "turn-1-complete",
+      "sdkSessionId": "ba313851-c7cd-4cbe-952d-a57796a1b7d6",
+      "response": {
+        "id": "msg_5388312e6ad24e7fa2a8e44a92f24741",
+        "type": "message",
+        "role": "assistant",
+        "model": "relay-chat",
+        "content": [
+          {
+            "type": "text",
+            "text": "SCHEMA_V1_OK"
+          }
+        ],
+        "stop_reason": "end_turn",
+        "stop_sequence": null,
+        "usage": {
+          "input_tokens": 4355,
+          "output_tokens": 90,
+          "cache_creation_input_tokens": 0,
+          "cache_read_input_tokens": 32896,
+          "status": "reported",
+          "coverage": "partial",
+          "knownFields": [
+            "input_tokens",
+            "output_tokens",
+            "cache_read_input_tokens"
+          ],
+          "scope": "provider_messages",
+          "estimated": true,
+          "modelRequests": 1
+        }
+      },
+      "fixtureSchemaVersion": "v1",
+      "catalogChangeExpected": false,
+      "nativeToolNamesObserved": [
+        "mcp__droid__FactoryRevisionProbe"
+      ],
+      "eventDelta": {
+        "cumulativeEventCount": 167,
+        "newEventCount": 18,
+        "countsByType": {
+          "stream_event": 9,
+          "usage": 5,
+          "user": 1,
+          "system": 1,
+          "assistant": 1,
+          "result": 1
+        },
+        "omittedMetadataOnlyEventCount": 12,
+        "events": [
+          {
+            "at": "2026-10-16T01:03:07.534Z",
+            "type": "usage",
+            "data": {
+              "source": "provider_message",
+              "eventType": "stream:message_delta",
+              "sdkSessionId": "ba313851-c7cd-4cbe-952d-a57796a1b7d6",
+              "messageId": "msg_2026101609030215356e47465c46f0",
+              "model": "glm-5.2",
+              "usage": {
+                "input_tokens": 4231,
+                "output_tokens": 83,
+                "cache_read_input_tokens": 14336
+              },
+              "status": "reported",
+              "sessionId": "sess_fe9e4801-9911-422c-99b0-209047059b62"
+            }
+          },
+          {
+            "at": "2026-10-16T01:03:08.128Z",
+            "type": "usage",
+            "data": {
+              "source": "provider_message",
+              "eventType": "stream:message_start",
+              "sdkSessionId": "ba313851-c7cd-4cbe-952d-a57796a1b7d6",
+              "messageId": "msg_20261016090307607865e1873041ab",
+              "model": "glm-5.2",
+              "usage": {
+                "input_tokens": 0,
+                "output_tokens": 0
+              },
+              "status": "reported",
+              "sessionId": "sess_fe9e4801-9911-422c-99b0-209047059b62"
+            }
+          },
+          {
+            "at": "2026-10-16T01:03:11.968Z",
+            "type": "usage",
+            "data": {
+              "source": "provider_message",
+              "eventType": "assistant",
+              "sdkSessionId": "ba313851-c7cd-4cbe-952d-a57796a1b7d6",
+              "messageId": "msg_20261016090307607865e1873041ab",
+              "model": "glm-5.2",
+              "usage": {
+                "input_tokens": 0,
+                "output_tokens": 0
+              },
+              "status": "reported",
+              "sessionId": "sess_fe9e4801-9911-422c-99b0-209047059b62"
+            }
+          },
+          {
+            "at": "2026-10-16T01:03:11.972Z",
+            "type": "usage",
+            "data": {
+              "source": "provider_message",
+              "eventType": "stream:message_delta",
+              "sdkSessionId": "ba313851-c7cd-4cbe-952d-a57796a1b7d6",
+              "messageId": "msg_20261016090307607865e1873041ab",
+              "model": "glm-5.2",
+              "usage": {
+                "input_tokens": 124,
+                "output_tokens": 7,
+                "cache_read_input_tokens": 18560
+              },
+              "status": "reported",
+              "sessionId": "sess_fe9e4801-9911-422c-99b0-209047059b62"
+            }
+          },
+          {
+            "at": "2026-10-16T01:03:11.978Z",
+            "type": "result",
+            "data": {
+              "type": "result",
+              "subtype": "success",
+              "session_id": "ba313851-c7cd-4cbe-952d-a57796a1b7d6"
+            }
+          },
+          {
+            "at": "2026-10-16T01:03:11.979Z",
+            "type": "usage",
+            "data": {
+              "source": "sdk_result",
+              "eventType": "result:success",
+              "sdkSessionId": "ba313851-c7cd-4cbe-952d-a57796a1b7d6",
+              "status": "reported",
+              "mainAgentTurnUsage": {
+                "input_tokens": 4355,
+                "output_tokens": 90,
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 32896
+              },
+              "modelUsage": {
+                "glm-5.2": {
+                  "input_tokens": 4355,
+                  "output_tokens": 90,
+                  "cache_creation_input_tokens": 0,
+                  "cache_read_input_tokens": 32896
+                }
+              },
+              "totalCostUSD": 0.040473,
+              "billingScope": "sdk_session_cumulative",
+              "sessionId": "sess_fe9e4801-9911-422c-99b0-209047059b62"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "label": "turn-2-tool",
+      "sdkSessionId": "ba313851-c7cd-4cbe-952d-a57796a1b7d6",
+      "response": {
+        "id": "msg_7f3e67532eda4c26a067d2f9adb64e0c",
+        "type": "message",
+        "role": "assistant",
+        "model": "relay-chat",
+        "content": [
+          {
+            "type": "tool_use",
+            "id": "call_11eae9076e9a4b24969b2f61",
+            "name": "FactoryRevisionProbe",
+            "input": {
+              "value": 137,
+              "items": [
+                "a",
+                "b"
+              ]
+            }
+          }
+        ],
+        "stop_reason": "tool_use",
+        "stop_sequence": null,
+        "usage": {
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cache_creation_input_tokens": 0,
+          "cache_read_input_tokens": 0,
+          "status": "reported",
+          "coverage": "partial",
+          "knownFields": [
+            "input_tokens",
+            "output_tokens"
+          ],
+          "scope": "provider_messages",
+          "estimated": true,
+          "modelRequests": 1
+        }
+      },
+      "fixtureSchemaVersion": "v2",
+      "catalogChangeExpected": true,
+      "nativeToolNamesObserved": [
+        "mcp__droid__droid_revision_FactoryRevisionP_7c871423e01b805bdffbd5ba8f893a50"
+      ],
+      "eventDelta": {
+        "cumulativeEventCount": 625,
+        "newEventCount": 458,
+        "countsByType": {
+          "command_lifecycle": 3,
+          "droid_catalog_updated": 1,
+          "system": 216,
+          "stream_event": 233,
+          "usage": 3,
+          "assistant": 2
+        },
+        "omittedMetadataOnlyEventCount": 454,
+        "events": [
+          {
+            "at": "2026-10-16T01:03:12.034Z",
+            "type": "droid_catalog_updated",
+            "data": {
+              "tools": [
+                "FactoryRevisionProbe"
+              ],
+              "visibility": "cli_tool_names_confirmed",
+              "schemaVisibility": "revision_name_confirmed"
+            }
+          },
+          {
+            "at": "2026-10-16T01:03:12.938Z",
+            "type": "usage",
+            "data": {
+              "source": "provider_message",
+              "eventType": "stream:message_start",
+              "sdkSessionId": "ba313851-c7cd-4cbe-952d-a57796a1b7d6",
+              "messageId": "msg_20261016090312ebceb1e515c545d7",
+              "model": "glm-5.2",
+              "usage": {
+                "input_tokens": 0,
+                "output_tokens": 0
+              },
+              "status": "reported",
+              "sessionId": "sess_fe9e4801-9911-422c-99b0-209047059b62"
+            }
+          },
+          {
+            "at": "2026-10-16T01:03:18.953Z",
+            "type": "usage",
+            "data": {
+              "source": "provider_message",
+              "eventType": "assistant",
+              "sdkSessionId": "ba313851-c7cd-4cbe-952d-a57796a1b7d6",
+              "messageId": "msg_20261016090312ebceb1e515c545d7",
+              "model": "glm-5.2",
+              "usage": {
+                "input_tokens": 0,
+                "output_tokens": 0
+              },
+              "status": "reported",
+              "sessionId": "sess_fe9e4801-9911-422c-99b0-209047059b62"
+            }
+          },
+          {
+            "at": "2026-10-16T01:03:19.004Z",
+            "type": "usage",
+            "data": {
+              "source": "provider_message",
+              "eventType": "assistant",
+              "sdkSessionId": "ba313851-c7cd-4cbe-952d-a57796a1b7d6",
+              "messageId": "msg_20261016090312ebceb1e515c545d7",
+              "model": "glm-5.2",
+              "usage": {
+                "input_tokens": 0,
+                "output_tokens": 0
+              },
+              "status": "reported",
+              "sessionId": "sess_fe9e4801-9911-422c-99b0-209047059b62"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "label": "turn-2-complete",
+      "sdkSessionId": "ba313851-c7cd-4cbe-952d-a57796a1b7d6",
+      "response": {
+        "id": "msg_998d559909814850ad18b425233280c7",
+        "type": "message",
+        "role": "assistant",
+        "model": "relay-chat",
+        "content": [
+          {
+            "type": "text",
+            "text": "SCHEMA_V2_OK"
+          }
+        ],
+        "stop_reason": "end_turn",
+        "stop_sequence": null,
+        "usage": {
+          "input_tokens": 4795,
+          "output_tokens": 278,
+          "cache_creation_input_tokens": 0,
+          "cache_read_input_tokens": 33280,
+          "status": "reported",
+          "coverage": "partial",
+          "knownFields": [
+            "input_tokens",
+            "output_tokens",
+            "cache_read_input_tokens"
+          ],
+          "scope": "provider_messages",
+          "estimated": true,
+          "modelRequests": 1
+        }
+      },
+      "fixtureSchemaVersion": "v2",
+      "catalogChangeExpected": false,
+      "nativeToolNamesObserved": [
+        "mcp__droid__droid_revision_FactoryRevisionP_7c871423e01b805bdffbd5ba8f893a50"
+      ],
+      "eventDelta": {
+        "cumulativeEventCount": 643,
+        "newEventCount": 18,
+        "countsByType": {
+          "user": 1,
+          "stream_event": 9,
+          "usage": 5,
+          "system": 1,
+          "assistant": 1,
+          "result": 1
+        },
+        "omittedMetadataOnlyEventCount": 12,
+        "events": [
+          {
+            "at": "2026-10-16T01:03:19.018Z",
+            "type": "usage",
+            "data": {
+              "source": "provider_message",
+              "eventType": "stream:message_delta",
+              "sdkSessionId": "ba313851-c7cd-4cbe-952d-a57796a1b7d6",
+              "messageId": "msg_20261016090312ebceb1e515c545d7",
+              "model": "glm-5.2",
+              "usage": {
+                "input_tokens": 4482,
+                "output_tokens": 271,
+                "cache_read_input_tokens": 14400
+              },
+              "status": "reported",
+              "sessionId": "sess_fe9e4801-9911-422c-99b0-209047059b62"
+            }
+          },
+          {
+            "at": "2026-10-16T01:03:19.663Z",
+            "type": "usage",
+            "data": {
+              "source": "provider_message",
+              "eventType": "stream:message_start",
+              "sdkSessionId": "ba313851-c7cd-4cbe-952d-a57796a1b7d6",
+              "messageId": "msg_20261016090319c3413a2e2e944f81",
+              "model": "glm-5.2",
+              "usage": {
+                "input_tokens": 0,
+                "output_tokens": 0
+              },
+              "status": "reported",
+              "sessionId": "sess_fe9e4801-9911-422c-99b0-209047059b62"
+            }
+          },
+          {
+            "at": "2026-10-16T01:03:29.795Z",
+            "type": "usage",
+            "data": {
+              "source": "provider_message",
+              "eventType": "assistant",
+              "sdkSessionId": "ba313851-c7cd-4cbe-952d-a57796a1b7d6",
+              "messageId": "msg_20261016090319c3413a2e2e944f81",
+              "model": "glm-5.2",
+              "usage": {
+                "input_tokens": 0,
+                "output_tokens": 0
+              },
+              "status": "reported",
+              "sessionId": "sess_fe9e4801-9911-422c-99b0-209047059b62"
+            }
+          },
+          {
+            "at": "2026-10-16T01:03:29.797Z",
+            "type": "usage",
+            "data": {
+              "source": "provider_message",
+              "eventType": "stream:message_delta",
+              "sdkSessionId": "ba313851-c7cd-4cbe-952d-a57796a1b7d6",
+              "messageId": "msg_20261016090319c3413a2e2e944f81",
+              "model": "glm-5.2",
+              "usage": {
+                "input_tokens": 313,
+                "output_tokens": 7,
+                "cache_read_input_tokens": 18880
+              },
+              "status": "reported",
+              "sessionId": "sess_fe9e4801-9911-422c-99b0-209047059b62"
+            }
+          },
+          {
+            "at": "2026-10-16T01:03:29.801Z",
+            "type": "result",
+            "data": {
+              "type": "result",
+              "subtype": "success",
+              "session_id": "ba313851-c7cd-4cbe-952d-a57796a1b7d6"
+            }
+          },
+          {
+            "at": "2026-10-16T01:03:29.802Z",
+            "type": "usage",
+            "data": {
+              "source": "sdk_result",
+              "eventType": "result:success",
+              "sdkSessionId": "ba313851-c7cd-4cbe-952d-a57796a1b7d6",
+              "status": "reported",
+              "mainAgentTurnUsage": {
+                "input_tokens": 4795,
+                "output_tokens": 278,
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 33280
+              },
+              "modelUsage": {
+                "glm-5.2": {
+                  "input_tokens": 9150,
+                  "output_tokens": 368,
+                  "cache_creation_input_tokens": 0,
+                  "cache_read_input_tokens": 66176
+                }
+              },
+              "totalCostUSD": 0.088038,
+              "billingScope": "sdk_session_cumulative",
+              "sessionId": "sess_fe9e4801-9911-422c-99b0-209047059b62"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "label": "turn-3-tool",
+      "sdkSessionId": "ba313851-c7cd-4cbe-952d-a57796a1b7d6",
+      "response": {
+        "id": "msg_05790c7b57f1423f930a460d205c0525",
+        "type": "message",
+        "role": "assistant",
+        "model": "relay-chat",
+        "content": [
+          {
+            "type": "tool_use",
+            "id": "call_6e081755da62411d8e1273f3",
+            "name": "FactoryRevisionProbe",
+            "input": {
+              "items": [
+                "a",
+                "b"
+              ],
+              "value": 138
+            }
+          }
+        ],
+        "stop_reason": "tool_use",
+        "stop_sequence": null,
+        "usage": {
+          "input_tokens": 113,
+          "output_tokens": 57,
+          "cache_creation_input_tokens": 0,
+          "cache_read_input_tokens": 19136,
+          "status": "reported",
+          "coverage": "partial",
+          "knownFields": [
+            "input_tokens",
+            "output_tokens",
+            "cache_read_input_tokens"
+          ],
+          "scope": "provider_messages",
+          "estimated": true,
+          "modelRequests": 1
+        }
+      },
+      "fixtureSchemaVersion": "v2",
+      "catalogChangeExpected": false,
+      "nativeToolNamesObserved": [
+        "mcp__droid__droid_revision_FactoryRevisionP_7c871423e01b805bdffbd5ba8f893a50"
+      ],
+      "eventDelta": {
+        "cumulativeEventCount": 672,
+        "newEventCount": 29,
+        "countsByType": {
+          "command_lifecycle": 3,
+          "system": 2,
+          "stream_event": 20,
+          "usage": 3,
+          "assistant": 1
+        },
+        "omittedMetadataOnlyEventCount": 26,
+        "events": [
+          {
+            "at": "2026-10-16T01:03:30.481Z",
+            "type": "usage",
+            "data": {
+              "source": "provider_message",
+              "eventType": "stream:message_start",
+              "sdkSessionId": "ba313851-c7cd-4cbe-952d-a57796a1b7d6",
+              "messageId": "msg_20261016090329b71214984071466a",
+              "model": "glm-5.2",
+              "usage": {
+                "input_tokens": 0,
+                "output_tokens": 0
+              },
+              "status": "reported",
+              "sessionId": "sess_fe9e4801-9911-422c-99b0-209047059b62"
+            }
+          },
+          {
+            "at": "2026-10-16T01:03:37.483Z",
+            "type": "usage",
+            "data": {
+              "source": "provider_message",
+              "eventType": "assistant",
+              "sdkSessionId": "ba313851-c7cd-4cbe-952d-a57796a1b7d6",
+              "messageId": "msg_20261016090329b71214984071466a",
+              "model": "glm-5.2",
+              "usage": {
+                "input_tokens": 0,
+                "output_tokens": 0
+              },
+              "status": "reported",
+              "sessionId": "sess_fe9e4801-9911-422c-99b0-209047059b62"
+            }
+          },
+          {
+            "at": "2026-10-16T01:03:37.487Z",
+            "type": "usage",
+            "data": {
+              "source": "provider_message",
+              "eventType": "stream:message_delta",
+              "sdkSessionId": "ba313851-c7cd-4cbe-952d-a57796a1b7d6",
+              "messageId": "msg_20261016090329b71214984071466a",
+              "model": "glm-5.2",
+              "usage": {
+                "input_tokens": 113,
+                "output_tokens": 57,
+                "cache_read_input_tokens": 19136
+              },
+              "status": "reported",
+              "sessionId": "sess_fe9e4801-9911-422c-99b0-209047059b62"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "label": "turn-3-complete",
+      "sdkSessionId": "ba313851-c7cd-4cbe-952d-a57796a1b7d6",
+      "response": {
+        "id": "msg_a3f72d25718846898cb8df3679b8a74f",
+        "type": "message",
+        "role": "assistant",
+        "model": "relay-chat",
+        "content": [
+          {
+            "type": "text",
+            "text": "SCHEMA_V2_STABLE_OK"
+          }
+        ],
+        "stop_reason": "end_turn",
+        "stop_sequence": null,
+        "usage": {
+          "input_tokens": 147,
+          "output_tokens": 9,
+          "cache_creation_input_tokens": 0,
+          "cache_read_input_tokens": 19200,
+          "status": "reported",
+          "coverage": "partial",
+          "knownFields": [
+            "input_tokens",
+            "output_tokens",
+            "cache_read_input_tokens"
+          ],
+          "scope": "provider_messages",
+          "estimated": true,
+          "modelRequests": 1
+        }
+      },
+      "fixtureSchemaVersion": "v2",
+      "catalogChangeExpected": false,
+      "nativeToolNamesObserved": [
+        "mcp__droid__droid_revision_FactoryRevisionP_7c871423e01b805bdffbd5ba8f893a50"
+      ],
+      "eventDelta": {
+        "cumulativeEventCount": 692,
+        "newEventCount": 20,
+        "countsByType": {
+          "user": 1,
+          "system": 1,
+          "stream_event": 12,
+          "usage": 4,
+          "assistant": 1,
+          "result": 1
+        },
+        "omittedMetadataOnlyEventCount": 15,
+        "events": [
+          {
+            "at": "2026-10-16T01:03:38.118Z",
+            "type": "usage",
+            "data": {
+              "source": "provider_message",
+              "eventType": "stream:message_start",
+              "sdkSessionId": "ba313851-c7cd-4cbe-952d-a57796a1b7d6",
+              "messageId": "msg_202610160903374b0bf10c6c374f60",
+              "model": "glm-5.2",
+              "usage": {
+                "input_tokens": 0,
+                "output_tokens": 0
+              },
+              "status": "reported",
+              "sessionId": "sess_fe9e4801-9911-422c-99b0-209047059b62"
+            }
+          },
+          {
+            "at": "2026-10-16T01:03:43.571Z",
+            "type": "usage",
+            "data": {
+              "source": "provider_message",
+              "eventType": "assistant",
+              "sdkSessionId": "ba313851-c7cd-4cbe-952d-a57796a1b7d6",
+              "messageId": "msg_202610160903374b0bf10c6c374f60",
+              "model": "glm-5.2",
+              "usage": {
+                "input_tokens": 0,
+                "output_tokens": 0
+              },
+              "status": "reported",
+              "sessionId": "sess_fe9e4801-9911-422c-99b0-209047059b62"
+            }
+          },
+          {
+            "at": "2026-10-16T01:03:43.573Z",
+            "type": "usage",
+            "data": {
+              "source": "provider_message",
+              "eventType": "stream:message_delta",
+              "sdkSessionId": "ba313851-c7cd-4cbe-952d-a57796a1b7d6",
+              "messageId": "msg_202610160903374b0bf10c6c374f60",
+              "model": "glm-5.2",
+              "usage": {
+                "input_tokens": 147,
+                "output_tokens": 9,
+                "cache_read_input_tokens": 19200
+              },
+              "status": "reported",
+              "sessionId": "sess_fe9e4801-9911-422c-99b0-209047059b62"
+            }
+          },
+          {
+            "at": "2026-10-16T01:03:43.576Z",
+            "type": "result",
+            "data": {
+              "type": "result",
+              "subtype": "success",
+              "session_id": "ba313851-c7cd-4cbe-952d-a57796a1b7d6"
+            }
+          },
+          {
+            "at": "2026-10-16T01:03:43.576Z",
+            "type": "usage",
+            "data": {
+              "source": "sdk_result",
+              "eventType": "result:success",
+              "sdkSessionId": "ba313851-c7cd-4cbe-952d-a57796a1b7d6",
+              "status": "reported",
+              "mainAgentTurnUsage": {
+                "input_tokens": 260,
+                "output_tokens": 66,
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 38336
+              },
+              "modelUsage": {
+                "glm-5.2": {
+                  "input_tokens": 9410,
+                  "output_tokens": 434,
+                  "cache_creation_input_tokens": 0,
+                  "cache_read_input_tokens": 104512
+                }
+              },
+              "totalCostUSD": 0.110156,
+              "billingScope": "sdk_session_cumulative",
+              "sessionId": "sess_fe9e4801-9911-422c-99b0-209047059b62"
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "eventSummary": {
+    "cumulativeSnapshots": true,
+    "snapshotCount": 6,
+    "uniqueTimelineEventCount": 692,
+    "countsByType": {
+      "sdk_query_start": 1,
+      "command_lifecycle": 8,
+      "system": 287,
+      "stream_event": 358,
+      "usage": 23,
+      "assistant": 8,
+      "user": 3,
+      "result": 3,
+      "droid_catalog_updated": 1
+    },
+    "queryStarts": 1,
+    "catalogUpdates": 1,
+    "rejectionEvents": [],
+    "rejectionScope": "Recorded bridge events only; this probe supplied valid inputs and does not claim live stale-revision or invalid-schema rejection coverage. Offline tests cover those paths."
+  },
+  "failureAnalysis": {
+    "originalStatusPreserved": true,
+    "originalFailedChecks": {
+      "turn3ExactHostArguments": false,
+      "oneNativeQuery": false,
+      "noUnnecessaryCatalogRefresh": false
+    },
+    "classification": "verification-harness defects; not converted to PASS",
+    "basis": {
+      "turn3OriginalKeyOrder": [
+        "items",
+        "value"
+      ],
+      "turn3ArgumentsSemanticallyEqual": true,
+      "actualTimelineQueryStarts": 1,
+      "actualTimelineCatalogUpdates": 1,
+      "snapshotCountingRisk": "Summing all six cumulative arrays counts the same query-start/catalog-update event repeatedly."
+    },
+    "fix": "Use deep argument equality instead of JSON object key order, and unique/cumulative event handling instead of counting repeated snapshots. Separate r2 evidence records the rerun."
+  },
+  "compression": {
+    "method": "Preserve all top-level facts; store event deltas once; omit only metadata-only high-frequency stream/lifecycle/assistant/user/init/status/thinking notifications; exact raw bytes remain archived by SHA256.",
+    "originalStatusUnchanged": true,
+    "originalChecksUnchanged": true,
+    "originalResponsesUnchanged": true,
+    "originalNativeCallsUnchanged": true,
+    "originalUsageAndCleanupUnchanged": true
+  }
+}

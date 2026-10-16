@@ -1,0 +1,208 @@
+{
+  "feature": "spec",
+  "status": "FAIL",
+  "startedAt": "2026-10-16T00:54:00.344Z",
+  "authentication": {
+    "provider": "glm",
+    "label": "https://open.bigmodel.cn/api/anthropic",
+    "baseUrl": "https://open.bigmodel.cn/api/anthropic",
+    "model": "glm-5.2",
+    "tokenEnv": "READINESS_MODEL_API_KEY",
+    "authHeader": "x-api-key",
+    "subscriptionCredentialsRead": false
+  },
+  "exclusions": [
+    "Anthropic subscription billing or account-safety guarantees",
+    "different underlying models for Factory aliases",
+    "all possible custom droids"
+  ],
+  "exitCode": 143,
+  "checks": {
+    "droidSucceeded": false,
+    "independentFileResult": false,
+    "inputUnchanged": true,
+    "authenticatedBridgeTraffic": true,
+    "nativeReadCompleted": true,
+    "nativeWriteCompleted": false,
+    "runtimeDrained": true,
+    "nativeSessionsPresent": true,
+    "realFactoryExitSpecMode": true,
+    "finalCompletionMarker": false
+  },
+  "observations": {
+    "result": {},
+    "tools": [
+      {
+        "name": "Read",
+        "id": "call_bef1bc6068994bee82524232",
+        "input": {
+          "file_path": "/tmp/relay-e2e-ws-p5vYpI/input.json"
+        },
+        "sessionId": "33a61c03-b807-4d1d-ba70-eda949351799",
+        "resultSeen": true,
+        "isError": false
+      },
+      {
+        "name": "mcp__droid__ExitSpecMode",
+        "id": "call_19325f03dcc24d1ca1461f78",
+        "input": {
+          "plan": "Write `/tmp/relay-e2e-ws-p5vYpI/spec-result.json` containing exactly:\n\n```json\n{\"nonce\": \"72b37fcc513668394cde7bf0\", \"sum\": 46}\n```\n\nSteps:\n1. Read `input.json` (done): nonce `72b37fcc513668394cde7bf0`, `a` = 17, `b` = 29.\n2. Compute sum: 17 + 29 = 46.\n3. Create `spec-result.json` in the working directory with the nonce verbatim and the computed sum as a JSON number.\n4. Leave `input.json` untouched; no other files or state change.\n\nVerification: read back `spec-result.json` and confirm the exact content `{\"nonce\":\"72b37fcc513668394cde7bf0\",\"sum\":46}`.",
+          "title": "Write spec-result.json from input.json fixture"
+        },
+        "sessionId": "33a61c03-b807-4d1d-ba70-eda949351799",
+        "resultSeen": true,
+        "isError": true
+      }
+    ],
+    "requests": [
+      {
+        "at": "2026-10-16T00:54:00.987Z",
+        "session": "sess_5380629b-29c1-4071-9302-4ab1796f8900",
+        "model": "relay-chat"
+      },
+      {
+        "at": "2026-10-16T00:54:15.400Z",
+        "session": "sess_5380629b-29c1-4071-9302-4ab1796f8900",
+        "model": "relay-chat"
+      }
+    ],
+    "sessions": [
+      {
+        "bridgeSessionId": "sess_5380629b-29c1-4071-9302-4ab1796f8900",
+        "role": "chat",
+        "state": "CANCELLED",
+        "model": "relay-chat",
+        "historyHash": "6207e07b038f152a3d0157a667060d575a46e058cd2a1a1a9898ae61973280ed",
+        "contextHash": "ac2a2d2290f752bc959d1e17207106ab681d39a2c18e4e6f87b069b97f0c978c",
+        "requestMessageHashes": [
+          "a5940018a881b68216d66165fa8285e20c57d764207013ec16306e8385668ede",
+          "c3db183e6b9dde94e662fd21e2aaa83c77aab413ea86e666d04b04481f955f5a",
+          "319c1c52d8736168f96e981d0f0b09cfccdb23ef746a4ef20126ac4e2b1ddb86",
+          "484c106896d6de391db7aa64c6cc2495a24cdbb5dc322f0eb7964e47bcd74047",
+          "89baad693b4070dccf381d25b94655eed98fb933846ad3892a3b203e62a907e7"
+        ],
+        "historyMessageHashes": [
+          "a5940018a881b68216d66165fa8285e20c57d764207013ec16306e8385668ede",
+          "c3db183e6b9dde94e662fd21e2aaa83c77aab413ea86e666d04b04481f955f5a",
+          "319c1c52d8736168f96e981d0f0b09cfccdb23ef746a4ef20126ac4e2b1ddb86",
+          "484c106896d6de391db7aa64c6cc2495a24cdbb5dc322f0eb7964e47bcd74047"
+        ],
+        "toolNames": [
+          "Read",
+          "LS",
+          "Execute",
+          "Edit",
+          "Grep",
+          "Glob",
+          "Create",
+          "TaskOutput",
+          "TaskStop",
+          "ToolSearch",
+          "Skill",
+          "Task"
+        ],
+        "createdAt": "2026-10-16T00:54:00.986Z",
+        "updatedAt": "2026-10-16T00:56:41.645Z",
+        "pendingToolIds": [],
+        "cancelRequested": true,
+        "notes": [
+          "factory-cancelled"
+        ],
+        "usage": {
+          "input_tokens": 9180,
+          "output_tokens": 469,
+          "cache_creation_input_tokens": 0,
+          "cache_read_input_tokens": 37632,
+          "status": "reported",
+          "coverage": "partial",
+          "knownFields": [
+            "input_tokens",
+            "output_tokens",
+            "cache_read_input_tokens"
+          ],
+          "scope": "provider_messages",
+          "estimated": true,
+          "modelRequests": 2
+        },
+        "factorySessionId": "28ae6a74-0c5b-4aaf-8dda-48fbcc4023a1",
+        "factoryCwd": "/tmp/relay-e2e-ws-p5vYpI",
+        "hostEnded": "interrupted",
+        "sdkSessionId": "33a61c03-b807-4d1d-ba70-eda949351799"
+      }
+    ],
+    "runtime": {
+      "kind": "sdk",
+      "authMode": "byok",
+      "permissionMode": "bypass",
+      "prompt": {
+        "systemPrompt": "preset:claude_code + stable append",
+        "dynamicPlacement": "user input on initial turn or context change",
+        "tools": "preset:claude_code built-ins + Droid-exclusive MCP"
+      },
+      "tools": "preset:claude_code + droid-exclusive MCP",
+      "input": "persistent SDK streaming input",
+      "includePartialMessages": true,
+      "approvalChannel": "external controller",
+      "activeNativeSessions": 0,
+      "activeNativeTurns": 0,
+      "pendingHostCalls": 0,
+      "pendingApprovals": 0,
+      "fatalErrors": [],
+      "overridesAnthropicEnv": true,
+      "upstream": {
+        "provider": "glm",
+        "label": "https://open.bigmodel.cn/api/anthropic",
+        "baseUrl": "https://open.bigmodel.cn/api/anthropic",
+        "model": "glm-5.2",
+        "tokenEnv": "READINESS_MODEL_API_KEY",
+        "authHeader": "x-api-key"
+      },
+      "control": {
+        "pendingApprovals": 0,
+        "failures": [],
+        "activeHostSessions": 0,
+        "boundNativeSessions": 0
+      }
+    }
+  },
+  "cleanup": {
+    "processes": {
+      "supported": true,
+      "observedProcessCount": 7,
+      "terminatedProcessCount": 0,
+      "remainingProcessIds": [],
+      "complete": true
+    },
+    "removed": [
+      true,
+      true,
+      true
+    ],
+    "errors": [],
+    "retained": [
+      {
+        "name": "action.json",
+        "sha256": "be2028955eb71a90f0463e587d34e4fa0c01c2336ba0326dd4e3a6badb4212ec",
+        "unchanged": true
+      },
+      {
+        "name": "requests.json",
+        "sha256": "20bee55d332f30ac72dabd31df96dc0ab43f5473bf904c3b62b64cd355d44bc0",
+        "unchanged": true
+      },
+      {
+        "name": "native-transcript.json",
+        "sha256": "7c0ba308f7d89f4ea6fcb3a4dc4e64ce2b751b1323ba44ef3413badfd9bdaf3b",
+        "unchanged": true
+      },
+      {
+        "name": "snapshot.json",
+        "sha256": "9d7aaf822d43462c9202f6a106262617b8bf8c4d90c1cfc32811ff27ac3665d5",
+        "unchanged": true
+      }
+    ],
+    "complete": true
+  },
+  "finishedAt": "2026-10-16T00:56:43.682Z",
+  "evidenceDirectory": "/workspace/work/factory-cc-prep/repo/evidence/local/verify-spec-2026-10-16T00-54-00-343Z-38fa29"
+}

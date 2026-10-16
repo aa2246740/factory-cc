@@ -3,6 +3,7 @@ import type { RuntimeRequest } from "./types.js";
 import { orchestratorAppendix, roleAppendix } from "./mission-tools.js";
 import { BridgeError, type ContentBlock } from "../types.js";
 import { isAbsolute } from "node:path";
+import { allowedNativeToolNames } from "./native-tool-policy.js";
 
 /**
  * Stable suffix appended to Claude Code's own system prompt.
@@ -11,7 +12,7 @@ import { isAbsolute } from "node:path";
  */
 export const STABLE_DROID_APPEND = [
   "Factory Droid is the host UI and Mission runner for this session.",
-  "Use Claude Code built-in tools (Read, Edit, Write, Bash, Glob, Grep) for files and shell. Execute those yourself.",
+  "Use Claude Code built-in file and shell tools only when their concrete equivalent is authorized by the current Factory host tool set. Tool availability can change between turns; native tools outside that set are denied even in bypass permission mode. Factory spec mode permits native read tools only until Factory approves the transition.",
   "Factory-owned skills, subagents, plugins, and Mission lifecycle remain under Droid control. Use the advertised mcp__droid__ tools for these actions, including Skill, Task, TaskOutput, TaskStop, ToolSearch, ExitSpecMode, StartMissionRun, ProposeMission, EndFeatureRun, and DismissHandoffItems.",
   "Factory Skill names and Factory task IDs belong to Droid, not to Claude Code's native Skill or subagent registry. Activate a Factory skill with mcp__droid__Skill and follow its returned full instructions; use mcp__droid__Task for Factory subagents and the corresponding Droid tools for their task IDs. Native Claude Code skills and subagents remain separate.",
   "Use mcp__droid__ToolSearch for deferred Factory tools. The host may update its advertised MCP tools after discovery; use only the tools currently available.",
@@ -64,6 +65,7 @@ export function buildHostContext(input: RuntimeRequest, cwd?: string): string {
     ];
   return [
     ...roleContext,
+    `Allowed native tool equivalents for this host request: ${allowedNativeToolNames(input.request, input.factoryPermissionMode).join(", ") || "none"}. All other advertised host tools execute through the current Factory MCP catalog. Native Agent, Task, Skill and unrelated plugin tools do not inherit Factory registry authority.`,
     cwd ? buildWorkspaceAppendix(cwd, missionDir) : "",
   ]
     .filter(Boolean)

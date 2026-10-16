@@ -83,7 +83,9 @@ export async function startSdkBridge(port: number, dataDir: string, selection: U
       mode: "sdk", host: "127.0.0.1", port, clientToken: token, dataDir,
       adminToken: randomBytes(24).toString("hex"),
       persistSessions: true, requestTimeoutMs: 10 * 60 * 1000,
-      toolWaitMs: 30 * 60 * 1000, maxTurns: 160, maxSessions: 32,
+      // Match production: a Mission's StartMissionRun can wait longer than
+      // 30 minutes. The outer harness deadline still cancels owned work.
+      toolWaitMs: 8 * 60 * 60 * 1000, maxTurns: 160, maxSessions: 32,
       authMode: "byok", permissionMode: "bypass", sdkCwd: workspace,
       upstreamBaseUrl: selection.provider.baseUrl,
       upstreamModel: selection.provider.model,

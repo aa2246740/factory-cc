@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { jsonSchemaToZod, zodObjectShape, zodToolInputSchema } from "../../src/protocol/schema-to-zod.js";
+import { jsonSchemaToZod, zodToolInputSchema } from "../../src/protocol/schema-to-zod.js";
 import { createToolNameMap, sanitizeMcpName } from "../../src/protocol/tool-names.js";
 
 describe("jsonSchemaToZod", () => {
@@ -96,8 +96,10 @@ describe("jsonSchemaToZod", () => {
       { type: "object", properties: { a: { type: "string" } }, required: ["a"], additionalProperties: false },
       { type: "object", properties: { b: { type: "string" } }, required: ["b"], additionalProperties: false },
     ] });
-    expect(() => zodToolInputSchema(root.schema)).toThrow(/Unsupported MCP tool input schema/);
-    expect(() => zodObjectShape(root.schema)).toThrow(/Unsupported MCP tool input schema/);
+    const rootInput = zodToolInputSchema(root.schema);
+    expect(rootInput.parse({ a: "valid" })).toEqual({ a: "valid" });
+    expect(rootInput.safeParse({ a: "one", b: "two" }).success).toBe(false);
+    expect(z.toJSONSchema(rootInput).oneOf).toHaveLength(2);
   });
 
   it("keeps default as an annotation and does not weaken required fields", () => {
@@ -111,28 +113,110 @@ describe("jsonSchemaToZod", () => {
 
   it("reports unsupported validation constraints honestly and fails closed on conversion errors", () => {
     const ignored = jsonSchemaToZod({ type: "object", dependencies: { a: ["b"] } });
-    expect(ignored.lossless).toBe(false);
-    expect(ignored.notes.join("\n")).toContain("unsupported keyword dependencies");
+    expect(ignored.lossless).toBe(true);
+    expect(ignored.schema.safeParse({ a: true }).success).toBe(false);
+    expect(ignored.schema.parse({ a: true, b: false })).toEqual({ a: true, b: false });
     const conditional = jsonSchemaToZod({ type: "object", if: { required: ["a"] }, then: { required: ["b"] } });
-    expect(conditional.lossless).toBe(false);
-    expect(conditional.schema.safeParse({}).success).toBe(false);
+    expect(conditional.lossless).toBe(true);
+    expect(conditional.schema.safeParse({ a: true }).success).toBe(false);
+    expect(conditional.schema.safeParse({}).success).toBe(true);
     const untyped = jsonSchemaToZod({ properties: { a: { type: "string" } } });
-    expect(untyped.lossless).toBe(false);
+    expect(untyped.lossless).toBe(true);
     expect(() => zodToolInputSchema(untyped.schema)).toThrow();
     const format = jsonSchemaToZod({ type: "object", properties: { value: { type: "string", format: "custom-ignored-format" } } });
     expect(format.lossless).toBe(false);
     const conflictingEnum = jsonSchemaToZod({ type: "object", properties: { value: { type: "string", enum: [1, "allowed"] } } });
-    expect(conflictingEnum.lossless).toBe(false);
+    expect(conflictingEnum.lossless).toBe(true);
+    expect(conflictingEnum.schema.safeParse({ value: 1 }).success).toBe(false);
+    expect(conflictingEnum.schema.safeParse({ value: "allowed" }).success).toBe(true);
   });
 
-  it("does not claim lossless conversion when enum would override a sibling const", () => {
+  it("prepares draft-07 schema dependencies without changing property dependency arrays", () => {
+    const converted = jsonSchemaToZod({
+      type: "object", $schema: "http://json-schema.org/draft-07/schema#",
+      dependencies: {
+        a: { properties: { b: { type: "integer", minimum: 1, default: 3, "x-description": "annotation" } } },
+        c: ["d"],
+      },
+    });
+    expect(converted.lossless, converted.notes.join("\n")).toBe(true);
+    const input = zodToolInputSchema(converted.schema);
+    expect(input.parse({ a: true, b: 2 })).toEqual({ a: true, b: 2 });
+    expect(input.safeParse({ a: true, b: 0 }).success).toBe(false);
+    expect(input.parse({ a: true })).toEqual({ a: true });
+    expect(input.safeParse({ c: true }).success).toBe(false);
+    expect(input.parse({ c: true, d: false })).toEqual({ c: true, d: false });
+    expect(z.toJSONSchema(input).dependencies).toEqual({
+      a: { properties: { b: { type: "integer", minimum: 1 } } },
+      c: ["d"],
+    });
+    expect(converted.notes).toContain("$/dependencies/a/properties/b: default annotation is not applied to caller arguments");
+  });
+
+  it("intersects enum and const instead of dropping either constraint", () => {
     const converted = jsonSchemaToZod({
       type: "object",
       properties: { value: { type: "string", enum: ["a", "b"], const: "a" } },
       required: ["value"],
     });
-    expect(converted.lossless).toBe(false);
-    expect(converted.notes).toContain("$/properties/value: combined enum and const constraints are not faithfully validated");
+    expect(converted.lossless).toBe(true);
+    expect(converted.schema.safeParse({ value: "a" }).success).toBe(true);
+    expect(converted.schema.safeParse({ value: "b" }).success).toBe(false);
+  });
+
+  it("enforces array bounds without items and counts Unicode scalar values", () => {
+    const converted = jsonSchemaToZod({ type: "object", properties: {
+      values: { type: "array", minItems: 2, maxItems: 3 },
+      glyph: { type: "string", minLength: 1, maxLength: 1 },
+    }, required: ["values", "glyph"] });
+    expect(converted.lossless).toBe(true);
+    expect(converted.schema.safeParse({ values: [], glyph: "a" }).success).toBe(false);
+    expect(converted.schema.safeParse({ values: [1, 2, 3, 4], glyph: "a" }).success).toBe(false);
+    expect(converted.schema.parse({ values: [1, 2], glyph: "💛" })).toEqual({ values: [1, 2], glyph: "💛" });
+  });
+
+  it("composes patternProperties with typed additionalProperties and compares object literals deeply", () => {
+    const converted = jsonSchemaToZod({ type: "object", properties: {
+      record: { type: "object", patternProperties: { "^n": { type: "number" } }, additionalProperties: { type: "string" } },
+      literal: { const: { nested: [1, { flag: true }] } },
+    } });
+    const valid = { record: { n1: 2, other: "text" }, literal: { nested: [1, { flag: true }] } };
+    expect(converted.lossless).toBe(true);
+    expect(converted.schema.parse(valid)).toEqual(valid);
+    expect(converted.schema.safeParse({ record: { other: 2 } }).success).toBe(false);
+    expect(converted.schema.safeParse({ literal: { nested: [1, { flag: false }] } }).success).toBe(false);
+  });
+
+  it("resolves complete JSON pointers and intersects ref siblings and multiple compositions", () => {
+    const converted = jsonSchemaToZod({ type: "object", $schema: "https://json-schema.org/draft/2020-12/schema", properties: {
+      ref: { $ref: "#/$defs/container/properties/value", minimum: 5 },
+      combined: { anyOf: [{ type: "number" }], oneOf: [{ type: "integer" }] },
+    }, $defs: { container: { type: "object", properties: { value: { type: "number" } } } } });
+    expect(converted.lossless, converted.notes.join("\n")).toBe(true);
+    expect(converted.schema.parse({ ref: 5, combined: 7 })).toEqual({ ref: 5, combined: 7 });
+    expect(converted.schema.safeParse({ ref: 1 }).success).toBe(false);
+    expect(converted.schema.safeParse({ ref: { value: 5 } }).success).toBe(false);
+    expect(converted.schema.safeParse({ combined: 1.5 }).success).toBe(false);
+  });
+
+  it("supports 2020 unevaluated properties and refuses unknown assertions without dropping them", () => {
+    const converted = jsonSchemaToZod({ type: "object", $schema: "https://json-schema.org/draft/2020-12/schema",
+      allOf: [{ properties: { a: { type: "string" } } }], unevaluatedProperties: false });
+    expect(converted.lossless, converted.notes.join("\n")).toBe(true);
+    expect(converted.schema.safeParse({ a: "yes" }).success).toBe(true);
+    expect(converted.schema.safeParse({ a: "yes", extra: true }).success).toBe(false);
+    expect(jsonSchemaToZod({ type: "object", unknownValidation: true }).lossless).toBe(false);
+  });
+
+  it("preserves nested reserved JSON keys and rejects an unrepresentable explicit root parameter", () => {
+    const converted = jsonSchemaToZod({ type: "object", properties: {} });
+    const root = JSON.parse('{"__proto__":{"retained":true}}');
+    expect(converted.schema.parse(root)).toEqual(root);
+    const nested = JSON.parse('{"data":{"__proto__":{"retained":true},"constructor":"data"}}');
+    expect(converted.schema.parse(nested)).toEqual(nested);
+    const declared = jsonSchemaToZod(JSON.parse('{"type":"object","properties":{"__proto__":{"type":"string"}}}'));
+    expect(declared.lossless).toBe(false);
+    expect(declared.notes.join("\n")).toContain("official MCP transport cannot preserve");
   });
 
   it("converts required object fields without dropping enums", () => {

@@ -1,0 +1,635 @@
+{
+  "suite": "mission-final-validation",
+  "workflow": "factory-native-unseeded",
+  "status": "FAIL",
+  "upstream": {
+    "provider": "glm",
+    "label": "https://open.bigmodel.cn/api/anthropic",
+    "baseUrl": "https://open.bigmodel.cn/api/anthropic",
+    "model": "glm-5.2",
+    "tokenEnv": "READINESS_MODEL_API_KEY",
+    "authHeader": "x-api-key"
+  },
+  "durationSec": 79,
+  "timeoutMs": 3600000,
+  "requestCount": 3,
+  "droid": {
+    "code": 143,
+    "stdout": "",
+    "stderr": "",
+    "timedOut": false,
+    "signal": null,
+    "processCleanup": {
+      "supported": true,
+      "observedProcessCount": 0,
+      "terminatedProcessCount": 0,
+      "remainingProcessIds": [],
+      "complete": true
+    }
+  },
+  "baseline": {
+    "code": 1,
+    "stdout": "TAP version 13\n# Subtest: adds positive numbers\nnot ok 1 - adds positive numbers\n  ---\n  duration_ms: 1.614296\n  type: 'test'\n  location: '/tmp/relay-e2e-ws-5fnCM1/sum.test.js:4:1'\n  failureType: 'testCodeFailure'\n  error: |-\n    Expected values to be strictly equal:\n    \n    -1 !== 5\n    \n  code: 'ERR_ASSERTION'\n  name: 'AssertionError'\n  expected: 5\n  actual: -1\n  operator: 'strictEqual'\n  stack: |-\n    TestContext.<anonymous> (file:///tmp/relay-e2e-ws-5fnCM1/sum.test.js:4:44)\n    Test.runInAsyncScope (node:async_hooks:227:14)\n    Test.run (node:internal/test_runner/test:1382:25)\n    Test.start (node:internal/test_runner/test:1242:17)\n    startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17)\n  ...\n# Subtest: adds negative numbers\nnot ok 2 - adds negative numbers\n  ---\n  duration_ms: 0.181667\n  type: 'test'\n  location: '/tmp/relay-e2e-ws-5fnCM1/sum.test.js:5:1'\n  failureType: 'testCodeFailure'\n  error: |-\n    Expected values to be strictly equal:\n    \n    1 !== -5\n    \n  code: 'ERR_ASSERTION'\n  name: 'AssertionError'\n  expected: -5\n  actual: 1\n  operator: 'strictEqual'\n  stack: |-\n    TestContext.<anonymous> (file:///tmp/relay-e2e-ws-5fnCM1/sum.test.js:5:44)\n    Test.runInAsyncScope (node:async_hooks:227:14)\n    Test.run (node:internal/test_runner/test:1382:25)\n    Test.processPendingSubtests (node:internal/test_runner/test:960:18)\n    Test.postRun (node:internal/test_runner/test:1522:19)\n    Test.run (node:internal/test_runner/test:1447:12)\n    async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)\n  ...\n# Subtest: adds mixed signs and zero\nnot ok 3 - adds mixed signs and zero\n  ---\n  duration_ms: 0.182629\n  type: 'test'\n  location: '/tmp/relay-e2e-ws-5fnCM1/sum.test.js:6:1'\n  failureType: 'testCodeFailure'\n  error: |-\n    Expected values to be strictly equal:\n    \n    -5 !== 1\n    \n  code: 'ERR_ASSERTION'\n  name: 'AssertionError'\n  expected: 1\n  actual: -5\n  operator: 'strictEqual'\n  stack: |-\n    TestContext.<anonymous> (file:///tmp/relay-e2e-ws-5fnCM1/sum.test.js:6:50)\n    Test.runInAsyncScope (node:async_hooks:227:14)\n    Test.run (node:internal/test_runner/test:1382:25)\n    Test.processPendingSubtests (node:internal/test_runner/test:960:18)\n    Test.postRun (node:internal/test_runner/test:1522:19)\n    Test.run (node:internal/test_runner/test:1447:12)\n    async Test.processPendingSubtests (node:internal/test_runner/test:960:7)\n  ...\n1..3\n# tests 3\n# suites 0\n# pass 0\n# fail 3\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 98.25234\n",
+    "stderr": "",
+    "timedOut": false,
+    "signal": null,
+    "processCleanup": {
+      "supported": true,
+      "observedProcessCount": 0,
+      "terminatedProcessCount": 0,
+      "remainingProcessIds": [],
+      "complete": true
+    }
+  },
+  "tests": {
+    "code": 1,
+    "stdout": "\n> test\n> node --test\n\n✖ adds positive numbers (1.284571ms)\n✖ adds negative numbers (0.184582ms)\n✖ adds mixed signs and zero (0.184552ms)\nℹ tests 3\nℹ suites 0\nℹ pass 0\nℹ fail 3\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 67.122045\n\n✖ failing tests:\n\ntest at sum.test.js:4:1\n✖ adds positive numbers (1.284571ms)\n  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n  \n  -1 !== 5\n  \n      at TestContext.<anonymous> (file:///tmp/relay-e2e-ws-5fnCM1/sum.test.js:4:44)\n      at Test.runInAsyncScope (node:async_hooks:227:14)\n      at Test.run (node:internal/test_runner/test:1382:25)\n      at Test.start (node:internal/test_runner/test:1242:17)\n      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {\n    generatedMessage: true,\n    code: 'ERR_ASSERTION',\n    actual: -1,\n    expected: 5,\n    operator: 'strictEqual',\n    diff: 'simple'\n  }\n\ntest at sum.test.js:5:1\n✖ adds negative numbers (0.184582ms)\n  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n  \n  1 !== -5\n  \n      at TestContext.<anonymous> (file:///tmp/relay-e2e-ws-5fnCM1/sum.test.js:5:44)\n      at Test.runInAsyncScope (node:async_hooks:227:14)\n      at Test.run (node:internal/test_runner/test:1382:25)\n      at Test.processPendingSubtests (node:internal/test_runner/test:960:18)\n      at Test.postRun (node:internal/test_runner/test:1522:19)\n      at Test.run (node:internal/test_runner/test:1447:12)\n      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {\n    generatedMessage: true,\n    code: 'ERR_ASSERTION',\n    actual: 1,\n    expected: -5,\n    operator: 'strictEqual',\n    diff: 'simple'\n  }\n\ntest at sum.test.js:6:1\n✖ adds mixed signs and zero (0.184552ms)\n  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n  \n  -5 !== 1\n  \n      at TestContext.<anonymous> (file:///tmp/relay-e2e-ws-5fnCM1/sum.test.js:6:50)\n      at Test.runInAsyncScope (node:async_hooks:227:14)\n      at Test.run (node:internal/test_runner/test:1382:25)\n      at Test.processPendingSubtests (node:internal/test_runner/test:960:18)\n      at Test.postRun (node:internal/test_runner/test:1522:19)\n      at Test.run (node:internal/test_runner/test:1447:12)\n      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {\n    generatedMessage: true,\n    code: 'ERR_ASSERTION',\n    actual: -5,\n    expected: 1,\n    operator: 'strictEqual',\n    diff: 'simple'\n  }\n",
+    "stderr": "",
+    "timedOut": false,
+    "signal": null,
+    "processCleanup": {
+      "supported": true,
+      "observedProcessCount": 0,
+      "terminatedProcessCount": 0,
+      "remainingProcessIds": [],
+      "complete": true
+    }
+  },
+  "roles": [
+    "orchestrator",
+    "orchestrator",
+    "orchestrator"
+  ],
+  "uniqueRoles": [
+    "orchestrator"
+  ],
+  "roleEvidence": [
+    {
+      "role": "orchestrator",
+      "bridgeSessionId": "sess_041201ec-0840-4c3d-af23-f84489d98769",
+      "sdkSessionId": "a469a3c4-f208-4738-9bba-2ab5259afc73",
+      "state": "IDLE",
+      "missionSession": true,
+      "providerMessages": 3
+    }
+  ],
+  "factoryToolCalls": [
+    {
+      "id": "call_198eb5cc8fa7409db6c27bcc",
+      "name": "Skill",
+      "sessionId": "sess_041201ec-0840-4c3d-af23-f84489d98769",
+      "resultObserved": true,
+      "skill": "mission-planning",
+      "isError": false
+    },
+    {
+      "id": "call_fc83c6890b3a4c988a13341a",
+      "name": "Skill",
+      "sessionId": "sess_041201ec-0840-4c3d-af23-f84489d98769",
+      "resultObserved": true,
+      "skill": "define-mission-skills",
+      "isError": false
+    }
+  ],
+  "missionHandoffs": [],
+  "droidSuccessful": false,
+  "threeRoles": false,
+  "factoryWorkflowObserved": false,
+  "missionCompleted": false,
+  "featuresDone": false,
+  "requiredValidatorsCompleted": false,
+  "completedWorkerHandoffsObserved": false,
+  "validationGreen": false,
+  "testsGreen": false,
+  "originalTestsPreserved": true,
+  "baselineFailedAsExpected": true,
+  "nativeRuntimeHealthy": true,
+  "toolFreeHelpersRespected": true,
+  "nativeWorkSettled": true,
+  "cleanupSuccessful": true,
+  "failedGates": [
+    "droidSuccessful",
+    "threeRoles",
+    "factoryWorkflowObserved",
+    "missionCompleted",
+    "featuresDone",
+    "requiredValidatorsCompleted",
+    "completedWorkerHandoffsObserved",
+    "validationGreen",
+    "testsGreen"
+  ],
+  "validation": [],
+  "features": [],
+  "missionState": "planning",
+  "missionDir": "/tmp/relay-e2e-home-S6wONy/.factory/missions/44449345-d94f-4e75-b655-1b2c5145612d",
+  "missionDirs": [
+    "/tmp/relay-e2e-home-S6wONy/.factory/missions/44449345-d94f-4e75-b655-1b2c5145612d"
+  ],
+  "artifactErrors": [],
+  "workspace": "/tmp/relay-e2e-ws-5fnCM1",
+  "factoryHome": "/tmp/relay-e2e-home-S6wONy/.factory",
+  "cache": {
+    "input_tokens": 28924,
+    "output_tokens": 1480,
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 50880,
+    "cache_hit_ratio": null,
+    "requests": 3,
+    "requestCountKnown": true,
+    "status": "reported",
+    "source": "provider_messages",
+    "coverage": "partial",
+    "eventRows": 15,
+    "representativeOfClaudeSubscription": false
+  },
+  "cleanupErrors": [],
+  "runtimeBeforeCleanup": {
+    "kind": "sdk",
+    "authMode": "byok",
+    "permissionMode": "bypass",
+    "prompt": {
+      "systemPrompt": "preset:claude_code + stable append",
+      "dynamicPlacement": "user input on initial turn or context change",
+      "tools": "preset:claude_code built-ins + Droid-exclusive MCP"
+    },
+    "tools": "preset:claude_code + droid-exclusive MCP",
+    "input": "persistent SDK streaming input",
+    "includePartialMessages": true,
+    "approvalChannel": "external controller",
+    "activeNativeSessions": 0,
+    "activeNativeTurns": 0,
+    "pendingHostCalls": 0,
+    "pendingApprovals": 0,
+    "fatalErrors": [],
+    "overridesAnthropicEnv": true,
+    "upstream": {
+      "provider": "glm",
+      "label": "https://open.bigmodel.cn/api/anthropic",
+      "baseUrl": "https://open.bigmodel.cn/api/anthropic",
+      "model": "glm-5.2",
+      "tokenEnv": "READINESS_MODEL_API_KEY",
+      "authHeader": "x-api-key"
+    },
+    "control": {
+      "pendingApprovals": 0,
+      "failures": [],
+      "activeHostSessions": 0,
+      "boundNativeSessions": 0
+    }
+  },
+  "runtimeAfterCleanup": {
+    "kind": "sdk",
+    "authMode": "byok",
+    "permissionMode": "bypass",
+    "prompt": {
+      "systemPrompt": "preset:claude_code + stable append",
+      "dynamicPlacement": "user input on initial turn or context change",
+      "tools": "preset:claude_code built-ins + Droid-exclusive MCP"
+    },
+    "tools": "preset:claude_code + droid-exclusive MCP",
+    "input": "persistent SDK streaming input",
+    "includePartialMessages": true,
+    "approvalChannel": "external controller",
+    "activeNativeSessions": 0,
+    "activeNativeTurns": 0,
+    "pendingHostCalls": 0,
+    "pendingApprovals": 0,
+    "fatalErrors": [],
+    "overridesAnthropicEnv": true,
+    "upstream": {
+      "provider": "glm",
+      "label": "https://open.bigmodel.cn/api/anthropic",
+      "baseUrl": "https://open.bigmodel.cn/api/anthropic",
+      "model": "glm-5.2",
+      "tokenEnv": "READINESS_MODEL_API_KEY",
+      "authHeader": "x-api-key"
+    },
+    "control": {
+      "pendingApprovals": 0,
+      "failures": [],
+      "activeHostSessions": 0,
+      "boundNativeSessions": 0
+    }
+  },
+  "unsettledSessions": [],
+  "bridgeErrors": [],
+  "toolFreeSessions": [],
+  "processCleanup": {
+    "supported": true,
+    "observedProcessCount": 18,
+    "terminatedProcessCount": 0,
+    "remainingProcessIds": [],
+    "complete": true
+  },
+  "hostHooks": {
+    "hooksPath": "/tmp/relay-e2e-ws-5fnCM1/.factory/hooks.json",
+    "configPath": "/tmp/relay-e2e-home-S6wONy/.factory/relay-hooks.json",
+    "events": [
+      "SessionStart",
+      "UserPromptSubmit",
+      "PreToolUse",
+      "PostToolUse",
+      "SessionEnd",
+      "Notification",
+      "Stop",
+      "SubagentStop"
+    ]
+  },
+  "launchId": "7a9d631e-eff8-4661-a74f-246de5a0f777",
+  "notes": [
+    "PASS requires successful Droid exit, completed Factory skill/planning/start tool roundtrips, real SDK/provider activity for all three roles, completed Mission state and features, passed validation, unchanged passing fixture tests, no execution of native tools from tool-free helpers, no fatal native runtime/control errors, and no stranded native turns or host tool handlers before cleanup.",
+    "Factory generates the plan, skills, features and validation artifacts through its normal workflow; the harness does not seed or repair those artifacts.",
+    "The Mission has a positive time limit; timeout, interruption and exit clean up owned CLI processes and the bridge SDK sessions. Linux process identity tracking verifies no live owned descendants remain, including previously detached/reparented children; it reads no process environments or arguments.",
+    "Factory uses an isolated FACTORY_HOME_OVERRIDE plus an explicit --settings file with a literal local bridge token; HOME is unchanged.",
+    "The selected BYOK provider's reported Claude Code usage is recorded. These numbers do not establish Claude subscription cache behavior.",
+    "This is one fresh, uninterrupted invocation. No previous Factory home, workspace, Mission or SDK session is reused.",
+    "Both scrutiny-validator and user-testing-validator must complete. Every completed feature requires a matching real EndFeatureRun worker transcript.",
+    "The summary is written exclusively; prior attempts and legacy summaries are retained. Owned processes are drained; isolated fixture directories are retained for failure diagnosis or explicit recovery.",
+    "A changed runtime source fingerprint invalidates the final acceptance claim, even if the underlying Mission completed."
+  ],
+  "startedAt": "2026-10-16T01:08:24.604Z",
+  "recordedAt": "2026-10-16T01:09:43.342Z",
+  "uninterruptedMissionPass": false,
+  "runtimeSourcesStable": true,
+  "sourceScope": {
+    "before": {
+      "sha256": "d362e909326686d75b0be6c5be6c61fb52f2cce6307455a42e411c3ada86a4c9",
+      "files": [
+        {
+          "path": "package-lock.json",
+          "sha256": "20ae8c194cd3f2bb613add4473d9efd6ebf5253f36331b939e9d623b57a1f511"
+        },
+        {
+          "path": "package.json",
+          "sha256": "228f6e5ade138e9dc6ab44fb72e6a565f7d3a6645d404f7048bce9df1c6d9296"
+        },
+        {
+          "path": "scripts/e2e-lib.ts",
+          "sha256": "b9ada2fa7cde87fe4e12350ddd3797d480c5d8bc4bbbaab4d7b7efd60f622362"
+        },
+        {
+          "path": "scripts/e2e-mission.ts",
+          "sha256": "27b82d441da97c2dabdf144bf983ef27bd22e4618840027fa0fff4e5546e1608"
+        },
+        {
+          "path": "scripts/e2e-processes.ts",
+          "sha256": "4c12fcb2973e5cc0596c1a42b98c09cd1efdd8f844405e1b21d7c397a0384d52"
+        },
+        {
+          "path": "scripts/factory-hook.ts",
+          "sha256": "9c8990b356faeed05657de51594c56fca6595d5f7c0197cf9ed364e4c86b1823"
+        },
+        {
+          "path": "src/config.ts",
+          "sha256": "2cb252ffd010751c28cb26560a3c6ed06177cc8a89d3eb10f54f2546aa155ac7"
+        },
+        {
+          "path": "src/control/broker.ts",
+          "sha256": "852788459935e146c433da7af5a8e2daf12e6340a941c865b2b56844bb992c8c"
+        },
+        {
+          "path": "src/control/factory-hooks.ts",
+          "sha256": "cec292d923276225ee3cc69c8c1ad612326c20243f84a8857d3ee46c5f903303"
+        },
+        {
+          "path": "src/http/app.ts",
+          "sha256": "4d0796ff388be90c099208f6e2b7d2dfbf9b10ca97a74ff1c5ab89c206127496"
+        },
+        {
+          "path": "src/http/control-page.ts",
+          "sha256": "3b7dee8af80b6924f7111487369ee9858b297364895357986a78c6d31f2bba2c"
+        },
+        {
+          "path": "src/http/sse-stream.ts",
+          "sha256": "7d167d6540c28b3ff705ee10e4b3e4f9a09be4389958e7f7470552aa534a02b0"
+        },
+        {
+          "path": "src/http/sse.ts",
+          "sha256": "736b7e28d209d0ab6735b888bf2f1df02cea0cf5f4a5dd0c5e176c20947f9bfd"
+        },
+        {
+          "path": "src/http/status-page.ts",
+          "sha256": "923b463d01293252c85b1eb7ba1dc4120f18e34e2dc7d6ef6f911f0ba0eabb46"
+        },
+        {
+          "path": "src/index.ts",
+          "sha256": "3f0d52fbf96a7cdee18ef0fe432aa2b0f9c9be6eee9943b2d692c4b993f4e718"
+        },
+        {
+          "path": "src/logging.ts",
+          "sha256": "e2c92fbb29d0d895b92717de6cdde44ece0ed6277dcdaa417d804c7ccb2675e8"
+        },
+        {
+          "path": "src/protocol/content.ts",
+          "sha256": "199656bed9ab99cc2180c8a69d5ba671287d0ddcdd9e91af44dd1fa09789b147"
+        },
+        {
+          "path": "src/protocol/messages.ts",
+          "sha256": "1ad1e1feb631169277645f395d4e3d6f324e8dab7dc7832f3573353ea79b249b"
+        },
+        {
+          "path": "src/protocol/schema-to-zod.ts",
+          "sha256": "45b0cd99c03f84a6fc04375e8f1de3a033a4c597ce51b947d438aa68a0d90c12"
+        },
+        {
+          "path": "src/protocol/tool-names.ts",
+          "sha256": "f4a5f0b14fa922dbfafef4158bce9444ae228d34b55e775568639c10d269904f"
+        },
+        {
+          "path": "src/protocol/validate.ts",
+          "sha256": "dc6eb620522fd65e3e5aefc1398dcf273932af712561cf584d0220afeaa64dc9"
+        },
+        {
+          "path": "src/relay/ids.ts",
+          "sha256": "2711da6afa47ea7e26d947d57517a251cd1d6a138b5045125d0edf06da48762e"
+        },
+        {
+          "path": "src/relay/mailbox.ts",
+          "sha256": "a52a9d7bef0e00c73b0a6e55c8fc699dfc88899fb893fc799564ce7830e238e7"
+        },
+        {
+          "path": "src/runtime/droid-mcp-catalog.ts",
+          "sha256": "bd6494fbebcda021b5afc0f03ce446641e40e227048fdea848053897d284db76"
+        },
+        {
+          "path": "src/runtime/droid-tools.ts",
+          "sha256": "09781bc4bdf76761707afc9d6dab3e98d9629f6f4341ff10eb071cead8be0ea5"
+        },
+        {
+          "path": "src/runtime/factory-capabilities.ts",
+          "sha256": "12d89a54eee639286fc36ffc8a51d2553e06a28b1d586bfbda13436b96312f32"
+        },
+        {
+          "path": "src/runtime/factory.ts",
+          "sha256": "731ff989b00903445819acf61d8108bc80c43bd3c422393ad75eeed32f81d3f8"
+        },
+        {
+          "path": "src/runtime/fake-runtime.ts",
+          "sha256": "da08586a2c97dac39a5e78c768910ade495de89fb409ba96a1ba8027ae1c2690"
+        },
+        {
+          "path": "src/runtime/mission-tools.ts",
+          "sha256": "a1bc9b27954f79fb280e131e98779a3c28698ff9785d9e5ab35367b2472af623"
+        },
+        {
+          "path": "src/runtime/mock-runtime.ts",
+          "sha256": "8299dc619ea7b9ec359d78c3a3035f8f6fcaad4bd48ba3893d756a5e855d3674"
+        },
+        {
+          "path": "src/runtime/native-tool-policy.ts",
+          "sha256": "f78bdab44ae412897ee5bc1a9de0abac6facfd4e3deaca214ac80765c1d2fe5c"
+        },
+        {
+          "path": "src/runtime/safe-tools.ts",
+          "sha256": "82a4122b1d98ede94337f8aa2393c37ab2db15844d5d62c100dd0ddf443e371b"
+        },
+        {
+          "path": "src/runtime/sdk-runtime.ts",
+          "sha256": "c92103cc725ec7646df08e97d03fbe496fb5926dbb571ea3d037bd672b49bc6a"
+        },
+        {
+          "path": "src/runtime/system-prompt.ts",
+          "sha256": "d30bbd9fc565361a1f6219c1f5195c3556b2d1da1536be58217ac2d2eacc67f8"
+        },
+        {
+          "path": "src/runtime/types.ts",
+          "sha256": "f98038399c968f5a4add1fd2aa6db321f111e13c0ec7a0bf0f1de192bcdb1e07"
+        },
+        {
+          "path": "src/runtime/usage.ts",
+          "sha256": "81b25a74b7a37c03f3b42a256099f1f64a35b9ccbef7d912359a771c0228f777"
+        },
+        {
+          "path": "src/security/auth.ts",
+          "sha256": "28b3d0a62769f1501bb67d84dd9f252ee9d603929b28ee4de7da45e0bb363cd3"
+        },
+        {
+          "path": "src/security/limits.ts",
+          "sha256": "f1c5a8b653a826ec257e691b4f48ecb34e75f6dbc232d4418945c7058621986e"
+        },
+        {
+          "path": "src/security/redact.ts",
+          "sha256": "65514578ea87343e0891351966ceaae1e5deedac44d5d53679cf795214b3527f"
+        },
+        {
+          "path": "src/sessions/correlate.ts",
+          "sha256": "411df2d6fbbbbbe1fb49188b93ce72419c33f8e042fb97e4a5052ab7dfd22997"
+        },
+        {
+          "path": "src/sessions/state.ts",
+          "sha256": "e4c75bcdeb2a6fdd1fe183c7ee8641226b8fd574afbdcc931302e2556159f1bf"
+        },
+        {
+          "path": "src/sessions/store.ts",
+          "sha256": "4599fca2fa1369aa76b66cd439501570031dd967095509cb32c973a899176505"
+        },
+        {
+          "path": "src/types.ts",
+          "sha256": "f98912af94b152bbeacd2ce69560855c7769f049c024115ef1199d9ba0b0e82a"
+        },
+        {
+          "path": "src/upstream/providers.ts",
+          "sha256": "5a358752e808ccd2aeb73466fc90e5c3d11f752d5f07fd2463a805441be2a0be"
+        },
+        {
+          "path": "src/workspace.ts",
+          "sha256": "3f475d5a0ef32c690d3f335e1d4e307d7e95447fc5d8a3c1ddd958944bee1180"
+        }
+      ]
+    },
+    "after": {
+      "sha256": "d362e909326686d75b0be6c5be6c61fb52f2cce6307455a42e411c3ada86a4c9",
+      "files": [
+        {
+          "path": "package-lock.json",
+          "sha256": "20ae8c194cd3f2bb613add4473d9efd6ebf5253f36331b939e9d623b57a1f511"
+        },
+        {
+          "path": "package.json",
+          "sha256": "228f6e5ade138e9dc6ab44fb72e6a565f7d3a6645d404f7048bce9df1c6d9296"
+        },
+        {
+          "path": "scripts/e2e-lib.ts",
+          "sha256": "b9ada2fa7cde87fe4e12350ddd3797d480c5d8bc4bbbaab4d7b7efd60f622362"
+        },
+        {
+          "path": "scripts/e2e-mission.ts",
+          "sha256": "27b82d441da97c2dabdf144bf983ef27bd22e4618840027fa0fff4e5546e1608"
+        },
+        {
+          "path": "scripts/e2e-processes.ts",
+          "sha256": "4c12fcb2973e5cc0596c1a42b98c09cd1efdd8f844405e1b21d7c397a0384d52"
+        },
+        {
+          "path": "scripts/factory-hook.ts",
+          "sha256": "9c8990b356faeed05657de51594c56fca6595d5f7c0197cf9ed364e4c86b1823"
+        },
+        {
+          "path": "src/config.ts",
+          "sha256": "2cb252ffd010751c28cb26560a3c6ed06177cc8a89d3eb10f54f2546aa155ac7"
+        },
+        {
+          "path": "src/control/broker.ts",
+          "sha256": "852788459935e146c433da7af5a8e2daf12e6340a941c865b2b56844bb992c8c"
+        },
+        {
+          "path": "src/control/factory-hooks.ts",
+          "sha256": "cec292d923276225ee3cc69c8c1ad612326c20243f84a8857d3ee46c5f903303"
+        },
+        {
+          "path": "src/http/app.ts",
+          "sha256": "4d0796ff388be90c099208f6e2b7d2dfbf9b10ca97a74ff1c5ab89c206127496"
+        },
+        {
+          "path": "src/http/control-page.ts",
+          "sha256": "3b7dee8af80b6924f7111487369ee9858b297364895357986a78c6d31f2bba2c"
+        },
+        {
+          "path": "src/http/sse-stream.ts",
+          "sha256": "7d167d6540c28b3ff705ee10e4b3e4f9a09be4389958e7f7470552aa534a02b0"
+        },
+        {
+          "path": "src/http/sse.ts",
+          "sha256": "736b7e28d209d0ab6735b888bf2f1df02cea0cf5f4a5dd0c5e176c20947f9bfd"
+        },
+        {
+          "path": "src/http/status-page.ts",
+          "sha256": "923b463d01293252c85b1eb7ba1dc4120f18e34e2dc7d6ef6f911f0ba0eabb46"
+        },
+        {
+          "path": "src/index.ts",
+          "sha256": "3f0d52fbf96a7cdee18ef0fe432aa2b0f9c9be6eee9943b2d692c4b993f4e718"
+        },
+        {
+          "path": "src/logging.ts",
+          "sha256": "e2c92fbb29d0d895b92717de6cdde44ece0ed6277dcdaa417d804c7ccb2675e8"
+        },
+        {
+          "path": "src/protocol/content.ts",
+          "sha256": "199656bed9ab99cc2180c8a69d5ba671287d0ddcdd9e91af44dd1fa09789b147"
+        },
+        {
+          "path": "src/protocol/messages.ts",
+          "sha256": "1ad1e1feb631169277645f395d4e3d6f324e8dab7dc7832f3573353ea79b249b"
+        },
+        {
+          "path": "src/protocol/schema-to-zod.ts",
+          "sha256": "45b0cd99c03f84a6fc04375e8f1de3a033a4c597ce51b947d438aa68a0d90c12"
+        },
+        {
+          "path": "src/protocol/tool-names.ts",
+          "sha256": "f4a5f0b14fa922dbfafef4158bce9444ae228d34b55e775568639c10d269904f"
+        },
+        {
+          "path": "src/protocol/validate.ts",
+          "sha256": "dc6eb620522fd65e3e5aefc1398dcf273932af712561cf584d0220afeaa64dc9"
+        },
+        {
+          "path": "src/relay/ids.ts",
+          "sha256": "2711da6afa47ea7e26d947d57517a251cd1d6a138b5045125d0edf06da48762e"
+        },
+        {
+          "path": "src/relay/mailbox.ts",
+          "sha256": "a52a9d7bef0e00c73b0a6e55c8fc699dfc88899fb893fc799564ce7830e238e7"
+        },
+        {
+          "path": "src/runtime/droid-mcp-catalog.ts",
+          "sha256": "bd6494fbebcda021b5afc0f03ce446641e40e227048fdea848053897d284db76"
+        },
+        {
+          "path": "src/runtime/droid-tools.ts",
+          "sha256": "09781bc4bdf76761707afc9d6dab3e98d9629f6f4341ff10eb071cead8be0ea5"
+        },
+        {
+          "path": "src/runtime/factory-capabilities.ts",
+          "sha256": "12d89a54eee639286fc36ffc8a51d2553e06a28b1d586bfbda13436b96312f32"
+        },
+        {
+          "path": "src/runtime/factory.ts",
+          "sha256": "731ff989b00903445819acf61d8108bc80c43bd3c422393ad75eeed32f81d3f8"
+        },
+        {
+          "path": "src/runtime/fake-runtime.ts",
+          "sha256": "da08586a2c97dac39a5e78c768910ade495de89fb409ba96a1ba8027ae1c2690"
+        },
+        {
+          "path": "src/runtime/mission-tools.ts",
+          "sha256": "a1bc9b27954f79fb280e131e98779a3c28698ff9785d9e5ab35367b2472af623"
+        },
+        {
+          "path": "src/runtime/mock-runtime.ts",
+          "sha256": "8299dc619ea7b9ec359d78c3a3035f8f6fcaad4bd48ba3893d756a5e855d3674"
+        },
+        {
+          "path": "src/runtime/native-tool-policy.ts",
+          "sha256": "f78bdab44ae412897ee5bc1a9de0abac6facfd4e3deaca214ac80765c1d2fe5c"
+        },
+        {
+          "path": "src/runtime/safe-tools.ts",
+          "sha256": "82a4122b1d98ede94337f8aa2393c37ab2db15844d5d62c100dd0ddf443e371b"
+        },
+        {
+          "path": "src/runtime/sdk-runtime.ts",
+          "sha256": "c92103cc725ec7646df08e97d03fbe496fb5926dbb571ea3d037bd672b49bc6a"
+        },
+        {
+          "path": "src/runtime/system-prompt.ts",
+          "sha256": "d30bbd9fc565361a1f6219c1f5195c3556b2d1da1536be58217ac2d2eacc67f8"
+        },
+        {
+          "path": "src/runtime/types.ts",
+          "sha256": "f98038399c968f5a4add1fd2aa6db321f111e13c0ec7a0bf0f1de192bcdb1e07"
+        },
+        {
+          "path": "src/runtime/usage.ts",
+          "sha256": "81b25a74b7a37c03f3b42a256099f1f64a35b9ccbef7d912359a771c0228f777"
+        },
+        {
+          "path": "src/security/auth.ts",
+          "sha256": "28b3d0a62769f1501bb67d84dd9f252ee9d603929b28ee4de7da45e0bb363cd3"
+        },
+        {
+          "path": "src/security/limits.ts",
+          "sha256": "f1c5a8b653a826ec257e691b4f48ecb34e75f6dbc232d4418945c7058621986e"
+        },
+        {
+          "path": "src/security/redact.ts",
+          "sha256": "65514578ea87343e0891351966ceaae1e5deedac44d5d53679cf795214b3527f"
+        },
+        {
+          "path": "src/sessions/correlate.ts",
+          "sha256": "411df2d6fbbbbbe1fb49188b93ce72419c33f8e042fb97e4a5052ab7dfd22997"
+        },
+        {
+          "path": "src/sessions/state.ts",
+          "sha256": "e4c75bcdeb2a6fdd1fe183c7ee8641226b8fd574afbdcc931302e2556159f1bf"
+        },
+        {
+          "path": "src/sessions/store.ts",
+          "sha256": "4599fca2fa1369aa76b66cd439501570031dd967095509cb32c973a899176505"
+        },
+        {
+          "path": "src/types.ts",
+          "sha256": "f98912af94b152bbeacd2ce69560855c7769f049c024115ef1199d9ba0b0e82a"
+        },
+        {
+          "path": "src/upstream/providers.ts",
+          "sha256": "5a358752e808ccd2aeb73466fc90e5c3d11f752d5f07fd2463a805441be2a0be"
+        },
+        {
+          "path": "src/workspace.ts",
+          "sha256": "3f475d5a0ef32c690d3f335e1d4e307d7e95447fc5d8a3c1ddd958944bee1180"
+        }
+      ]
+    },
+    "includesUncommittedWorkingTree": true
+  },
+  "authorization": {
+    "mode": "isolated-byok",
+    "realClaudeSubscriptionUsed": false,
+    "provider": "Configured explicit BRIDGE_UPSTREAM_BASE_URL; see upstream",
+    "preservesProxyAndCA": true
+  },
+  "evidence": "evidence/local/mission-final-summary-6u2Ovo",
+  "recoveryUsed": false
+}

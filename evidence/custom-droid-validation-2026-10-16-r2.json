@@ -1,0 +1,352 @@
+{
+  "feature": "custom",
+  "status": "PASS",
+  "startedAt": "2026-10-16T01:02:00.207Z",
+  "authentication": {
+    "provider": "glm",
+    "label": "https://open.bigmodel.cn/api/anthropic",
+    "baseUrl": "https://open.bigmodel.cn/api/anthropic",
+    "model": "glm-5.2",
+    "tokenEnv": "READINESS_MODEL_API_KEY",
+    "authHeader": "x-api-key",
+    "subscriptionCredentialsRead": false
+  },
+  "exclusions": [
+    "Anthropic subscription billing or account-safety guarantees",
+    "different underlying models for Factory aliases",
+    "all possible custom droids"
+  ],
+  "exitCode": 0,
+  "checks": {
+    "droidSucceeded": true,
+    "independentFileResult": true,
+    "inputUnchanged": true,
+    "authenticatedBridgeTraffic": true,
+    "nativeReadCompleted": true,
+    "nativeWriteCompleted": true,
+    "runtimeDrained": true,
+    "nativeSessionsPresent": true,
+    "actualCustomFactoryTask": true,
+    "bodyOnlyMarkerPreserved": true,
+    "customModelSelected": true,
+    "childNativeSession": true,
+    "parentDidNotReadOrWrite": true,
+    "markerNotInDelegatedPrompt": true
+  },
+  "observations": {
+    "result": {
+      "type": "result",
+      "subtype": "success",
+      "is_error": false,
+      "duration_ms": 38724,
+      "num_turns": 2,
+      "result": "The relay-verifier droid completed its verification task and returned:\n\n**bodyMarker:** `DROID_BODY_46dce6d174594b6eb26f`\n\nIt read `input.json`, computed the result, and wrote `custom-result.json` itself; I performed no file reads or writes directly.\n\nCUSTOM_PARENT_OK",
+      "session_id": "4ae6df25-ef3e-4ba2-a330-c90f2b6ba734",
+      "usage": {
+        "input_tokens": 15351,
+        "output_tokens": 863,
+        "cache_read_input_tokens": 92544,
+        "cache_creation_input_tokens": 0,
+        "factory_credits": 0,
+        "ttft_ms": 7720
+      }
+    },
+    "independentFileResult": {
+      "nonce": "cc0838bbc42827d7f3e98400",
+      "sum": 46,
+      "bodyMarker": "DROID_BODY_46dce6d174594b6eb26f"
+    },
+    "tools": [
+      {
+        "name": "mcp__droid__Task",
+        "id": "call_a7f0c9ae51c042fa96ec139f",
+        "input": {
+          "subagent_type": "relay-verifier",
+          "description": "Run relay-verifier verification",
+          "prompt": "Execute your verification task now, following all instructions you have. Read the verification input available to you, carry out the requested work, and when finished report back the exact string CUSTOM_CHILD_OK along with the exact bodyMarker value you produced. Do not omit either token from your final report.",
+          "await": true
+        },
+        "sessionId": "7a22082c-05ac-4c91-970a-474a8c40c292",
+        "resultSeen": true,
+        "isError": false
+      },
+      {
+        "name": "Read",
+        "id": "call_e1e1abb967524d40a0be43da",
+        "input": {
+          "file_path": "/tmp/relay-e2e-ws-bqHHpx/input.json"
+        },
+        "sessionId": "eeaf5e89-e22e-4ba9-891e-5ef8d913d116",
+        "resultSeen": true,
+        "isError": false
+      },
+      {
+        "name": "Write",
+        "id": "call_cc7a32b741fb452f91fcb89a",
+        "input": {
+          "file_path": "/tmp/relay-e2e-ws-bqHHpx/custom-result.json",
+          "content": "{\"nonce\": \"cc0838bbc42827d7f3e98400\", \"sum\": 46, \"bodyMarker\": \"DROID_BODY_46dce6d174594b6eb26f\"}"
+        },
+        "sessionId": "eeaf5e89-e22e-4ba9-891e-5ef8d913d116",
+        "resultSeen": true,
+        "isError": false
+      }
+    ],
+    "hookModes": [
+      {
+        "at": "2026-10-16T01:02:00.548Z",
+        "hook": "SessionStart",
+        "sessionId": "4ae6df25-ef3e-4ba2-a330-c90f2b6ba734",
+        "permissionMode": "off"
+      },
+      {
+        "at": "2026-10-16T01:02:08.578Z",
+        "hook": "PreToolUse",
+        "sessionId": "4ae6df25-ef3e-4ba2-a330-c90f2b6ba734",
+        "permissionMode": "auto-high",
+        "toolName": "Task"
+      },
+      {
+        "at": "2026-10-16T01:02:08.902Z",
+        "hook": "SessionStart",
+        "sessionId": "d80ac293-e782-4321-8f82-4c9679deba38",
+        "permissionMode": "auto-high"
+      },
+      {
+        "at": "2026-10-16T01:02:09.096Z",
+        "hook": "UserPromptSubmit",
+        "sessionId": "d80ac293-e782-4321-8f82-4c9679deba38",
+        "permissionMode": "auto-high"
+      },
+      {
+        "at": "2026-10-16T01:02:29.482Z",
+        "hook": "SessionEnd",
+        "sessionId": "d80ac293-e782-4321-8f82-4c9679deba38",
+        "permissionMode": "auto-high"
+      },
+      {
+        "at": "2026-10-16T01:02:29.789Z",
+        "hook": "PostToolUse",
+        "sessionId": "4ae6df25-ef3e-4ba2-a330-c90f2b6ba734",
+        "permissionMode": "auto-high",
+        "toolName": "Task"
+      },
+      {
+        "at": "2026-10-16T01:02:39.408Z",
+        "hook": "SessionEnd",
+        "sessionId": "4ae6df25-ef3e-4ba2-a330-c90f2b6ba734",
+        "permissionMode": "auto-high"
+      }
+    ],
+    "requests": [
+      {
+        "at": "2026-10-16T01:02:00.839Z",
+        "session": "sess_47d02495-b73d-40b5-b8fa-462b9baeb144",
+        "model": "relay-chat"
+      },
+      {
+        "at": "2026-10-16T01:02:09.178Z",
+        "session": "sess_ff89e9be-f10c-4d19-b91e-30f97e9a91c1",
+        "model": "relay-custom-child"
+      },
+      {
+        "at": "2026-10-16T01:02:29.882Z",
+        "session": "sess_47d02495-b73d-40b5-b8fa-462b9baeb144",
+        "model": "relay-chat"
+      }
+    ],
+    "sessions": [
+      {
+        "bridgeSessionId": "sess_47d02495-b73d-40b5-b8fa-462b9baeb144",
+        "role": "chat",
+        "state": "IDLE",
+        "model": "relay-chat",
+        "historyHash": "174c661d7dde5bf2fbb16c244ea5f05c4ec9f4f8cd841db593b26b969a84aeaf",
+        "contextHash": "2b8660b86903f8dc6541992227e1866e613a73c7f41a1def350dd5ddeabb9424",
+        "requestMessageHashes": [
+          "14698f7a0d88f54c901d5148f6c6b9a5b76eca1c1811725ca4c82e18bde5c8bb",
+          "dfb3a6c50cb30d4b5694621fd41eb9f1a2141550b39010ab1977ac5522418641",
+          "3dffc27d221aff2c4431fe5466b7d6602c144edc4e05f940d667a9ce647b0cbb",
+          "76879588a1e862e3195a04c00e600a3c441d90ba6ac250fbe883b5a286db9a8d"
+        ],
+        "historyMessageHashes": [
+          "14698f7a0d88f54c901d5148f6c6b9a5b76eca1c1811725ca4c82e18bde5c8bb",
+          "dfb3a6c50cb30d4b5694621fd41eb9f1a2141550b39010ab1977ac5522418641",
+          "3dffc27d221aff2c4431fe5466b7d6602c144edc4e05f940d667a9ce647b0cbb",
+          "76879588a1e862e3195a04c00e600a3c441d90ba6ac250fbe883b5a286db9a8d",
+          "e3320a289f715c289e311e26d57557b659ca8c3f4122444eae5e5b6915cfb604"
+        ],
+        "toolNames": [
+          "Read",
+          "LS",
+          "Execute",
+          "Edit",
+          "Grep",
+          "Glob",
+          "Create",
+          "TaskOutput",
+          "TaskStop",
+          "ToolSearch",
+          "Skill",
+          "Task"
+        ],
+        "createdAt": "2026-10-16T01:02:00.838Z",
+        "updatedAt": "2026-10-16T01:02:39.480Z",
+        "pendingToolIds": [],
+        "cancelRequested": false,
+        "notes": [
+          "factory-session-ended"
+        ],
+        "usage": {
+          "input_tokens": 8781,
+          "output_tokens": 342,
+          "cache_creation_input_tokens": 0,
+          "cache_read_input_tokens": 37120,
+          "status": "reported",
+          "coverage": "partial",
+          "knownFields": [
+            "input_tokens",
+            "output_tokens",
+            "cache_read_input_tokens"
+          ],
+          "scope": "provider_messages",
+          "estimated": true,
+          "modelRequests": 1
+        },
+        "factorySessionId": "4ae6df25-ef3e-4ba2-a330-c90f2b6ba734",
+        "factoryCwd": "/tmp/relay-e2e-ws-bqHHpx",
+        "hostEnded": "resumable",
+        "sdkSessionId": "7a22082c-05ac-4c91-970a-474a8c40c292"
+      },
+      {
+        "bridgeSessionId": "sess_ff89e9be-f10c-4d19-b91e-30f97e9a91c1",
+        "role": "chat",
+        "state": "IDLE",
+        "model": "relay-custom-child",
+        "historyHash": "d70dd73adb93146c8285562d6cd3683f2d0dbba06a1172b1008d7424cd55b604",
+        "contextHash": "8e487c5fa38e0335f8018a0af1cb77fcb6ac36ae7839bcd3804151a2ec93937f",
+        "requestMessageHashes": [
+          "be527ccd93d86b48dea72956767e3813dce6d33733745656f4ab6e0d3fe9ca36",
+          "067313dece0eea651e495cefed65550960104b93bb1e7bdfbc10fd7d264c6a77"
+        ],
+        "historyMessageHashes": [
+          "be527ccd93d86b48dea72956767e3813dce6d33733745656f4ab6e0d3fe9ca36",
+          "067313dece0eea651e495cefed65550960104b93bb1e7bdfbc10fd7d264c6a77",
+          "8aa4dc169ab87b4ba153b1d41a9e565b267bdfd04a9c45d2b4ebb2c7df1676f3"
+        ],
+        "toolNames": [
+          "Read",
+          "LS",
+          "Execute",
+          "Edit",
+          "Grep",
+          "Glob",
+          "Create",
+          "ToolSearch",
+          "Skill"
+        ],
+        "createdAt": "2026-10-16T01:02:09.178Z",
+        "updatedAt": "2026-10-16T01:02:29.556Z",
+        "pendingToolIds": [],
+        "cancelRequested": false,
+        "notes": [
+          "factory-session-ended"
+        ],
+        "usage": {
+          "input_tokens": 6570,
+          "output_tokens": 521,
+          "cache_creation_input_tokens": 0,
+          "cache_read_input_tokens": 55424,
+          "status": "reported",
+          "coverage": "partial",
+          "knownFields": [
+            "input_tokens",
+            "output_tokens",
+            "cache_read_input_tokens"
+          ],
+          "scope": "provider_messages",
+          "estimated": true,
+          "modelRequests": 3
+        },
+        "factorySessionId": "d80ac293-e782-4321-8f82-4c9679deba38",
+        "factoryCwd": "/tmp/relay-e2e-ws-bqHHpx",
+        "hostEnded": "resumable",
+        "sdkSessionId": "eeaf5e89-e22e-4ba9-891e-5ef8d913d116"
+      }
+    ],
+    "runtime": {
+      "kind": "sdk",
+      "authMode": "byok",
+      "permissionMode": "bypass",
+      "prompt": {
+        "systemPrompt": "preset:claude_code + stable append",
+        "dynamicPlacement": "user input on initial turn or context change",
+        "tools": "preset:claude_code built-ins + Droid-exclusive MCP"
+      },
+      "tools": "preset:claude_code + droid-exclusive MCP",
+      "input": "persistent SDK streaming input",
+      "includePartialMessages": true,
+      "approvalChannel": "external controller",
+      "activeNativeSessions": 0,
+      "activeNativeTurns": 0,
+      "pendingHostCalls": 0,
+      "pendingApprovals": 0,
+      "fatalErrors": [],
+      "overridesAnthropicEnv": true,
+      "upstream": {
+        "provider": "glm",
+        "label": "https://open.bigmodel.cn/api/anthropic",
+        "baseUrl": "https://open.bigmodel.cn/api/anthropic",
+        "model": "glm-5.2",
+        "tokenEnv": "READINESS_MODEL_API_KEY",
+        "authHeader": "x-api-key"
+      },
+      "control": {
+        "pendingApprovals": 0,
+        "failures": [],
+        "activeHostSessions": 0,
+        "boundNativeSessions": 0
+      }
+    }
+  },
+  "cleanup": {
+    "processes": {
+      "supported": true,
+      "observedProcessCount": 27,
+      "terminatedProcessCount": 0,
+      "remainingProcessIds": [],
+      "complete": true
+    },
+    "removed": [
+      true,
+      true,
+      true
+    ],
+    "errors": [],
+    "retained": [
+      {
+        "name": "action.json",
+        "sha256": "cd9a5601f3da4a603e94c8ceae8f2e5ff36522a3dd739bc58fe3ab018f2dd4d0",
+        "unchanged": true
+      },
+      {
+        "name": "requests.json",
+        "sha256": "3d998e93187f700d3c791775070574d7dfe48f54d28fff559fea8aeceb6fb368",
+        "unchanged": true
+      },
+      {
+        "name": "native-transcript.json",
+        "sha256": "673fa0a93e615db20e8d9f973d87813fe9bc3481715a64f63457815672fea004",
+        "unchanged": true
+      },
+      {
+        "name": "snapshot.json",
+        "sha256": "8417571a9e340c8435d3c6f5c036e1b22e594a8f14cbf6bbd7a832748ff604e7",
+        "unchanged": true
+      }
+    ],
+    "complete": true
+  },
+  "finishedAt": "2026-10-16T01:02:39.543Z",
+  "evidenceDirectory": "/workspace/work/factory-cc-prep/repo/evidence/local/verify-custom-2026-10-16T01-02-00-206Z-945da2"
+}

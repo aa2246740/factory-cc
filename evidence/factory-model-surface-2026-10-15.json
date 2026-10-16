@@ -1,0 +1,943 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-10-15",
+  "auditKind": "read-only inventory; no model requests launched",
+  "overall": "PARTIAL_COVERAGE_WITH_KNOWN_GAPS",
+  "allFactoryModelCallsitesCovered": false,
+  "totalInternalCallsiteCount": null,
+  "coveragePercentage": null,
+  "coveragePercentageReason": "Neither public black-box observation nor bounded static search proves a complete denominator of Factory internal/server-side/conditional/plugin calls.",
+  "artifact": {
+    "npmPackage": "@factory/cli-linux-x64",
+    "version": "0.242.0",
+    "sha256": "409f8cc7f2f461d08b21e1d3fe77d3f5af723f7cef43e14f84c2e851ac42d09c",
+    "bytes": 292567008,
+    "format": "ELF x86-64 with embedded bundled JavaScript text; source excerpts are static candidates, not runtime execution proof."
+  },
+  "method": {
+    "inputs": [
+      "Previously captured official CLI help",
+      "Installed public Droid artifact, read-only byte and string search",
+      "Repository sanitized evidence",
+      "Owned isolated Mission transcript files referenced by historical harness results"
+    ],
+    "reproducibility": "Static byte offsets are decimal offsets within exactly the sha256 artifact above. They are not runtime addresses.",
+    "reaUse": "REA lifecycle patterns informed prior fixes. This inventory uses evidence provenance/static-candidate-vs-runtime distinctions consistent with REA binary diagnostics; a separate actual REA artifact probe is recorded separately, not implied by these Python byte searches.",
+    "neverRead": [
+      "Host ~/.claude credentials",
+      "Host real Factory credentials"
+    ],
+    "neverModified": [
+      "Droid/Claude binaries",
+      "Auth/license checks",
+      "Factory feature flags"
+    ],
+    "newPaidModelCalls": 0,
+    "reaProbeEvidence": "evidence/rea-model-surface-2026-10-15.json"
+  },
+  "statusDefinitions": {
+    "historical_verified_scoped": "A specific past real runtime probe passed; scope and remaining variants are listed.",
+    "historical_observed": "Actual path observed, without an independent semantic acceptance test.",
+    "not_verified_static_candidate": "Installed artifact exposes a candidate path; no matching runtime verification found.",
+    "not_verified_public_surface": "Official help advertises feature but no matching workflow acceptance found.",
+    "unknown_not_enumerable": "Open-ended or opaque paths lack a complete denominator."
+  },
+  "countsByStatus": {
+    "historical_verified_scoped": 14,
+    "not_verified_public_surface": 1,
+    "not_verified_static_candidate": 9,
+    "unknown_not_enumerable": 2
+  },
+  "staticLiterals": [
+    {
+      "id": "title",
+      "byteOffsetDecimal": 181865895,
+      "literal": "messageCallType:\"session-title-generation\"",
+      "exactOffsetVerified": true
+    },
+    {
+      "id": "risk",
+      "byteOffsetDecimal": 182254530,
+      "literal": "messageCallType:\"command-risk-classification\"",
+      "exactOffsetVerified": true
+    },
+    {
+      "id": "shield",
+      "byteOffsetDecimal": 182713487,
+      "literal": "messageCallType:\"droid-shield-classification\"",
+      "exactOffsetVerified": true
+    },
+    {
+      "id": "image",
+      "byteOffsetDecimal": 182773493,
+      "literal": "messageCallType:\"tool-call\"",
+      "exactOffsetVerified": true
+    },
+    {
+      "id": "router",
+      "byteOffsetDecimal": 188831441,
+      "literal": "messageCallType:\"model-routing\"",
+      "exactOffsetVerified": true
+    },
+    {
+      "id": "local-signals",
+      "byteOffsetDecimal": 182507747,
+      "literal": "local-signals-classification",
+      "exactOffsetVerified": true
+    }
+  ],
+  "entries": [
+    {
+      "id": "chat-main",
+      "featureMap": "chat-resume-native-cache",
+      "name": "Main Droid exec conversation through Bridge and official Claude Code",
+      "status": "historical_verified_scoped",
+      "source": {
+        "kind": "published_cli_help",
+        "path": "evidence/g0-install/droid-exec-help.txt",
+        "flags": [
+          "--model",
+          "--settings",
+          "--cwd",
+          "--output-format"
+        ]
+      },
+      "evidence": [
+        {
+          "path": "evidence/native-session-validation-2026-10-15.json",
+          "jsonPointer": "/droid_full_chain_smoke",
+          "timeScope": "historical 2026-10-15; not rerun by this inventory"
+        }
+      ],
+      "limitations": [
+        "Only isolated GLM BYOK was used; not all models, transports or subscription billing."
+      ],
+      "neededVerification": [],
+      "featureMapFile": ".cursor/skills/verify-relay-bridge/features/chat-and-resume.md"
+    },
+    {
+      "id": "chat-resume",
+      "featureMap": "chat-resume-native-cache",
+      "name": "Normal Droid session continuation with native SDK checkpoint",
+      "status": "historical_verified_scoped",
+      "source": {
+        "kind": "published_cli_help",
+        "path": "evidence/g0-install/droid-exec-help.txt",
+        "flags": [
+          "--session-id"
+        ]
+      },
+      "evidence": [
+        {
+          "path": "evidence/control-validation-2026-10-15.json",
+          "jsonPointer": "/normalResumeWithHooks",
+          "timeScope": "historical 2026-10-15; not rerun by this inventory"
+        }
+      ],
+      "limitations": [
+        "No claim that in-flight MCP callbacks survive native process loss."
+      ],
+      "neededVerification": [],
+      "featureMapFile": ".cursor/skills/verify-relay-bridge/features/chat-and-resume.md"
+    },
+    {
+      "id": "native-cache",
+      "featureMap": "chat-resume-native-cache",
+      "name": "Claude Code provider-side prompt-cache reuse",
+      "status": "historical_verified_scoped",
+      "source": {
+        "kind": "native_runtime_evidence"
+      },
+      "evidence": [
+        {
+          "path": "evidence/native-session-validation-2026-10-15.json",
+          "jsonPointer": "/cache",
+          "timeScope": "historical 2026-10-15; not rerun by this inventory"
+        },
+        {
+          "path": "evidence/control-validation-2026-10-15.json",
+          "jsonPointer": "/normalResumeWithHooks/claudeSideWarmProviderUsage",
+          "timeScope": "historical 2026-10-15; not rerun by this inventory"
+        }
+      ],
+      "limitations": [
+        "GLM omitted cache-creation fields; exact hit ratio and Anthropic subscription consumption remain unknown."
+      ],
+      "neededVerification": [],
+      "featureMapFile": ".cursor/skills/verify-relay-bridge/features/chat-and-resume.md"
+    },
+    {
+      "id": "native-manual-compact",
+      "featureMap": "chat-resume-native-cache",
+      "name": "Claude Code manual /compact",
+      "status": "historical_verified_scoped",
+      "source": {
+        "kind": "native_runtime_evidence"
+      },
+      "evidence": [
+        {
+          "path": "evidence/native-session-validation-2026-10-15.json",
+          "jsonPointer": "/manual_compaction",
+          "timeScope": "historical 2026-10-15; not rerun by this inventory"
+        },
+        {
+          "path": "evidence/native-session-validation-2026-10-15.json",
+          "jsonPointer": "/compaction_recall_passed",
+          "timeScope": "historical 2026-10-15; not rerun by this inventory"
+        }
+      ],
+      "limitations": [
+        "This is native Claude compaction, not Factory Summarizer coverage."
+      ],
+      "neededVerification": [],
+      "featureMapFile": ".cursor/skills/verify-relay-bridge/features/chat-and-resume.md"
+    },
+    {
+      "id": "native-auto-compact",
+      "featureMap": "chat-resume-native-cache",
+      "name": "Claude Code automatic compaction with lowered documented threshold",
+      "status": "historical_verified_scoped",
+      "source": {
+        "kind": "native_runtime_evidence"
+      },
+      "evidence": [
+        {
+          "path": "evidence/auto-compaction-validation-2026-10-15.json",
+          "jsonPointer": "/automaticBoundaries",
+          "timeScope": "historical 2026-10-15; not rerun by this inventory"
+        },
+        {
+          "path": "evidence/auto-compaction-validation-2026-10-15.json",
+          "jsonPointer": "/turns",
+          "timeScope": "historical 2026-10-15; not rerun by this inventory"
+        }
+      ],
+      "limitations": [
+        "Default production threshold and arbitrary long Missions are untested.",
+        "This is native Claude compaction, not Factory Summarizer coverage."
+      ],
+      "neededVerification": [],
+      "featureMapFile": ".cursor/skills/verify-relay-bridge/features/chat-and-resume.md"
+    },
+    {
+      "id": "factory-skill",
+      "featureMap": "skills-agents",
+      "name": "Factory Skill definition and complete body passed to native model",
+      "status": "historical_verified_scoped",
+      "source": {
+        "kind": "actual_factory_tool"
+      },
+      "evidence": [
+        {
+          "path": "evidence/factory-host-validation-2026-10-15.json",
+          "jsonPointer": "/factorySkill",
+          "timeScope": "historical 2026-10-15; not rerun by this inventory"
+        },
+        {
+          "path": "evidence/control-validation-2026-10-15.json",
+          "jsonPointer": "/factoryHooks/realDroidSkillResult",
+          "timeScope": "historical 2026-10-15; not rerun by this inventory"
+        }
+      ],
+      "limitations": [
+        "Skill is context/tool transport, not itself necessarily a separate model request; arbitrary external skills are not exhaustively tested."
+      ],
+      "neededVerification": [],
+      "featureMapFile": ".cursor/skills/verify-relay-bridge/features/skills-and-agents.md"
+    },
+    {
+      "id": "factory-task",
+      "featureMap": "skills-agents",
+      "name": "Factory Task child sessions and built-in subagent roles",
+      "status": "historical_verified_scoped",
+      "source": {
+        "kind": "static_candidate",
+        "binaryOffsetsDecimal": [
+          177643353
+        ],
+        "observation": "Task input schema requires an available subagent_type; live transcript records child type.",
+        "executedInAudit": false
+      },
+      "evidence": [
+        {
+          "path": "evidence/mission-validation-2026-10-15.json",
+          "jsonPointer": "/final/actualFactoryHandoffs",
+          "timeScope": "historical 2026-10-15; not rerun by this inventory"
+        },
+        {
+          "path": "evidence/control-validation-2026-10-15.json",
+          "jsonPointer": "/factoryHooks/taskChildren",
+          "timeScope": "historical 2026-10-15; not rerun by this inventory"
+        }
+      ],
+      "limitations": [
+        "Verified built-in worker readiness, scrutiny-feature-reviewer and user-testing-flow-validator; not all custom droids or per-child model selections.",
+        "Model/header role labels are configuration tags, not proof of actual task role."
+      ],
+      "neededVerification": [],
+      "featureMapFile": ".cursor/skills/verify-relay-bridge/features/skills-and-agents.md"
+    },
+    {
+      "id": "task-summary",
+      "featureMap": "skills-agents",
+      "name": "Factory Task result-summary helpers",
+      "status": "unknown_not_enumerable",
+      "source": {
+        "kind": "historical_transcript_reclassified_as_factory_summarizer",
+        "independentTaskSummaryCallsiteEstablished": false
+      },
+      "evidence": [
+        {
+          "path": "evidence/mission-validation-2026-10-15.json",
+          "jsonPointer": "/claudeCodeUsage/limitations",
+          "timeScope": "historical 2026-10-15; not rerun by this inventory"
+        },
+        {
+          "path": "evidence/mission-validation-2026-10-15.json",
+          "jsonPointer": "/final/toolFreeHelperVerification",
+          "timeScope": "historical 2026-10-15; not rerun by this inventory"
+        }
+      ],
+      "limitations": [
+        "The 2026-10-15 helper observation was misclassified. Its 2300-character system prompt exactly matches the real Factory Summarizer request observed on 2026-10-16; the old helper input contained session-hook markers, not Task output.",
+        "No distinct Task result-summary helper has been established by this observation. Custom Task result fidelity is separately verified; it does not prove a dedicated summary model call.",
+        "The old raw Mission evidence and original classification are retained in classificationCorrection. Existing evidence links above describe the old observation, not positive proof of an independent Task-summary path."
+      ],
+      "neededVerification": [
+        "Establish a distinct real Task result-summary callsite, if present, and trigger it through a public Factory path with an independently checked large Task result. Do not infer this path from a Summarizer prompt or a generic helper model label."
+      ],
+      "featureMapFile": ".cursor/skills/verify-relay-bridge/features/skills-and-agents.md",
+      "classificationCorrection": {
+        "recordedAt": "2026-10-16",
+        "originalEntry": {
+          "id": "task-summary",
+          "featureMap": "skills-agents",
+          "name": "Factory Task result-summary helpers",
+          "status": "historical_observed",
+          "source": {
+            "kind": "historical_factory_native_transcript"
+          },
+          "evidence": [
+            {
+              "path": "evidence/mission-validation-2026-10-15.json",
+              "jsonPointer": "/claudeCodeUsage/limitations",
+              "timeScope": "historical 2026-10-15; not rerun by this inventory"
+            },
+            {
+              "path": "evidence/mission-validation-2026-10-15.json",
+              "jsonPointer": "/final/toolFreeHelperVerification",
+              "timeScope": "historical 2026-10-15; not rerun by this inventory"
+            }
+          ],
+          "limitations": [
+            "Summary helper was observed during actual Mission; no independent summary-fidelity/large-result assertion.",
+            "Distinct from both Factory conversation compaction and native Claude compaction."
+          ],
+          "neededVerification": [],
+          "featureMapFile": ".cursor/skills/verify-relay-bridge/features/skills-and-agents.md"
+        },
+        "reason": "Exact system-prompt hash matches prove the old observation belongs to Factory conversation Summarizer, not an independently established Task-result summary path.",
+        "comparison": {
+          "path": "evidence/factory-context-regression-2026-10-16.json",
+          "jsonPointer": "/historicalClassificationCorrection",
+          "sha256": "115a4ea6fe511ca4919c7029c94b10a2ff7016005c4b61fc31b1cf72d1b025ba"
+        },
+        "rawEvidencePreserved": true,
+        "systemSha256": "849fe6f4e9ce4431fc2f9cfa9e2965a5f9f7b23c9f0d96b2a2e6083d5d786f53"
+      }
+    },
+    {
+      "id": "dynamic-host-tools",
+      "featureMap": "skills-agents",
+      "name": "Dynamic Factory tool discovery and MCP host callback",
+      "status": "historical_verified_scoped",
+      "source": {
+        "kind": "deterministic_host_fixture_with_official_native_runtime"
+      },
+      "evidence": [
+        {
+          "path": "evidence/factory-host-validation-2026-10-15.json",
+          "jsonPointer": "/dynamicHostTools",
+          "timeScope": "historical 2026-10-15; not rerun by this inventory"
+        },
+        {
+          "path": "evidence/factory-host-validation-2026-10-15.json",
+          "jsonPointer": "/validatedHandoffRetry",
+          "timeScope": "historical 2026-10-15; not rerun by this inventory"
+        }
+      ],
+      "limitations": [
+        "ToolSearch hot-add test used deterministic external host fixture; does not validate every real Factory plugin/MCP service.",
+        "Official MCP status confirms names, not same-name schema-version acknowledgements."
+      ],
+      "neededVerification": [],
+      "featureMapFile": ".cursor/skills/verify-relay-bridge/features/skills-and-agents.md"
+    },
+    {
+      "id": "custom-droid-run",
+      "featureMap": "skills-agents",
+      "name": "Project/personal custom Droid execution and model overrides",
+      "status": "not_verified_static_candidate",
+      "source": {
+        "kind": "static_candidate",
+        "binaryOffsetsDecimal": [
+          177643353,
+          187006044
+        ],
+        "observation": "Task accepts catalog subagent_type; /droids opens custom Droid manager.",
+        "executedInAudit": false
+      },
+      "evidence": [],
+      "limitations": [
+        "Built-in Task coverage is not proof of arbitrary custom Droid configs."
+      ],
+      "neededVerification": [
+        "Create explicit isolated project Droid with a unique body-only marker; invoke by actual Factory Task and prove intended model, prompt, result, child session and cleanup."
+      ],
+      "featureMapFile": ".cursor/skills/verify-relay-bridge/features/skills-and-agents.md"
+    },
+    {
+      "id": "mission-orchestrator",
+      "featureMap": "mission",
+      "name": "Mission planning, proposal and orchestrator model",
+      "status": "historical_verified_scoped",
+      "source": {
+        "kind": "published_cli_help",
+        "path": "evidence/g0-install/droid-exec-help.txt",
+        "flags": [
+          "--mission",
+          "--model"
+        ]
+      },
+      "evidence": [
+        {
+          "path": "evidence/mission-validation-2026-10-15.json",
+          "jsonPointer": "/final",
+          "timeScope": "historical 2026-10-15; not rerun by this inventory"
+        },
+        {
+          "path": "evidence/mission-validation-2026-10-15.json",
+          "jsonPointer": "/status",
+          "timeScope": "historical 2026-10-15; not rerun by this inventory"
+        }
+      ],
+      "limitations": [
+        "PASS_WITH_RECOVERY after 20-minute original harness timeout; not an uninterrupted final-source run.",
+        "Evidence includes real Skill/Task/ProposeMission/StartMissionRun; not merely header labels."
+      ],
+      "neededVerification": [],
+      "featureMapFile": ".cursor/skills/verify-relay-bridge/features/mission.md"
+    },
+    {
+      "id": "mission-worker",
+      "featureMap": "mission",
+      "name": "Mission implementation worker model",
+      "status": "historical_verified_scoped",
+      "source": {
+        "kind": "published_cli_help",
+        "path": "evidence/g0-install/droid-exec-help.txt",
+        "flags": [
+          "--mission",
+          "--worker-model",
+          "--worker-reasoning-effort"
+        ]
+      },
+      "evidence": [
+        {
+          "path": "evidence/mission-validation-2026-10-15.json",
+          "jsonPointer": "/final/features/0",
+          "timeScope": "historical 2026-10-15; not rerun by this inventory"
+        },
+        {
+          "path": "evidence/mission-validation-2026-10-15.json",
+          "jsonPointer": "/final/actualFactoryHandoffs/0",
+          "timeScope": "historical 2026-10-15; not rerun by this inventory"
+        }
+      ],
+      "limitations": [
+        "One sum-fix fixture using backend-worker; other worker skills, multi-worktree concurrency and arbitrary models remain untested."
+      ],
+      "neededVerification": [],
+      "featureMapFile": ".cursor/skills/verify-relay-bridge/features/mission.md"
+    },
+    {
+      "id": "mission-validators",
+      "featureMap": "mission",
+      "name": "Mission scrutiny and user-testing validator model plus delegated review/flow Tasks",
+      "status": "historical_verified_scoped",
+      "source": {
+        "kind": "published_cli_help",
+        "path": "evidence/g0-install/droid-exec-help.txt",
+        "flags": [
+          "--mission",
+          "--validator-model",
+          "--validator-reasoning-effort"
+        ]
+      },
+      "evidence": [
+        {
+          "path": "evidence/mission-validation-2026-10-15.json",
+          "jsonPointer": "/final/features/1",
+          "timeScope": "historical 2026-10-15; not rerun by this inventory"
+        },
+        {
+          "path": "evidence/mission-validation-2026-10-15.json",
+          "jsonPointer": "/final/features/2",
+          "timeScope": "historical 2026-10-15; not rerun by this inventory"
+        },
+        {
+          "path": "evidence/mission-validation-2026-10-15.json",
+          "jsonPointer": "/final/validation",
+          "timeScope": "historical 2026-10-15; not rerun by this inventory"
+        }
+      ],
+      "limitations": [
+        "Five fixture assertions passed; review of this fixture is not coverage of standalone /review."
+      ],
+      "neededVerification": [],
+      "featureMapFile": ".cursor/skills/verify-relay-bridge/features/mission.md"
+    },
+    {
+      "id": "native-approvals",
+      "featureMap": "approvals-control",
+      "name": "Native tool permission, denial, cancellation and stale-result rejection",
+      "status": "historical_verified_scoped",
+      "source": {
+        "kind": "real_native_sdk_permission_callbacks"
+      },
+      "evidence": [
+        {
+          "path": "evidence/control-validation-2026-10-15.json",
+          "jsonPointer": "/nativeApproval",
+          "timeScope": "historical 2026-10-15; not rerun by this inventory"
+        },
+        {
+          "path": "evidence/control-validation-2026-10-15.json",
+          "jsonPointer": "/nativeCancellation",
+          "timeScope": "historical 2026-10-15; not rerun by this inventory"
+        }
+      ],
+      "limitations": [
+        "These controller probes do not exercise Factory risk-classification or Droid Shield model sidechains."
+      ],
+      "neededVerification": [],
+      "featureMapFile": ".cursor/skills/verify-relay-bridge/features/permissions-and-control.md"
+    },
+    {
+      "id": "factory-lifecycle",
+      "featureMap": "approvals-control",
+      "name": "Factory lifecycle hooks, once-only ownership and session generation",
+      "status": "historical_verified_scoped",
+      "source": {
+        "kind": "actual_official_factory_hooks"
+      },
+      "evidence": [
+        {
+          "path": "evidence/control-validation-2026-10-15.json",
+          "jsonPointer": "/factoryHooks",
+          "timeScope": "historical 2026-10-15; not rerun by this inventory"
+        },
+        {
+          "path": "evidence/control-validation-2026-10-15.json",
+          "jsonPointer": "/normalResumeWithHooks",
+          "timeScope": "historical 2026-10-15; not rerun by this inventory"
+        },
+        {
+          "path": "evidence/mission-validation-2026-10-15.json",
+          "jsonPointer": "/lifecycle",
+          "timeScope": "historical 2026-10-15; not rerun by this inventory"
+        }
+      ],
+      "limitations": [
+        "Hooks are control events; their existence does not prove every internal model request was routed through Bridge."
+      ],
+      "neededVerification": [],
+      "featureMapFile": ".cursor/skills/verify-relay-bridge/features/permissions-and-control.md"
+    },
+    {
+      "id": "factory-title",
+      "featureMap": "spec-review-and-auxiliary",
+      "name": "Factory session-title generation helpers",
+      "status": "historical_verified_scoped",
+      "source": {
+        "kind": "static_candidate",
+        "binaryOffsetsDecimal": [
+          181865895,
+          181866338
+        ],
+        "observation": "session-title-generation completion path; first-message/first-file-edit stages and fallback candidates exist.",
+        "executedInAudit": false
+      },
+      "evidence": [
+        {
+          "path": "evidence/control-validation-2026-10-15.json",
+          "jsonPointer": "/toolCapabilityBoundary/cases/0",
+          "timeScope": "historical 2026-10-15; not rerun by this inventory"
+        },
+        {
+          "path": "evidence/factory-host-validation-2026-10-15.json",
+          "jsonPointer": "/titleHelper",
+          "timeScope": "historical 2026-10-15; not rerun by this inventory"
+        },
+        {
+          "path": "evidence/mission-validation-2026-10-15.json",
+          "jsonPointer": "/final/toolFreeHelperVerification",
+          "timeScope": "historical 2026-10-15; not rerun by this inventory"
+        }
+      ],
+      "limitations": [
+        "Observed/replayed Mission-worker title; interactive top-level stages, first-file-edit title and fallback-model paths lack dedicated validation.",
+        "Tools-empty capability is verified; that does not enumerate every title generation variant."
+      ],
+      "neededVerification": [],
+      "featureMapFile": ".cursor/skills/verify-relay-bridge/features/spec-review-and-auxiliary.md"
+    },
+    {
+      "id": "factory-compaction",
+      "featureMap": "spec-review-and-auxiliary",
+      "name": "Factory own conversation Summarizer / compaction / handoff",
+      "status": "not_verified_static_candidate",
+      "source": {
+        "kind": "static_candidate",
+        "binaryOffsetsDecimal": [
+          188826727,
+          188826792,
+          189055962
+        ],
+        "observation": "Factory creates Summarizer, selects compaction model, calls completion client with fallback reasoning/model attempts; separate compactCurrentSession and compactToNewSession paths.",
+        "executedInAudit": false
+      },
+      "evidence": [],
+      "limitations": [
+        "Native Claude /compact and auto-compaction evidence cannot be credited to this Factory path."
+      ],
+      "neededVerification": [
+        "Trigger actual Factory compaction and handoff surfaces in isolated session, record summary request/model, apply result, resume and prove retained markers plus native session behavior."
+      ],
+      "featureMapFile": ".cursor/skills/verify-relay-bridge/features/spec-review-and-auxiliary.md",
+      "currentEvidence": {
+        "recordedAt": "2026-10-16",
+        "status": "verified_scoped",
+        "historicalStatusPreserved": true,
+        "evidence": [
+          {
+            "path": "evidence/factory-context-validation-2026-10-16-r3.json",
+            "jsonPointer": "/checks",
+            "sha256": "29c6e72249bdae26071ddf7a219b4c9efbdd1c2763a56b020bc321e51d13879c"
+          },
+          {
+            "path": "evidence/factory-context-validation-2026-10-16-r3.json",
+            "jsonPointer": "/compactionStates",
+            "sha256": "29c6e72249bdae26071ddf7a219b4c9efbdd1c2763a56b020bc321e51d13879c"
+          },
+          {
+            "path": "evidence/factory-context-regression-2026-10-16.json",
+            "jsonPointer": "/automaticCompactionRegression",
+            "sha256": "115a4ea6fe511ca4919c7029c94b10a2ff7016005c4b61fc31b1cf72d1b025ba"
+          },
+          {
+            "path": "evidence/factory-context-handoff-2026-10-16.json",
+            "jsonPointer": "/checks",
+            "sha256": "ebefc29b65fcfdf8b447c9b9cf1546dd0a890f2863ebbd89d928e721410f136e"
+          }
+        ],
+        "scope": [
+          "Unmodified official Droid stream-jsonrpc: manual compactCurrentSession, automatic compaction with a public lowered threshold, and compactToNewSession handoff.",
+          "A fresh user turn after the actual automatic boundary and manual compaction retains the same native Claude session; same-worker handoff creates a distinct native session and retains tested facts."
+        ],
+        "limitations": [
+          "Automatic probe compacted one initial hook/context message at a 12000-token threshold. It does not establish default-threshold or large semantic-history automatic compaction fidelity.",
+          "This is Factory Summarizer coverage; it must not be conflated with native Claude manual or automatic compaction.",
+          "Partial provider cache counters demonstrate reuse only, not an exact hit ratio or subscription billing."
+        ]
+      }
+    },
+    {
+      "id": "factory-spec",
+      "featureMap": "spec-review-and-auxiliary",
+      "name": "Factory spec planning model and ExitSpecMode transition",
+      "status": "not_verified_public_surface",
+      "source": {
+        "kind": "published_cli_help",
+        "path": "evidence/g0-install/droid-exec-help.txt",
+        "flags": [
+          "--use-spec",
+          "--spec-model",
+          "--spec-reasoning-effort"
+        ]
+      },
+      "evidence": [],
+      "limitations": [
+        "Flag help and MCP name registration are not an executed spec workflow.",
+        "Only new sessions support spec; --session-id and --fork cannot combine with --use-spec/--spec-model."
+      ],
+      "neededVerification": [
+        "Run new Droid exec --use-spec with explicit main/spec Bridge models; prove actual spec instructions, ExitSpecMode result, transition and native runtime health."
+      ],
+      "featureMapFile": ".cursor/skills/verify-relay-bridge/features/spec-review-and-auxiliary.md"
+    },
+    {
+      "id": "factory-review",
+      "featureMap": "spec-review-and-auxiliary",
+      "name": "Interactive /review flow and review Skill",
+      "status": "not_verified_static_candidate",
+      "source": {
+        "kind": "static_candidate",
+        "binaryOffsetsDecimal": [
+          176983163,
+          187029040,
+          98645223
+        ],
+        "observation": "Slash registry opens review flow; disabled/invalid review Skill blocks /review.",
+        "executedInAudit": false
+      },
+      "evidence": [],
+      "limitations": [
+        "No --review option is advertised. Ordinary review prompt and Mission scrutiny reviewer do not prove standalone /review selection/generation flow."
+      ],
+      "neededVerification": [
+        "Drive actual /review in isolated TTY against known diff; prove review Skill body, model request, findings and cleanup."
+      ],
+      "featureMapFile": ".cursor/skills/verify-relay-bridge/features/spec-review-and-auxiliary.md"
+    },
+    {
+      "id": "generate-droid",
+      "featureMap": "spec-review-and-auxiliary",
+      "name": "AI-generated custom Droid configuration from /droids",
+      "status": "not_verified_static_candidate",
+      "source": {
+        "kind": "static_candidate",
+        "binaryOffsetsDecimal": [
+          177648333,
+          177648398,
+          187006044
+        ],
+        "observation": "GenerateDroid deferred client tool advertises AI generation and external-service side effect; /droids menu opens generation flow.",
+        "executedInAudit": false
+      },
+      "evidence": [],
+      "limitations": [
+        "Definition is a static candidate; the generation implementation and emitted model call were not runtime traced."
+      ],
+      "neededVerification": [
+        "Use actual /droids generation UI in owned project, validate generated body/schema/model request, then execute the generated child."
+      ],
+      "featureMapFile": ".cursor/skills/verify-relay-bridge/features/spec-review-and-auxiliary.md"
+    },
+    {
+      "id": "factory-auto-router",
+      "featureMap": "spec-review-and-auxiliary",
+      "name": "Auto Model classifier and routing fallbacks",
+      "status": "not_verified_static_candidate",
+      "source": {
+        "kind": "static_candidate",
+        "binaryOffsetsDecimal": [
+          188831441
+        ],
+        "observation": "model-routing completion classifier chooses allowed candidates; single-candidate/policy fallback skips classification.",
+        "executedInAudit": false
+      },
+      "evidence": [],
+      "limitations": [
+        "Using fixed custom model does not exercise Auto routing or its classifier.",
+        "Policy, feature flags and account state can make path unavailable."
+      ],
+      "neededVerification": [
+        "With explicitly supported isolated config, prove classifier request vs deterministic skip, chosen model, continuation and fallback behavior."
+      ],
+      "featureMapFile": ".cursor/skills/verify-relay-bridge/features/spec-review-and-auxiliary.md"
+    },
+    {
+      "id": "factory-command-risk",
+      "featureMap": "spec-review-and-auxiliary",
+      "name": "Independent command-risk classification model",
+      "status": "not_verified_static_candidate",
+      "source": {
+        "kind": "static_candidate",
+        "binaryOffsetsDecimal": [
+          182254530
+        ],
+        "observation": "command-risk-classification one-shot completion; classifier selector can be off, jev or luna; model, cache and parse/schema failure paths are separate.",
+        "executedInAudit": false
+      },
+      "evidence": [],
+      "limitations": [
+        "Native approval UI is not this classifier. Availability/configuration is conditional; fixed main custom model does not imply routing of classifier request."
+      ],
+      "neededVerification": [
+        "If public configuration supports enabling it under authorized BYOK, run harmless command cases and prove classifier route/output; otherwise mark blocked/unknown without patching feature flags."
+      ],
+      "featureMapFile": ".cursor/skills/verify-relay-bridge/features/spec-review-and-auxiliary.md"
+    },
+    {
+      "id": "factory-droid-shield",
+      "featureMap": "spec-review-and-auxiliary",
+      "name": "Droid Shield learned classification models",
+      "status": "not_verified_static_candidate",
+      "source": {
+        "kind": "static_candidate",
+        "binaryOffsetsDecimal": [
+          182713487
+        ],
+        "observation": "droid-shield-classification completion uses risk/downgrade models, response_format, logprobs/top_logprobs and fallback behavior.",
+        "executedInAudit": false
+      },
+      "evidence": [],
+      "limitations": [
+        "Bridge Anthropic Messages/native-agent semantics do not establish support for this specialized classification response contract.",
+        "Availability/configuration is conditional and untested."
+      ],
+      "neededVerification": [
+        "Use officially exposed enabled configuration only; prove request route, required logprobs/JSON response and resulting decision, or explicitly mark unsupported."
+      ],
+      "featureMapFile": ".cursor/skills/verify-relay-bridge/features/spec-review-and-auxiliary.md"
+    },
+    {
+      "id": "factory-local-signals",
+      "featureMap": "spec-review-and-auxiliary",
+      "name": "Local Signals analytics classifications and reused-prefix sidechain",
+      "status": "not_verified_static_candidate",
+      "source": {
+        "kind": "static_candidate",
+        "binaryOffsetsDecimal": [
+          182507747,
+          182563619,
+          182564163
+        ],
+        "observation": "local-signals-classification constant; compaction/todo_completion/session_end triggers; reused prompt-prefix and one-shot completion code paths.",
+        "executedInAudit": false
+      },
+      "evidence": [],
+      "limitations": [
+        "Hook/SessionEnd tests do not prove this analytics classifier executed.",
+        "Policy/feature flags/account configuration may gate it. No all-egress trace establishes absence."
+      ],
+      "neededVerification": [
+        "Observe officially enabled isolated trigger and model usage; distinguish reused prefix vs one-shot; if inaccessible mark unknown."
+      ],
+      "featureMapFile": ".cursor/skills/verify-relay-bridge/features/spec-review-and-auxiliary.md"
+    },
+    {
+      "id": "factory-image-generation",
+      "featureMap": "spec-review-and-auxiliary",
+      "name": "GenerateImage model tool and image-edit model requests",
+      "status": "not_verified_static_candidate",
+      "source": {
+        "kind": "static_candidate",
+        "binaryOffsetsDecimal": [
+          182773493
+        ],
+        "observation": "tool-call completion sends to configured image-generation model IDs with optional inputImages and model-fallback loop.",
+        "executedInAudit": false
+      },
+      "evidence": [],
+      "limitations": [
+        "Not validated by text-only GLM BYOK. Image-generation model output is outside current proven bridge capabilities."
+      ],
+      "neededVerification": [
+        "Use authorized image-model route and assert image content/artifact, edit input handling, fallback and billing scope, or fail as unsupported."
+      ],
+      "featureMapFile": ".cursor/skills/verify-relay-bridge/features/spec-review-and-auxiliary.md"
+    },
+    {
+      "id": "transport-and-open-ended-extensions",
+      "featureMap": "spec-review-and-auxiliary",
+      "name": "Other frontends, remote services, plugins and future/conditional model surfaces",
+      "status": "unknown_not_enumerable",
+      "source": {
+        "kind": "published_cli_help",
+        "path": "evidence/g0-install/droid-exec-help.txt",
+        "flags": [
+          "--input-format stream-json",
+          "--input-format stream-jsonrpc",
+          "--output-format acp",
+          "--fork"
+        ]
+      },
+      "evidence": [],
+      "limitations": [
+        "Current live evidence does not cover all ACP/JSON-RPC/TUI/desktop/daemon frontends, forks, remote workers or arbitrary plugins.",
+        "External plugins can make their own model calls. Public CLI/embedded strings cannot enumerate all server-side or remotely configured code."
+      ],
+      "neededVerification": [],
+      "featureMapFile": ".cursor/skills/verify-relay-bridge/features/spec-review-and-auxiliary.md"
+    }
+  ],
+  "exactInvocationGuidance": {
+    "spec": "droid exec --use-spec --model <main-id> --spec-model <spec-id> --spec-reasoning-effort <supported-level> --settings <isolated-settings> --cwd <owned-project> \"<task>\"",
+    "specLimits": "New sessions only. Do not combine --session-id/--fork with --use-spec/--spec-model.",
+    "review": "Interactive droid, then /review. No dedicated --review flag is advertised. droid \"review app.tsx\" is an ordinary prompt, not equivalent flow evidence.",
+    "customDroid": "Interactive /droids manages project/personal definitions. Runtime child invocation is actual Factory Task({subagent_type:<available catalog identifier>, description, prompt, ...}); no user-facing --droid/--agent flag was found in captured help."
+  },
+  "historicalCaveats": [
+    "Mission status is PASS_WITH_RECOVERY, not uninterrupted pass.",
+    "No real Claude subscription was accessed; GLM BYOK does not establish subscription cache, billing or account-enforcement safety.",
+    "Factory model configuration/header role is not sufficient evidence of actual task identity.",
+    "Factory Summarizer and Task summary helpers are distinct from Claude Code native compaction.",
+    "Published evidence contains historical unverified fields which later evidence supersedes; this inventory points at the newer specific evidence where applicable.",
+    "No complete all-process network egress capture was performed. Non-observation in Bridge logs cannot prove a request did not bypass Bridge."
+  ],
+  "separateReaProbe": {
+    "status": "READ_ONLY_ARTIFACT_PROBE_COMPLETED",
+    "reaVersion": "6.5.0",
+    "command": "rea inspect-artifact <official-droid-binary> --json",
+    "sameArtifactSha256": "409f8cc7f2f461d08b21e1d3fe77d3f5af723f7cef43e14f84c2e851ac42d09c",
+    "scope": "Root artifact inventory only; native semantics remained unexplored. Ghidra/Hopper/IDA providers were unavailable. Static string indexes in this file were gathered separately, not produced by REA.",
+    "localEvidence": "work/rea-model-surface-2026-10-15/summary.json (outside repository; separate sanitized evidence may be published by the probe owner)"
+  },
+  "observedTaskTypes": [
+    {
+      "type": "worker",
+      "sessionId": "74ea5abb-df4d-443f-a7ff-1279f6d0f47b",
+      "parentSessionId": "a473da6f-655b-4249-a598-1d971b7b2992",
+      "toolUseId": "call_279cc8b852e049dfb8e8fa98",
+      "description": "Mission readiness verification"
+    },
+    {
+      "type": "scrutiny-feature-reviewer",
+      "sessionId": "d7066d49-bf12-4c1d-9f63-add6daecbc96",
+      "parentSessionId": "800d05ba-388d-4ade-ade9-79d5fad7e537",
+      "toolUseId": "call_8c9d54dc833b4f548cb4c814",
+      "description": "Review feature fix-sum-addition"
+    },
+    {
+      "type": "user-testing-flow-validator",
+      "sessionId": "86cf75a8-54ec-4412-8b6c-c1002187f5d4",
+      "parentSessionId": "05542ef4-2efa-46dc-9643-681d02eab8c3",
+      "toolUseId": "call_83c60c456ac142699cda0bef",
+      "description": "Test assertions sum-fix suite+repo"
+    }
+  ],
+  "observedTaskTypesSource": {
+    "harnessEvidence": "evidence/local/e2e-mission-2026-10-15T09-47-43-619Z/result.json",
+    "factoryDirectory": "Exact isolated factoryHome from that harness evidence; sessions/<owned-project>/<sessionId>.jsonl",
+    "method": "Cross-check parent actual Task tool-use subagent_type against child session_start callingSessionId/callingToolUseId. No classification from X-Bridge-Role."
+  },
+  "newVerificationSkillProof": "evidence/verification-skill-execution-2026-10-15.json",
+  "newVerificationSkillScope": "Only the separately recorded chat/native-file/resume path was newly driven. Historical candidate statuses below are retained, not promoted by that new result.",
+  "originalCountsByStatus": {
+    "historical_observed": 1,
+    "historical_verified_scoped": 14,
+    "not_verified_public_surface": 1,
+    "not_verified_static_candidate": 9,
+    "unknown_not_enumerable": 1
+  },
+  "lastCorrectedAt": "2026-10-16",
+  "corrections": [
+    {
+      "recordedAt": "2026-10-16",
+      "entryId": "task-summary",
+      "fromStatus": "historical_observed",
+      "toStatus": "unknown_not_enumerable",
+      "reason": "Old Mission helper evidence exactly matches Factory Summarizer; a distinct Task-summary model helper remains unestablished.",
+      "evidence": {
+        "path": "evidence/factory-context-regression-2026-10-16.json",
+        "jsonPointer": "/historicalClassificationCorrection",
+        "sha256": "115a4ea6fe511ca4919c7029c94b10a2ff7016005c4b61fc31b1cf72d1b025ba"
+      },
+      "originalObservationPreserved": true,
+      "otherHistoricalStatusesUnchanged": true,
+      "currentFactoryCompactionEvidenceAddedWithoutBackdating": true
+    }
+  ]
+}

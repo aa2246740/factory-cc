@@ -21,12 +21,23 @@ export const ACCEPTANCE_TEST = [
   "",
 ].join("\n");
 
-export async function runE2eMission(): Promise<number> {
+export interface MissionRunOptions {
+  /** A new summary file; an existing attempt must never be overwritten. */
+  summaryPath?: string;
+  /** Keep default CLI compatibility while allowing independent acceptance runs. */
+  updateLegacyPointers?: boolean;
+}
+
+export async function runE2eMission(options: MissionRunOptions = {}): Promise<number> {
+  if (options.summaryPath && existsSync(options.summaryPath)) {
+    throw new Error("Mission summary already exists; preserve it and select a new path");
+  }
+  const updateLegacyPointers = options.updateLegacyPointers !== false;
   const startedAt = Date.now();
   const timeoutMs = missionTimeout();
   const evidence = join(process.cwd(), "evidence", "local", `e2e-mission-${stamp()}`);
   mkdirSync(evidence, { recursive: true });
-  writeFileSync(join(process.cwd(), "evidence/e2e-mission-current.txt"), `${evidence}\n`);
+  if (updateLegacyPointers) writeFileSync(join(process.cwd(), "evidence/e2e-mission-current.txt"), `${evidence}\n`);
   let selection: UpstreamSelection | undefined;
   let isolated: IsolatedBridge | undefined;
   let daemon: ReturnType<typeof startDroidDaemon> | undefined;
@@ -83,7 +94,7 @@ export async function runE2eMission(): Promise<number> {
         nativeRuntime: active.app.runtimeStatus(),
       };
       writeJson(join(evidence, "progress.json"), progress);
-      writeJson(join(process.cwd(), "evidence/e2e-mission-live.json"), progress);
+      if (updateLegacyPointers) writeJson(join(process.cwd(), "evidence/e2e-mission-live.json"), progress);
       console.log(`[e2e-mission] t=${progress.elapsedSec}s req=${progress.requests} roles=${progress.requestedRoles.join(",")} state=${progress.missionState}`);
     }, 15_000);
     captured = await runDroid([
@@ -154,6 +165,9 @@ export async function runE2eMission(): Promise<number> {
     factoryWorkflowObserved: ["Skill", "ProposeMission", "StartMissionRun"].every((name) => completedFactoryTools.has(name)),
     missionCompleted: snapshot.missionState === "completed" && snapshot.missionDirs.length === 1 && snapshot.errors.length === 0,
     featuresDone: snapshot.features.length > 0 && snapshot.features.every((item) => item.status === "completed"),
+    requiredValidatorsCompleted: ["scrutiny-validator", "user-testing-validator"].every((skill) =>
+      snapshot.features.some((feature) => feature.status === "completed" && feature.skillName === skill)),
+    completedWorkerHandoffsObserved: hasCompletedWorkerHandoffs(snapshot, missionHandoffs),
     validationGreen: snapshot.validation.length > 0 && snapshot.validation.every((item) => item.status === "passed"),
     testsGreen: Boolean(tests && tests.code === 0 && !tests.timedOut),
     originalTestsPreserved: Boolean(isolated && fixtureCreated
@@ -210,7 +224,11 @@ export async function runE2eMission(): Promise<number> {
   };
   const sanitized = JSON.parse(redact(JSON.stringify(report))) as typeof report;
   writeJson(join(evidence, "result.json"), sanitized);
-  writeJson(join(process.cwd(), "evidence/e2e-mission.json"), sanitized);
+  if (updateLegacyPointers) writeJson(join(process.cwd(), "evidence/e2e-mission.json"), sanitized);
+  if (options.summaryPath) {
+    mkdirSync(dirname(options.summaryPath), { recursive: true });
+    writeFileSync(options.summaryPath, `${JSON.stringify(sanitized, null, 2)}\n`, { flag: "wx" });
+  }
   console.log(JSON.stringify({ status, failedGates: report.failedGates, uniqueRoles, missionState: snapshot.missionState, evidence, failure: failure ? redact(failure) : undefined }, null, 2));
   return status === "PASS" ? 0 : 1;
 }
@@ -236,7 +254,7 @@ async function checkedCommand(command: string, args: string[], cwd: string): Pro
   if (result.code !== 0) throw new Error(`${command} fixture setup failed: ${result.stderr.slice(-2000)}`);
 }
 
-interface MissionSnapshot {
+export interface MissionSnapshot {
   missionDirs: string[];
   missionDir?: string;
   missionState: string;
@@ -370,6 +388,15 @@ export function readMissionHandoffs(snapshot: MissionSnapshot): Array<{
     return [{ workerSessionId: row.workerSessionId, featureId: row.featureId, endFeatureRunObserved: true as const,
       matchesCompletedFeature: feature?.status === "completed" && feature.completedWorkerSessionId === row.workerSessionId }];
   });
+}
+
+/** A completed ledger alone cannot prove its real worker returned through Factory. */
+export function hasCompletedWorkerHandoffs(snapshot: MissionSnapshot,
+  handoffs: ReturnType<typeof readMissionHandoffs>): boolean {
+  return snapshot.features.length > 0 && snapshot.features.every((feature) =>
+    feature.status === "completed" && typeof feature.completedWorkerSessionId === "string"
+      && handoffs.some((handoff) => handoff.matchesCompletedFeature && handoff.featureId === feature.id
+        && handoff.workerSessionId === feature.completedWorkerSessionId));
 }
 
 interface FactoryToolEvidence {

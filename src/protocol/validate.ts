@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { BridgeError, type MessagesRequest } from "../types.js";
+import { assertNativeOutputContract } from "../runtime/factory-capabilities.js";
 
 const contentBlockSchema = z.object({ type: z.string() }).passthrough();
 
@@ -38,6 +39,7 @@ export function parseMessagesRequest(body: unknown): MessagesRequest {
   if (!parsed.success) {
     throw new BridgeError(400, "invalid_request_error", parsed.error.issues.map((i) => i.message).join("; "));
   }
+  assertNativeOutputContract(parsed.data);
   const choice: unknown = parsed.data.tool_choice;
   if (choice !== undefined) {
     if (!choice || typeof choice !== "object" || Array.isArray(choice)

@@ -111,6 +111,31 @@ export function resolveSession(
   if (candidates.length > 1) throw ambiguous("multiple transcripts match this history; supply X-Bridge-Session");
   if (candidates[0]) return { match: candidates[0], reason: "history-prefix" };
 
+  // Factory compaction rewrites the prefix but retains the last complete turn.
+  // Reuse native history only with both authenticated host ownership and an
+  // exact user/assistant tail, followed by exactly one new user message. Neither
+  // a summary-looking prompt nor a host ID alone can establish continuity.
+  // Tool-free auxiliary requests remain independent, even if they copy context.
+  const tail = incoming.slice(-3);
+  const tailMessages = request.messages.slice(-3);
+  const authenticatedTail = options.hostSessionId && workspace && request.tools?.length
+    && tail.length === 3 && tailMessages[0]?.role === "user" && tailMessages[1]?.role === "assistant"
+    && tailMessages[2]?.role === "user"
+    && !asBlocks(tailMessages[2].content).some((block) => block.type === "tool_result")
+    ? sessions.filter((session) => {
+      const completed = session.historyMessageHashes;
+      return session.factorySessionId === options.hostSessionId && session.factoryCwd !== undefined
+        && canonicalWorkspacePath(session.factoryCwd) === workspace
+        && session.contextHash === contextHash && session.state === "IDLE" && !session.cancelRequested
+        && session.hostEnded !== "terminal" && session.hostEnded !== "interrupted"
+        && Boolean(session.sdkSessionId) && session.pendingToolIds.length === 0 && session.toolNames.length > 0
+        && completed !== undefined && completed.length >= 2
+        && session.requestMessageHashes?.at(-1) === completed.at(-2)
+        && completed.at(-2) === tail[0] && completed.at(-1) === tail[1];
+    }) : [];
+  if (authenticatedTail.length > 1) throw ambiguous("multiple authenticated Factory transcripts match the retained turn; supply X-Bridge-Session");
+  if (authenticatedTail[0]) return { match: authenticatedTail[0], reason: "authenticated-history-tail" };
+
   const activeDuplicates = sessions.filter((session) => {
     if (!inHostScope(session)) return false;
     if (session.state !== "NEW" && session.state !== "GENERATING" && session.state !== "RESUMING") return false;

@@ -1,0 +1,284 @@
+{
+  "schemaVersion": 1,
+  "suite": "Factory spec and custom Droid verification",
+  "status": "PASS_WITH_PRESERVED_FAILURES",
+  "recordedAt": "2026-10-16T01:08:15.748962+00:00",
+  "runtimeChanges": [
+    "Production run-droid explicitly adds Factory ExitSpecMode for spec exec while rejecting conflicting explicit tool restrictions. It does not implement its own plan approval.",
+    "Shared runtime now enforces native advertised-tool capabilities and authenticated Factory spec read-only state (implemented by parent/auxiliary agents)."
+  ],
+  "driver": "scripts/verify-spec-custom.ts",
+  "tests": [
+    "tests/unit/run-droid.test.ts",
+    "tests/unit/spec-custom.test.ts"
+  ],
+  "attempts": [
+    {
+      "evidence": "evidence/spec-validation-2026-10-16.json",
+      "sha256": "451a552b4ef89384e444c5e5770a0715d0d41a5d85fc5bb62a97f2c6cdfc48f8",
+      "status": "FAIL",
+      "startedAt": "2026-10-16T00:54:00.344Z",
+      "finishedAt": "2026-10-16T00:56:43.682Z",
+      "exitCode": 143,
+      "allChecksPassed": false,
+      "checks": {
+        "droidSucceeded": false,
+        "independentFileResult": false,
+        "inputUnchanged": true,
+        "authenticatedBridgeTraffic": true,
+        "nativeReadCompleted": true,
+        "nativeWriteCompleted": false,
+        "runtimeDrained": true,
+        "nativeSessionsPresent": true,
+        "realFactoryExitSpecMode": true,
+        "finalCompletionMarker": false
+      },
+      "cleanupComplete": true,
+      "note": "Runtime failure: official Factory rejected advertised ExitSpecMode. Supervisor was terminated after the observed rejection (exit 143), with complete owned cleanup; not a timeout or success."
+    },
+    {
+      "evidence": "evidence/spec-validation-2026-10-16-r2.json",
+      "sha256": "7439e10939caac00f6e18fb156a67cf678644f6e868afd5fe63c1625cd89a3f4",
+      "status": "PASS",
+      "startedAt": "2026-10-16T00:55:40.972Z",
+      "finishedAt": "2026-10-16T00:56:18.114Z",
+      "exitCode": 0,
+      "allChecksPassed": true,
+      "checks": {
+        "droidSucceeded": true,
+        "independentFileResult": true,
+        "inputUnchanged": true,
+        "authenticatedBridgeTraffic": true,
+        "nativeReadCompleted": true,
+        "nativeWriteCompleted": true,
+        "runtimeDrained": true,
+        "nativeSessionsPresent": true,
+        "realFactoryExitSpecMode": true,
+        "finalCompletionMarker": true
+      },
+      "cleanupComplete": true,
+      "note": "Public --add-tools ExitSpecMode workaround passed real spec -> approval -> file work."
+    },
+    {
+      "evidence": "evidence/spec-validation-2026-10-16-r3.json",
+      "sha256": "3f196593a188eff4ff01ff23ba84449b23a9d4783655e9c64bcac4865d1e7ee7",
+      "status": "PASS",
+      "startedAt": "2026-10-16T00:58:23.848Z",
+      "finishedAt": "2026-10-16T00:59:14.718Z",
+      "exitCode": 0,
+      "allChecksPassed": true,
+      "checks": {
+        "droidSucceeded": true,
+        "independentFileResult": true,
+        "inputUnchanged": true,
+        "authenticatedBridgeTraffic": true,
+        "nativeReadCompleted": true,
+        "nativeWriteCompleted": true,
+        "runtimeDrained": true,
+        "nativeSessionsPresent": true,
+        "realFactoryExitSpecMode": true,
+        "factoryApprovalObserved": true,
+        "finalCompletionMarker": true
+      },
+      "cleanupComplete": true,
+      "note": "Production wrapper automatically added the official ExitSpecMode capability; caller did not provide --add-tools."
+    },
+    {
+      "evidence": "evidence/spec-validation-2026-10-16-r4.json",
+      "sha256": "41dfee48d006d3350df2f8c57f707872987f9eaf80536170cbf8206279323215",
+      "status": "PASS",
+      "startedAt": "2026-10-16T00:59:46.315Z",
+      "finishedAt": "2026-10-16T01:00:21.337Z",
+      "exitCode": 0,
+      "allChecksPassed": true,
+      "checks": {
+        "droidSucceeded": true,
+        "independentFileResult": true,
+        "inputUnchanged": true,
+        "authenticatedBridgeTraffic": true,
+        "nativeReadCompleted": true,
+        "nativeWriteCompleted": true,
+        "runtimeDrained": true,
+        "nativeSessionsPresent": true,
+        "realFactoryExitSpecMode": true,
+        "factoryApprovalObserved": true,
+        "finalCompletionMarker": true
+      },
+      "cleanupComplete": true,
+      "note": "Production wrapper flow plus official permission_mode hook observations: SessionStart spec; ExitSpecMode PreToolUse/PostToolUse auto-high."
+    },
+    {
+      "evidence": "evidence/spec-readonly-validation-2026-10-16.json",
+      "sha256": "2a7c38d25456a87e000d403300a670a6d273bfb208a9caaa920ae9516e13c1bf",
+      "status": "PASS",
+      "startedAt": "2026-10-16T01:05:02.584Z",
+      "finishedAt": "2026-10-16T01:05:49.859Z",
+      "exitCode": 0,
+      "allChecksPassed": true,
+      "checks": {
+        "droidSucceeded": true,
+        "independentFileResult": true,
+        "inputUnchanged": true,
+        "authenticatedBridgeTraffic": true,
+        "nativeReadCompleted": true,
+        "nativeWriteCompleted": true,
+        "runtimeDrained": true,
+        "nativeSessionsPresent": true,
+        "realFactoryExitSpecMode": true,
+        "factoryApprovalObserved": true,
+        "finalCompletionMarker": true,
+        "preApprovalWriteDenied": true,
+        "preApprovalFileAbsent": true
+      },
+      "cleanupComplete": true,
+      "note": "Native pre-approval Write mechanically denied, official Factory approval succeeded, later native Write succeeded with correct file result."
+    },
+    {
+      "evidence": "evidence/custom-droid-validation-2026-10-16.json",
+      "sha256": "af33df74b3d619c560007014ec9ec1e07dcd4307858c2a3a294080f96d949899",
+      "status": "PASS",
+      "startedAt": "2026-10-16T00:54:01.976Z",
+      "finishedAt": "2026-10-16T00:54:42.887Z",
+      "exitCode": 0,
+      "allChecksPassed": true,
+      "checks": {
+        "droidSucceeded": true,
+        "independentFileResult": true,
+        "inputUnchanged": true,
+        "authenticatedBridgeTraffic": true,
+        "nativeReadCompleted": true,
+        "nativeWriteCompleted": true,
+        "runtimeDrained": true,
+        "nativeSessionsPresent": true,
+        "actualCustomFactoryTask": true,
+        "bodyOnlyMarkerPreserved": true,
+        "customModelSelected": true,
+        "childNativeSession": true
+      },
+      "cleanupComplete": true,
+      "note": "Custom project Droid Task, explicit model alias, complete body marker, native child file work passed."
+    },
+    {
+      "evidence": "evidence/custom-droid-validation-2026-10-16-r2.json",
+      "sha256": "871a1837a7d3d0d2c88d88834e22760fc2563b45e03d21e499f263d5f217456a",
+      "status": "PASS",
+      "startedAt": "2026-10-16T01:02:00.207Z",
+      "finishedAt": "2026-10-16T01:02:39.543Z",
+      "exitCode": 0,
+      "allChecksPassed": true,
+      "checks": {
+        "droidSucceeded": true,
+        "independentFileResult": true,
+        "inputUnchanged": true,
+        "authenticatedBridgeTraffic": true,
+        "nativeReadCompleted": true,
+        "nativeWriteCompleted": true,
+        "runtimeDrained": true,
+        "nativeSessionsPresent": true,
+        "actualCustomFactoryTask": true,
+        "bodyOnlyMarkerPreserved": true,
+        "customModelSelected": true,
+        "childNativeSession": true,
+        "parentDidNotReadOrWrite": true,
+        "markerNotInDelegatedPrompt": true
+      },
+      "cleanupComplete": true,
+      "note": "Expanded custom acceptance passed with parent no-file-work and marker absent from delegated prompt."
+    },
+    {
+      "evidence": "evidence/custom-droid-readonly-validation-2026-10-16.json",
+      "sha256": "e2714df5dac3f8d1a4a39b622307124c0e2606711e19c4386b9024feeb67fa8c",
+      "status": "FAIL",
+      "startedAt": "2026-10-16T01:04:16.280Z",
+      "finishedAt": "2026-10-16T01:05:21.998Z",
+      "exitCode": 0,
+      "allChecksPassed": false,
+      "checks": {
+        "droidSucceeded": true,
+        "independentFileResult": true,
+        "inputUnchanged": true,
+        "authenticatedBridgeTraffic": true,
+        "nativeReadCompleted": true,
+        "nativeWriteCompleted": true,
+        "runtimeDrained": true,
+        "nativeSessionsPresent": true,
+        "actualCustomFactoryTask": true,
+        "bodyOnlyMarkerPreserved": true,
+        "customModelSelected": true,
+        "childNativeSession": true,
+        "parentDidNotReadOrWrite": true,
+        "markerNotInDelegatedPrompt": true,
+        "readOnlyResultFidelity": true,
+        "childAdvertisesOnlyRead": false
+      },
+      "cleanupComplete": true,
+      "note": "Verifier assertion failure only: expected Read alone, but official Factory advertises Read plus Skill. Native Write was mechanically denied and file absent. The misleading old nativeWriteCompleted label in this first read-only attempt meant its conditional denial check; preserved unchanged."
+    },
+    {
+      "evidence": "evidence/custom-droid-readonly-validation-2026-10-16-r2.json",
+      "sha256": "3dee6dc8b334255c30c022294b02c373fecf6aee476788fcd62d32993c27ea93",
+      "status": "PASS",
+      "startedAt": "2026-10-16T01:06:05.903Z",
+      "finishedAt": "2026-10-16T01:06:50.366Z",
+      "exitCode": 0,
+      "allChecksPassed": true,
+      "checks": {
+        "droidSucceeded": true,
+        "forbiddenFilesAbsent": true,
+        "inputUnchanged": true,
+        "authenticatedBridgeTraffic": true,
+        "nativeReadCompleted": true,
+        "nativeWriteDenied": true,
+        "runtimeDrained": true,
+        "nativeSessionsPresent": true,
+        "actualCustomFactoryTask": true,
+        "bodyOnlyMarkerPreserved": true,
+        "customModelSelected": true,
+        "childNativeSession": true,
+        "parentDidNotReadOrWrite": true,
+        "markerNotInDelegatedPrompt": true,
+        "readOnlyResultFidelity": true,
+        "childNativeFileToolsReadOnly": true
+      },
+      "cleanupComplete": true,
+      "note": "Corrected acceptance allows Factory-owned Skill entry while requiring Read-only native file capabilities; all 16 assertions passed."
+    }
+  ],
+  "nativeDenialProof": [
+    {
+      "evidence": "evidence/spec-readonly-validation-2026-10-16.json",
+      "nativeTranscriptSha256": "e0c18c6abd495189bb62c28935346466089203479e84edb2e06638e7f3535e20",
+      "expectedMechanicalDenial": "BRIDGE_FACTORY_SPEC_READ_ONLY",
+      "denialObserved": true,
+      "denials": [
+        {
+          "toolUseId": "call_b5960b90ec124378aec77a57",
+          "reason": "PreToolUse:Write hook error: BRIDGE_FACTORY_SPEC_READ_ONLY: Factory spec mode permits native read tools only. Propose the plan through Factory and wait for its permission transition before executing changes.",
+          "nativeSessionId": "698503af-6862-47c9-987c-56c76bcd32d8"
+        }
+      ],
+      "sameNativeSessionAcrossSpecWriteDenialApprovalAndAllowedWrite": true
+    },
+    {
+      "evidence": "evidence/custom-droid-readonly-validation-2026-10-16-r2.json",
+      "nativeTranscriptSha256": "899de47076fb7acd426924dfc9b41132c00bf0fa62821bd86a8c289a7d42735d",
+      "expectedMechanicalDenial": "BRIDGE_HOST_TOOL_NOT_ADVERTISED",
+      "denialObserved": true,
+      "denials": [
+        {
+          "toolUseId": "call_d571f78385004cefa8ad9a50",
+          "reason": "PreToolUse:Write hook error: BRIDGE_HOST_TOOL_NOT_ADVERTISED: Write is not authorized by the current host tool set. Use only its advertised native equivalents or Factory MCP tools; do not work around this restriction.",
+          "nativeSessionId": "f19cd065-8890-4d7d-8af9-6e27a073278c"
+        }
+      ],
+      "sameNativeSessionAcrossSpecWriteDenialApprovalAndAllowedWrite": null
+    }
+  ],
+  "scopeLimitations": [
+    "All live calls used authorized GLM-5.2 BYOK through official Claude Code; no real subscription credentials or Anthropic billing checks.",
+    "Factory parent and child use different aliases but the same GLM upstream; this proves Factory alias selection and child session/prompt separation, not simultaneous distinct upstream providers.",
+    "The read-only custom fixture tests blocked native Write and no side effect, plus successful Read. It does not prove every possible external Factory Skill capability.",
+    "No dedicated Task-summary helper was invoked by these short tasks; result fidelity was checked directly. Historical summary-helper wording was flagged for correction.",
+    "These scoped paths do not establish exhaustive Factory internal callsite coverage."
+  ]
+}

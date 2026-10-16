@@ -65,6 +65,74 @@ describe("live permission requests", () => {
 });
 
 describe("authentic Factory lifecycle", () => {
+  it("renews ownership on authenticated user turns after Factory discarded its original start context", async () => {
+    const f = fixture(); const start = await f.send("SessionStart");
+    const token = start.bindingToken as string;
+    const turn = await f.send("UserPromptSubmit", token, { prompt: "Recall after automatic compaction" });
+    expect(turn).toEqual({ ok: true, additionalContext: start.additionalContext });
+    const request: MessagesRequest = { model: "test", max_tokens: 10, messages: [{ role: "user", content: `${turn.additionalContext} recall` }] };
+    expect(f.broker.prepareRequest(request, f.dir)).toMatchObject({ binding: token, request: { messages: [{ role: "user", content: " recall" }] } });
+    await expect(f.send("UserPromptSubmit", "old-generation")).rejects.toMatchObject({ code: "stale_host_event" });
+    await f.send("SessionEnd", token);
+    expect(await f.send("UserPromptSubmit", token)).not.toHaveProperty("additionalContext");
+  });
+
+  it("retires only the authenticated compact predecessor so copied markers cannot misbind handoff", async () => {
+    const f = fixture();
+    const old = await f.send("SessionStart");
+    const id = f.session(); f.broker.bind(old.bindingToken as string, id);
+    const sibling = await f.send("SessionStart", undefined, { session_id: "sibling" });
+    const siblingId = f.session(); f.broker.bind(sibling.bindingToken as string, siblingId);
+    const currentCompact = await f.send("SessionStart", undefined, { source: "compact", previous_session_id: "factory-a" });
+    expect(currentCompact.bindingToken).toBe(old.bindingToken);
+    expect(f.runtime.endHostSession).not.toHaveBeenCalled();
+    const fresh = await f.send("SessionStart", undefined, { session_id: "handoff-b", source: "compact", previous_session_id: "factory-a" });
+    expect(f.runtime.endHostSession).toHaveBeenCalledExactlyOnceWith(id, "Factory compact handoff");
+    const request: MessagesRequest = { model: "test", max_tokens: 10, messages: [{ role: "user", content: `${old.additionalContext}\n${fresh.additionalContext}\ncontinue` }] };
+    expect(f.broker.prepareRequest(request, f.dir).binding).toBe(fresh.bindingToken);
+    request.messages[0]!.content = `${sibling.additionalContext} separate work`;
+    expect(f.broker.prepareRequest(request, f.dir).binding).toBe(sibling.bindingToken);
+    expect(f.store.require(id).hostEnded).toBe("resumable");
+  });
+
+  it("does not let a new launch retire another launch's live compact predecessor", async () => {
+    const f = fixture();
+    const firstLaunch = f.broker.createLaunch({ cwd: f.dir }).launchId;
+    const secondLaunch = f.broker.createLaunch({ cwd: f.dir }).launchId;
+    const old = await f.broker.hostEvent({ eventId: randomUUID(), event: f.event("SessionStart"), launchId: firstLaunch });
+    const id = f.session(); f.broker.bind(old.bindingToken as string, id);
+    await expect(f.broker.hostEvent({ eventId: randomUUID(), event: f.event("SessionStart", {
+      session_id: "new", source: "compact", previous_session_id: "factory-a",
+    }), launchId: secondLaunch })).rejects.toMatchObject({ code: "conflicting_host_launch" });
+    expect(f.runtime.endHostSession).not.toHaveBeenCalled();
+  });
+
+  it("keeps Spec read-only through optimistic mode changes until the exact successful host receipt", async () => {
+    const f = fixture();
+    const start = await f.send("SessionStart", undefined, { permission_mode: "spec" });
+    const token = start.bindingToken as string;
+    const id = f.session(); f.broker.bind(token, id);
+    const call = { toolUseId: "native-spec-exit", toolName: "ExitSpecMode", input: { title: "Plan", plan: "Read then implement" } };
+    f.calls.set(id, [call]);
+    expect(f.broker.factoryPermissionMode(id)).toBe("spec");
+    await f.send("PreToolUse", token, { permission_mode: "auto-high", tool_name: "ExitSpecMode" });
+    expect(f.broker.factoryPermissionMode(id)).toBe("spec");
+    const completed = { permission_mode: "auto-high", tool_name: "ExitSpecMode", tool_input: call.input,
+      tool_use_id: call.toolUseId, tool_response: "approved" };
+    await expect(f.send("PostToolUse", "stale", completed)).rejects.toMatchObject({ code: "stale_host_event" });
+    expect(f.broker.factoryPermissionMode(id)).toBe("spec");
+    await f.send("PostToolUse", token, { ...completed, tool_use_id: "another-call" });
+    expect(f.broker.factoryPermissionMode(id)).toBe("spec");
+    await f.send("PostToolUse", token, { ...completed, tool_response: { isError: true } });
+    expect(f.broker.factoryPermissionMode(id)).toBe("spec");
+    await f.send("PostToolUse", token, completed);
+    expect(f.broker.factoryPermissionMode(id)).toBe("auto-high");
+    await f.send("UserPromptSubmit", token, { permission_mode: "spec" });
+    expect(f.broker.factoryPermissionMode(id)).toBe("spec");
+    await f.send("SessionEnd", token);
+    expect(f.broker.factoryPermissionMode(id)).toBeUndefined();
+  });
+
   it("binds an alias launch to physical Factory cwd and rejects unrelated workspaces", async () => {
     const f = fixture();
     const physical = realpathSync(f.dir);

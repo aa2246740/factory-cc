@@ -1,0 +1,172 @@
+{
+  "suite": "mission-final-validation",
+  "status": "INTERRUPTED_ENVIRONMENT",
+  "startedAt": "2026-10-16T01:11:55.966Z",
+  "recordedAt": "2026-10-16T01:21:30.017455+00:00",
+  "uninterruptedMissionPass": false,
+  "recoveryUsed": false,
+  "reason": "Unified exec transport disconnected with pong_timeout and lost the active session. The owned supervisor disappeared without running its finally block or writing its final summary. All native and Droid processes are now exited. This is an interrupted acceptance attempt, not a completed Mission failure.",
+  "transportErrors": [
+    "exec-server transport disconnected",
+    "pong_timeout",
+    "unknown session id 3feed1de-90ad-4a29-9ff2-e7a92dd7af69"
+  ],
+  "lastProgress": {
+    "at": "2026-10-16T01:18:56.147Z",
+    "elapsedSec": 420,
+    "requests": 12,
+    "requestedRoles": [
+      "orchestrator",
+      "worker"
+    ],
+    "validation": [
+      {
+        "id": "VAL-SUM-001",
+        "status": "pending"
+      },
+      {
+        "id": "VAL-SUM-002",
+        "status": "pending"
+      },
+      {
+        "id": "VAL-SUM-003",
+        "status": "pending"
+      },
+      {
+        "id": "VAL-SUM-004",
+        "status": "pending"
+      }
+    ],
+    "features": [
+      {
+        "id": "fix-sum-addition",
+        "status": "in_progress",
+        "skillName": "backend-worker"
+      }
+    ],
+    "missionState": "running",
+    "httpSilenceSec": 30,
+    "model": "glm-5.2",
+    "nativeRuntime": {
+      "kind": "sdk",
+      "authMode": "byok",
+      "permissionMode": "bypass",
+      "prompt": {
+        "systemPrompt": "preset:claude_code + stable append",
+        "dynamicPlacement": "user input on initial turn or context change",
+        "tools": "preset:claude_code built-ins + Droid-exclusive MCP"
+      },
+      "tools": "preset:claude_code + droid-exclusive MCP",
+      "input": "persistent SDK streaming input",
+      "includePartialMessages": true,
+      "approvalChannel": "external controller",
+      "activeNativeSessions": 3,
+      "activeNativeTurns": 2,
+      "pendingHostCalls": 1,
+      "pendingApprovals": 0,
+      "fatalErrors": [],
+      "overridesAnthropicEnv": true,
+      "upstream": {
+        "provider": "glm",
+        "label": "https://open.bigmodel.cn/api/anthropic",
+        "baseUrl": "https://open.bigmodel.cn/api/anthropic",
+        "model": "glm-5.2",
+        "tokenEnv": "READINESS_MODEL_API_KEY",
+        "authHeader": "x-api-key"
+      },
+      "control": {
+        "pendingApprovals": 0,
+        "failures": [],
+        "activeHostSessions": 2,
+        "boundNativeSessions": 2
+      }
+    }
+  },
+  "lastProgressSha256": "d60e1a20f134c853bef77b2e5a75917467a7221ee74812f2f14cccc1cafc1b93",
+  "lastMissionArtifacts": {
+    "state.json": {
+      "missionId": "mis_e4c58413",
+      "state": "orchestrator_turn",
+      "workingDirectory": "/tmp/relay-e2e-ws-IVEBpa",
+      "createdAt": "2026-10-16T01:11:56.677Z",
+      "updatedAt": "2026-10-16T01:19:12.768Z",
+      "initialFeatureCount": 1
+    },
+    "features.json": {
+      "features": [
+        {
+          "id": "fix-sum-addition",
+          "description": "Fix the arithmetic bug in sum.js: sum(a, b) currently returns a - b; change the operator so it returns a + b. This is the ONLY permitted change \u2014 preserve sum.test.js, package.json, and every other file exactly as-is; create no new repo files. Validate with the existing automated suite: npm test must exit 0 with node --test summary 'tests 3 / pass 3 / fail 0'. Baseline (readiness check): npm test exits 1 with all 3 tests failing (-1 !== 5, 1 !== -5, -5 !== 1). Commit the one-line fix with a clear message.",
+          "skillName": "backend-worker",
+          "preconditions": [
+            "Node.js >= 18 (verified: v24.19.0), npm 11.9.0, git 2.52.0 all functional",
+            "No dependencies to install \u2014 package.json declares none; npm install must NOT be run",
+            "Baseline documented: npm test exits 1, 3/3 tests fail because sum subtracts instead of adds",
+            "No services, ports, or credentials required (backend-only fixture)"
+          ],
+          "expectedBehavior": [
+            "sum.js exports sum(a, b) returning a + b (single-line operator change, no other edits)",
+            "sum.test.js and package.json remain byte-identical; no other files created or modified",
+            "npm test exits 0 with node --test summary: tests 3, pass 3, fail 0",
+            "Fix is committed with a clear message and the working tree is clean afterwards"
+          ],
+          "fulfills": [
+            "VAL-SUM-001",
+            "VAL-SUM-002",
+            "VAL-SUM-003",
+            "VAL-SUM-004"
+          ],
+          "milestone": "fix-addition",
+          "status": "pending",
+          "workerSessionIds": [
+            "7aceb255-f132-4c0e-8084-76828a2f893a"
+          ],
+          "currentWorkerSessionId": null,
+          "completedWorkerSessionId": null
+        }
+      ]
+    },
+    "validation-state.json": {
+      "assertions": {
+        "VAL-SUM-001": {
+          "status": "pending"
+        },
+        "VAL-SUM-002": {
+          "status": "pending"
+        },
+        "VAL-SUM-003": {
+          "status": "pending"
+        },
+        "VAL-SUM-004": {
+          "status": "pending"
+        }
+      }
+    }
+  },
+  "runtimeSourceSha256AtStart": "22b04c2500b87ac3b7d0f91f9a48d24cc1923d14ff344509f67c8356162ac1d7",
+  "evidence": "evidence/local/e2e-mission-2026-10-16T01-11-55-969Z",
+  "supervisorPid": 67076,
+  "supervisorPresent": false,
+  "workspace": "/tmp/relay-e2e-ws-IVEBpa",
+  "factoryHome": "/tmp/relay-e2e-home-Uq41cn/.factory",
+  "processInspection": {
+    "method": "/proc metadata only; no environment or arguments read; no processes killed by name",
+    "liveProcessesUnderOwnedWorkspace": [],
+    "liveDroidClaudeNodeProcesses": [],
+    "exitedNativeProcessGroup": 67076,
+    "exitedDroidProcessGroup": 67104,
+    "finallyCleanupObserved": false,
+    "liveOwnedProcessResidualObserved": false
+  },
+  "environmentMemory": {
+    "limitBytes": 17179869184,
+    "peakBytes": 7494856704,
+    "oomEvents": 0,
+    "oomKills": 0
+  },
+  "notes": [
+    "No claim of a clean finally/host lifecycle drain: the supervisor was terminated by the execution environment.",
+    "Remaining zombie entries represent exited processes, not running provider work.",
+    "Do not use this interrupted attempt as uninterrupted Mission evidence. A fresh isolated -r3 is required."
+  ]
+}

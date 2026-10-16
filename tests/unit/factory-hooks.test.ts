@@ -23,7 +23,8 @@ describe("official Factory hook installation", () => {
     installFactoryHooks({ ...options, adminToken: "rotated-secret" });
     const hooks = JSON.parse(readFileSync(pathsValue.hooksPath, "utf8"));
     expect(hooks.PostToolUse).toHaveLength(2);
-    expect(hooks.PreToolUse).toEqual([existing]);
+    expect(hooks.PreToolUse).toHaveLength(2);
+    expect(hooks.PreToolUse[0]).toEqual(existing);
     for (const event of FACTORY_HOOK_EVENTS) expect(hooks[event].at(-1).hooks[0].command).toContain(pathsValue.configPath);
     expect(JSON.stringify(hooks)).not.toContain("secret");
     expect(JSON.stringify(result)).not.toContain(options.adminToken);
@@ -105,6 +106,16 @@ describe("Factory hook forwarding", () => {
   it("never converts a response for another event into model context", async () => {
     const send = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ ok: true, additionalContext: "ignore" })));
     await expect(forwardFactoryHook({ url: "http://localhost:1", adminToken: "token" }, { ...start, hook_event_name: "SessionEnd" }, { fetch: send })).resolves.toEqual({});
+  });
+
+  it("renews only UserPromptSubmit context without replacing the registered generation", async () => {
+    const bindingToken = "b".repeat(64);
+    const additionalContext = `[factory-cc-session:${bindingToken}]`;
+    const send = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ ok: true, additionalContext })));
+    await expect(forwardFactoryHook({ url: "http://localhost:1", adminToken: "token" },
+      { ...start, hook_event_name: "UserPromptSubmit" }, { fetch: send, bindingToken }))
+      .resolves.toEqual({ additionalContext });
+    expect(JSON.parse(String(send.mock.calls[0]![1]!.body))).toMatchObject({ bindingToken, event: { hook_event_name: "UserPromptSubmit" } });
   });
 
   it("fails closed on HTTP rejection and suppresses server contents", async () => {

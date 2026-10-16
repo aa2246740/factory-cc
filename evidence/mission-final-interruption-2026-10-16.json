@@ -1,0 +1,25 @@
+{
+  "suite": "mission-final-interruption-context",
+  "recordedAt": "2026-10-16T01:10:03.401444+00:00",
+  "attempt": "evidence/mission-final-validation-2026-10-16.json",
+  "attemptSha256": "e8fc233831a118a70c2372450f711e0a2938ebf23a0840f97e2b2ec838f75e40",
+  "classification": "INTERRUPTED_FOR_SOURCE_UPDATE",
+  "requestedBy": "parent integration supervisor",
+  "reason": "A separate live Factory automatic-compaction run exposed missing authenticated binding after history truncation. The integration supervisor requested stopping this Mission acceptance before updating official UserPromptSubmit hook behavior. This Mission did not fail a completed product journey; it was deliberately interrupted during planning to validate a corrected runtime in a fresh subsequent attempt.",
+  "supervisorPid": 64213,
+  "signal": "SIGTERM",
+  "droidExitCode": 143,
+  "missionStateAtInterruption": "planning",
+  "durationSec": 79,
+  "cleanupSuccessful": true,
+  "processCleanup": {
+    "supported": true,
+    "observedProcessCount": 18,
+    "terminatedProcessCount": 0,
+    "remainingProcessIds": [],
+    "complete": true
+  },
+  "runtimeSourcesStable": true,
+  "uninterruptedMissionPass": false,
+  "nextAttempt": "evidence/mission-final-validation-2026-10-16-r2.json"
+}

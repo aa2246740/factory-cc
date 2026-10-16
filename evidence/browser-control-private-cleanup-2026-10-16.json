@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-10-16T01:37:01.078227+00:00",
+  "scope": "Supplemental cleanup performed after the two historical browser runs. Does not rewrite their PASS/FAIL states or original cleanup timing. Only each explicitly owned claude-config path was removed; no real subscription configuration was opened.",
+  "records": [
+    {
+      "evidence": "evidence/browser-control-validation-2026-10-16.json",
+      "evidenceSha256": "2e56aecc992f798242baf0b55d3c43956c075ff6b01fef399b694c1a971edbee",
+      "historicalEvidenceUnchanged": true,
+      "privateConfig": "evidence/local/verify-control-2026-10-16T01-31-36-314Z/bridge-data/claude-config",
+      "privateConfigExistedBeforeCleanup": true,
+      "privateConfigRemoved": true,
+      "retained": "Original evidence JSON and screenshots unchanged; ignored Bridge logs and fixture response files retained."
+    },
+    {
+      "evidence": "evidence/browser-connect-status-before-2026-10-16.json",
+      "evidenceSha256": "660e13bdd473e6ef7130d672d3f4d4b72f2f5192709f314e9cbd5a598d046e4e",
+      "historicalEvidenceUnchanged": true,
+      "privateConfig": "evidence/local/verify-control-2026-10-16T01-33-34-463Z/bridge-data/claude-config",
+      "privateConfigExistedBeforeCleanup": false,
+      "privateConfigRemoved": true,
+      "retained": "Original evidence JSON and screenshots unchanged; ignored Bridge logs and fixture response files retained."
+    }
+  ],
+  "status": "PASS"
+}

@@ -2,7 +2,8 @@ const SECRET_KEYS = /^(authorization|x-api-key|api[-_]?key|cookie|set-cookie|pro
 const SECRET_VALUE = /(?:sk-|fk-|ant-|claude-|Bearer\s+)[A-Za-z0-9._\-]{8,}/g;
 
 export function redactValue(value: string): string {
-  return value.replace(SECRET_VALUE, "[redacted]");
+  return value.replace(SECRET_VALUE, "[redacted]")
+    .replace(/\[factory-cc-session:[a-f0-9]{64}\]/g, "[factory-cc-session:redacted]");
 }
 
 export function redactHeaders(headers: Record<string, string | string[] | undefined>): Record<string, string> {

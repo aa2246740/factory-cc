@@ -1,0 +1,552 @@
+{
+  "recordedAt": "2026-10-16T01:08:01.226Z",
+  "status": "PASS",
+  "surface": "real Factory droid.compact_session (same-session and handoff)",
+  "model": "glm-5.2",
+  "output": "/workspace/work/factory-cc-prep/repo/evidence/local/factory-context-2026-10-16T01-08-01-189Z-77416e",
+  "checks": {
+    "stored": true,
+    "currentCompacted": true,
+    "currentRecall": true,
+    "currentNativeContinued": true,
+    "handoffCreated": true,
+    "handoffRecall": true,
+    "handoffNativeIsolated": true
+  },
+  "steps": [
+    {
+      "action": "initialize",
+      "sessionId": "ecbdf843-f09e-4e7f-86d0-5af0b0e9917b",
+      "settings": {
+        "modelId": "custom:Relay-chat-0",
+        "reasoningEffort": "none",
+        "autonomyMode": "auto-high",
+        "interactionMode": "auto",
+        "autonomyLevel": "high",
+        "availableAutonomyLevels": [
+          "off",
+          "low",
+          "medium",
+          "high"
+        ],
+        "compactionThresholdCheckEnabled": true,
+        "additionalToolIds": [],
+        "enabledToolIds": [],
+        "disabledToolIds": [],
+        "restrictToolIds": [],
+        "toolExecutionMode": "direct_only",
+        "allowSubagentsInScripts": false,
+        "migrationActive": false
+      }
+    },
+    {
+      "action": "remember",
+      "response": "CONTEXT_STORED",
+      "sessions": [
+        {
+          "bridgeSessionId": "sess_722e2ea3-75e5-4bc3-9900-50ad6b16a200",
+          "sdkSessionId": "f7e0931a-dac0-49a1-8372-487f27e31abb",
+          "state": "IDLE",
+          "historyMessageCount": 2
+        },
+        {
+          "bridgeSessionId": "sess_3809d4cd-569b-4578-9d97-6edcc31355f5",
+          "factorySessionId": "ecbdf843-f09e-4e7f-86d0-5af0b0e9917b",
+          "sdkSessionId": "278a2185-2157-4be9-9f9f-11280ab1f581",
+          "state": "IDLE",
+          "historyMessageCount": 3
+        }
+      ]
+    },
+    {
+      "action": "compact-current",
+      "result": {
+        "newSessionId": "ecbdf843-f09e-4e7f-86d0-5af0b0e9917b",
+        "removedCount": 6
+      },
+      "sessions": [
+        {
+          "bridgeSessionId": "sess_722e2ea3-75e5-4bc3-9900-50ad6b16a200",
+          "sdkSessionId": "f7e0931a-dac0-49a1-8372-487f27e31abb",
+          "state": "IDLE",
+          "historyMessageCount": 2
+        },
+        {
+          "bridgeSessionId": "sess_3809d4cd-569b-4578-9d97-6edcc31355f5",
+          "factorySessionId": "ecbdf843-f09e-4e7f-86d0-5af0b0e9917b",
+          "sdkSessionId": "278a2185-2157-4be9-9f9f-11280ab1f581",
+          "state": "IDLE",
+          "historyMessageCount": 3
+        },
+        {
+          "bridgeSessionId": "sess_c3f24adb-0063-4819-bf90-f85492005c66",
+          "sdkSessionId": "11bbfdf0-e9e4-4101-b135-09b97a617cee",
+          "state": "IDLE",
+          "historyMessageCount": 2
+        }
+      ]
+    },
+    {
+      "action": "recall-current",
+      "response": "CONTEXT_cb80bfdd4530430b94393f57230e2a97|43127|3",
+      "sessions": [
+        {
+          "bridgeSessionId": "sess_722e2ea3-75e5-4bc3-9900-50ad6b16a200",
+          "sdkSessionId": "f7e0931a-dac0-49a1-8372-487f27e31abb",
+          "state": "IDLE",
+          "historyMessageCount": 2
+        },
+        {
+          "bridgeSessionId": "sess_3809d4cd-569b-4578-9d97-6edcc31355f5",
+          "factorySessionId": "ecbdf843-f09e-4e7f-86d0-5af0b0e9917b",
+          "sdkSessionId": "278a2185-2157-4be9-9f9f-11280ab1f581",
+          "state": "IDLE",
+          "historyMessageCount": 7
+        },
+        {
+          "bridgeSessionId": "sess_c3f24adb-0063-4819-bf90-f85492005c66",
+          "sdkSessionId": "11bbfdf0-e9e4-4101-b135-09b97a617cee",
+          "state": "IDLE",
+          "historyMessageCount": 2
+        }
+      ]
+    },
+    {
+      "action": "compact-handoff",
+      "result": {
+        "newSessionId": "9318b36f-293f-49af-82fb-8b357346cde3",
+        "removedCount": 11
+      },
+      "sessions": [
+        {
+          "bridgeSessionId": "sess_722e2ea3-75e5-4bc3-9900-50ad6b16a200",
+          "sdkSessionId": "f7e0931a-dac0-49a1-8372-487f27e31abb",
+          "state": "IDLE",
+          "historyMessageCount": 2
+        },
+        {
+          "bridgeSessionId": "sess_3809d4cd-569b-4578-9d97-6edcc31355f5",
+          "factorySessionId": "ecbdf843-f09e-4e7f-86d0-5af0b0e9917b",
+          "sdkSessionId": "278a2185-2157-4be9-9f9f-11280ab1f581",
+          "state": "IDLE",
+          "historyMessageCount": 7
+        },
+        {
+          "bridgeSessionId": "sess_c3f24adb-0063-4819-bf90-f85492005c66",
+          "sdkSessionId": "11bbfdf0-e9e4-4101-b135-09b97a617cee",
+          "state": "IDLE",
+          "historyMessageCount": 2
+        },
+        {
+          "bridgeSessionId": "sess_9544080a-7409-4537-baff-bfbd5129d1d3",
+          "sdkSessionId": "b0a5cdd7-836d-4f0e-88fb-529bd1cc0216",
+          "state": "IDLE",
+          "historyMessageCount": 2
+        }
+      ]
+    },
+    {
+      "action": "recall-handoff",
+      "response": "CONTEXT_cb80bfdd4530430b94393f57230e2a97|43127|3",
+      "sessions": [
+        {
+          "bridgeSessionId": "sess_722e2ea3-75e5-4bc3-9900-50ad6b16a200",
+          "sdkSessionId": "f7e0931a-dac0-49a1-8372-487f27e31abb",
+          "state": "IDLE",
+          "historyMessageCount": 2
+        },
+        {
+          "bridgeSessionId": "sess_3809d4cd-569b-4578-9d97-6edcc31355f5",
+          "factorySessionId": "ecbdf843-f09e-4e7f-86d0-5af0b0e9917b",
+          "sdkSessionId": "278a2185-2157-4be9-9f9f-11280ab1f581",
+          "state": "IDLE",
+          "historyMessageCount": 7,
+          "hostEnded": "resumable"
+        },
+        {
+          "bridgeSessionId": "sess_c3f24adb-0063-4819-bf90-f85492005c66",
+          "sdkSessionId": "11bbfdf0-e9e4-4101-b135-09b97a617cee",
+          "state": "IDLE",
+          "historyMessageCount": 2
+        },
+        {
+          "bridgeSessionId": "sess_9544080a-7409-4537-baff-bfbd5129d1d3",
+          "sdkSessionId": "b0a5cdd7-836d-4f0e-88fb-529bd1cc0216",
+          "state": "IDLE",
+          "historyMessageCount": 2
+        },
+        {
+          "bridgeSessionId": "sess_b6f1c937-25d2-4351-84d5-008f14a0cc73",
+          "factorySessionId": "9318b36f-293f-49af-82fb-8b357346cde3",
+          "sdkSessionId": "3addf6e9-502c-4766-a4df-c8e87a3274d5",
+          "state": "IDLE",
+          "historyMessageCount": 10
+        }
+      ]
+    }
+  ],
+  "automaticProbeRequested": false,
+  "handoffLifecycle": "same-worker-load-with-authenticated-previous-session-transfer",
+  "limitations": [
+    "Default production-threshold automatic compaction is separate from an optional lowered-threshold probe.",
+    "Uses authorized non-Claude BYOK; no subscription-account policy assurance.",
+    "Missing provider cache-create fields remain unknown, not zero cost or an exact hit ratio."
+  ],
+  "factorySessionId": "ecbdf843-f09e-4e7f-86d0-5af0b0e9917b",
+  "currentNativeUsage": {
+    "input_tokens": 553,
+    "output_tokens": 116,
+    "cache_creation_input_tokens": null,
+    "cache_read_input_tokens": 23488,
+    "status": "reported",
+    "coverage": "partial",
+    "knownFields": [
+      "input_tokens",
+      "output_tokens",
+      "cache_read_input_tokens"
+    ],
+    "scope": "provider_messages",
+    "estimated": true,
+    "modelRequests": 1
+  },
+  "runtimeBeforeClose": {
+    "kind": "sdk",
+    "authMode": "byok",
+    "permissionMode": "bypass",
+    "prompt": {
+      "systemPrompt": "preset:claude_code + stable append",
+      "dynamicPlacement": "user input on initial turn or context change",
+      "tools": "preset:claude_code built-ins + Droid-exclusive MCP"
+    },
+    "tools": "preset:claude_code + droid-exclusive MCP",
+    "input": "persistent SDK streaming input",
+    "includePartialMessages": true,
+    "approvalChannel": "external controller",
+    "activeNativeSessions": 3,
+    "activeNativeTurns": 0,
+    "pendingHostCalls": 0,
+    "pendingApprovals": 0,
+    "fatalErrors": [],
+    "overridesAnthropicEnv": true,
+    "upstream": {
+      "provider": "glm",
+      "label": "https://open.bigmodel.cn/api/anthropic",
+      "baseUrl": "https://open.bigmodel.cn/api/anthropic",
+      "model": "glm-5.2",
+      "tokenEnv": "READINESS_MODEL_API_KEY",
+      "authHeader": "x-api-key"
+    },
+    "control": {
+      "pendingApprovals": 0,
+      "failures": [],
+      "activeHostSessions": 0,
+      "boundNativeSessions": 0
+    }
+  },
+  "sessions": [
+    {
+      "bridgeSessionId": "sess_722e2ea3-75e5-4bc3-9900-50ad6b16a200",
+      "sdkSessionId": "f7e0931a-dac0-49a1-8372-487f27e31abb",
+      "state": "IDLE",
+      "historyMessageCount": 2
+    },
+    {
+      "bridgeSessionId": "sess_3809d4cd-569b-4578-9d97-6edcc31355f5",
+      "factorySessionId": "ecbdf843-f09e-4e7f-86d0-5af0b0e9917b",
+      "sdkSessionId": "278a2185-2157-4be9-9f9f-11280ab1f581",
+      "state": "IDLE",
+      "historyMessageCount": 7,
+      "hostEnded": "resumable"
+    },
+    {
+      "bridgeSessionId": "sess_c3f24adb-0063-4819-bf90-f85492005c66",
+      "sdkSessionId": "11bbfdf0-e9e4-4101-b135-09b97a617cee",
+      "state": "IDLE",
+      "historyMessageCount": 2
+    },
+    {
+      "bridgeSessionId": "sess_9544080a-7409-4537-baff-bfbd5129d1d3",
+      "sdkSessionId": "b0a5cdd7-836d-4f0e-88fb-529bd1cc0216",
+      "state": "IDLE",
+      "historyMessageCount": 2
+    },
+    {
+      "bridgeSessionId": "sess_b6f1c937-25d2-4351-84d5-008f14a0cc73",
+      "factorySessionId": "9318b36f-293f-49af-82fb-8b357346cde3",
+      "sdkSessionId": "3addf6e9-502c-4766-a4df-c8e87a3274d5",
+      "state": "IDLE",
+      "historyMessageCount": 10,
+      "hostEnded": "resumable"
+    }
+  ],
+  "requests": [
+    {
+      "at": "2026-10-16T01:08:01.812Z",
+      "method": "POST",
+      "path": "/v1/messages",
+      "role": "chat",
+      "authOk": true,
+      "sessionHint": "sess_722e2ea3-75e5-4bc3-9900-50ad6b16a200",
+      "model": "relay-chat",
+      "stream": true,
+      "toolNames": [],
+      "messageCount": 1,
+      "notes": [
+        "new-session"
+      ]
+    },
+    {
+      "at": "2026-10-16T01:08:01.973Z",
+      "method": "POST",
+      "path": "/v1/messages",
+      "role": "chat",
+      "authOk": true,
+      "sessionHint": "sess_3809d4cd-569b-4578-9d97-6edcc31355f5",
+      "model": "relay-chat",
+      "stream": true,
+      "toolNames": [
+        "Read",
+        "LS",
+        "Execute",
+        "Edit",
+        "Grep",
+        "Glob",
+        "Create",
+        "ExitSpecMode",
+        "AskUser",
+        "TodoWrite",
+        "TaskOutput",
+        "TaskStop",
+        "ToolSearch",
+        "Task"
+      ],
+      "messageCount": 2,
+      "notes": [
+        "new-session"
+      ]
+    },
+    {
+      "at": "2026-10-16T01:08:12.937Z",
+      "method": "POST",
+      "path": "/v1/messages",
+      "role": "chat",
+      "authOk": true,
+      "sessionHint": "sess_c3f24adb-0063-4819-bf90-f85492005c66",
+      "model": "relay-chat",
+      "stream": true,
+      "toolNames": [],
+      "messageCount": 1,
+      "notes": [
+        "new-session"
+      ]
+    },
+    {
+      "at": "2026-10-16T01:08:25.455Z",
+      "method": "POST",
+      "path": "/v1/messages",
+      "role": "chat",
+      "authOk": true,
+      "sessionHint": "sess_3809d4cd-569b-4578-9d97-6edcc31355f5",
+      "model": "relay-chat",
+      "stream": true,
+      "toolNames": [
+        "Read",
+        "LS",
+        "Execute",
+        "Edit",
+        "Grep",
+        "Glob",
+        "Create",
+        "ExitSpecMode",
+        "AskUser",
+        "TodoWrite",
+        "TaskOutput",
+        "TaskStop",
+        "ToolSearch",
+        "Task"
+      ],
+      "messageCount": 6,
+      "notes": [
+        "authenticated-history-tail"
+      ]
+    },
+    {
+      "at": "2026-10-16T01:08:30.892Z",
+      "method": "POST",
+      "path": "/v1/messages",
+      "role": "chat",
+      "authOk": true,
+      "sessionHint": "sess_9544080a-7409-4537-baff-bfbd5129d1d3",
+      "model": "relay-chat",
+      "stream": true,
+      "toolNames": [],
+      "messageCount": 1,
+      "notes": [
+        "new-session"
+      ]
+    },
+    {
+      "at": "2026-10-16T01:08:42.122Z",
+      "method": "POST",
+      "path": "/v1/messages",
+      "role": "chat",
+      "authOk": true,
+      "sessionHint": "sess_b6f1c937-25d2-4351-84d5-008f14a0cc73",
+      "model": "relay-chat",
+      "stream": true,
+      "toolNames": [
+        "Read",
+        "LS",
+        "Execute",
+        "Edit",
+        "Grep",
+        "Glob",
+        "Create",
+        "ExitSpecMode",
+        "AskUser",
+        "TodoWrite",
+        "TaskOutput",
+        "TaskStop",
+        "ToolSearch",
+        "Task"
+      ],
+      "messageCount": 9,
+      "notes": [
+        "new-session"
+      ]
+    }
+  ],
+  "hookMetadata": [
+    {
+      "keys": [
+        "session_id",
+        "transcript_path",
+        "cwd",
+        "permission_mode",
+        "hook_event_name",
+        "source",
+        "CLAUDE_ENV_FILE"
+      ],
+      "session_id": "ecbdf843-f09e-4e7f-86d0-5af0b0e9917b",
+      "permission_mode": "auto-high",
+      "hook_event_name": "SessionStart",
+      "source": "startup"
+    },
+    {
+      "keys": [
+        "session_id",
+        "transcript_path",
+        "cwd",
+        "permission_mode",
+        "hook_event_name",
+        "message_id",
+        "source",
+        "CLAUDE_ENV_FILE"
+      ],
+      "session_id": "ecbdf843-f09e-4e7f-86d0-5af0b0e9917b",
+      "permission_mode": "auto-high",
+      "hook_event_name": "SessionStart",
+      "source": "resume"
+    },
+    {
+      "keys": [
+        "session_id",
+        "transcript_path",
+        "cwd",
+        "permission_mode",
+        "hook_event_name",
+        "message_id",
+        "source",
+        "CLAUDE_ENV_FILE"
+      ],
+      "session_id": "ecbdf843-f09e-4e7f-86d0-5af0b0e9917b",
+      "permission_mode": "auto-high",
+      "hook_event_name": "SessionStart",
+      "source": "resume"
+    },
+    {
+      "keys": [
+        "session_id",
+        "transcript_path",
+        "cwd",
+        "permission_mode",
+        "hook_event_name",
+        "source",
+        "previous_session_id",
+        "CLAUDE_ENV_FILE"
+      ],
+      "session_id": "9318b36f-293f-49af-82fb-8b357346cde3",
+      "permission_mode": "auto-high",
+      "hook_event_name": "SessionStart",
+      "source": "compact",
+      "previous_session_id": "ecbdf843-f09e-4e7f-86d0-5af0b0e9917b"
+    },
+    {
+      "keys": [
+        "session_id",
+        "transcript_path",
+        "cwd",
+        "permission_mode",
+        "hook_event_name",
+        "message_id",
+        "reason",
+        "session_duration_ms",
+        "message_count"
+      ],
+      "session_id": "9318b36f-293f-49af-82fb-8b357346cde3",
+      "permission_mode": "auto-high",
+      "hook_event_name": "SessionEnd",
+      "reason": "other"
+    }
+  ],
+  "generatedTitles": [
+    {
+      "type": "session_title_updated",
+      "title": "Test memory through Factory compaction",
+      "updateType": "llm_generated"
+    }
+  ],
+  "factoryTranscriptFiles": [
+    {
+      "path": "/tmp/relay-e2e-home-4kH6B2/.factory/sessions/-tmp-relay-e2e-ws-CAcPFw/9318b36f-293f-49af-82fb-8b357346cde3.jsonl",
+      "bytes": 7382
+    },
+    {
+      "path": "/tmp/relay-e2e-home-4kH6B2/.factory/sessions/-tmp-relay-e2e-ws-CAcPFw/ecbdf843-f09e-4e7f-86d0-5af0b0e9917b.jsonl",
+      "bytes": 13968
+    }
+  ],
+  "compactionStates": [
+    {
+      "id": "65b0f13d-3b52-4230-8845-6916cf913e93",
+      "timestamp": "2026-10-16T01:08:41.821Z",
+      "summaryTokens": 387,
+      "summaryKind": "llm_summary",
+      "removedCount": 11,
+      "retainedVerificationValue": true,
+      "retainedPort": true,
+      "summaryChars": 1503
+    },
+    {
+      "id": "2f8e27f8-4212-48d3-9c05-1edb7577666a",
+      "timestamp": "2026-10-16T01:08:25.185Z",
+      "summaryTokens": 388,
+      "summaryKind": "llm_summary",
+      "removedCount": 6,
+      "retainedVerificationValue": true,
+      "retainedPort": true,
+      "summaryChars": 1517
+    }
+  ],
+  "cleanup": {
+    "supported": true,
+    "observedProcessCount": 28,
+    "terminatedProcessCount": 0,
+    "remainingProcessIds": [],
+    "complete": true
+  },
+  "removedOwnedDirectories": [
+    "/tmp/relay-e2e-home-4kH6B2",
+    "/tmp/relay-e2e-ws-CAcPFw"
+  ]
+}

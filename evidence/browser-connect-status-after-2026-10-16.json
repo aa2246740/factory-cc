@@ -1,0 +1,76 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-10-16T01:41:21.119Z",
+  "scope": "Real Chromium /control DOM connect, refresh and disconnect. No model request is made.",
+  "modelRequestsStarted": 0,
+  "connectOnly": true,
+  "driver": "Playwright locator.fill/click; passive browser response listeners; frozen polling in one stale tab only for cancellation race",
+  "directory": "/workspace/work/factory-cc-prep/repo/evidence/local/verify-control-2026-10-16T01-41-21-113Z",
+  "upstream": {
+    "baseUrl": "https://open.bigmodel.cn/api/anthropic",
+    "model": "glm-5.2"
+  },
+  "actions": [],
+  "screenshots": [
+    {
+      "name": "01-login",
+      "path": "evidence/control-browser-2026-10-16T01-41-21-113Z/01-login.png",
+      "sha256": "b59bf5e0206c526e2b74e42424f833d440626b8333c99f293a4fd548820820d9"
+    },
+    {
+      "name": "02-connected",
+      "path": "evidence/control-browser-2026-10-16T01-41-21-113Z/02-connected.png",
+      "sha256": "d753658f2eac6152b00fb7fe33e223e81e73dd812644005272b8f4a9c3a04985"
+    },
+    {
+      "name": "05-disconnected",
+      "path": "evidence/control-browser-2026-10-16T01-41-21-113Z/05-disconnected.png",
+      "sha256": "5d0c502d442444a8f3b74c59c5c294d9ae3fee2d6485fa85aac06bb2a3f312b7"
+    }
+  ],
+  "browserRequests": [
+    {
+      "method": "GET",
+      "path": "/internal/approvals",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/internal/sessions",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/internal/approvals",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/internal/sessions",
+      "status": 200
+    }
+  ],
+  "browserVersion": "154.0.8037.57",
+  "connectionStatus": "已连接。",
+  "connectionStatusAfterRefresh": "已连接。",
+  "disconnectClearsInputAndCards": true,
+  "processCleanup": {
+    "supported": true,
+    "observedProcessCount": 9,
+    "terminatedProcessCount": 0,
+    "remainingProcessIds": [],
+    "complete": true
+  },
+  "privateConfigExistedBeforeCleanup": false,
+  "privateConfigRemoved": true,
+  "workspaceRemoved": true,
+  "checks": {
+    "actualBrowserConnected": true,
+    "connectedStatusResolved": true,
+    "disconnectClearsInputAndCards": true,
+    "processCleanupComplete": true,
+    "privateConfigRemoved": true,
+    "workspaceRemoved": true
+  },
+  "status": "PASS"
+}

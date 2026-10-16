@@ -1,0 +1,219 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-10-16T01:06:30.690Z",
+  "mode": "real-droid-native-sdk-isolated-byok",
+  "auxiliaryClassifiersVerified": false,
+  "note": "Factory API base overrides point to an explicit 403 sink. No hosted model is mocked or authorized. This observes only requests that honor those official overrides, not all egress.",
+  "nativeOutputCapabilities": {
+    "text": true,
+    "toolCalls": true,
+    "tokenLogprobs": false,
+    "constrainedJson": false,
+    "generatedImages": false,
+    "generatedAudio": false,
+    "factoryHostTools": "delegated-to-factory"
+  },
+  "imageAdvertised": false,
+  "specializedOutputGuard": {
+    "status": 422,
+    "body": {
+      "type": "error",
+      "error": {
+        "type": "unsupported_output_contract",
+        "message": "The native Claude Code bridge cannot honor logprobs, top_logprobs, response_format. Use a separately authorized provider route for token probabilities, constrained JSON, or generated media; this request was rejected before native execution."
+      }
+    }
+  },
+  "actions": [
+    {
+      "name": "tool-catalog",
+      "args": [
+        "--model",
+        "relay-chat",
+        "--list-tools"
+      ],
+      "code": 0,
+      "stdout": "Available tools for Relay chat\nAutonomy: read-only\n\nRead\n  • DismissHandoffItems (Dismiss Handoff Items) - status: blocked\n  • EndFeatureRun (End Feature Run) - status: blocked\n  • ExitSpecMode (Propose Specification) - status: blocked\n  • Glob - status: allowed\n  • Grep - status: allowed\n  • LS - status: allowed\n  • ProposeMission (Propose Mission) - status: blocked\n  • Read - status: allowed\n  • StageSettingsChanges (Stage Settings Changes) - status: allowed\n  • StartMissionRun (Start Mission Run) - status: blocked\n  • TodoWrite (Plan) - status: allowed\n\nEdit\n  • Create - status: blocked\n  • Edit - status: blocked\n\nExecute\n  • Execute - status: allowed\n  • Loop - status: blocked\n  • Skill - status: allowed\n  • Task - status: blocked\n  • TaskOutput (Result) - status: blocked\n  • TaskStop - status: blocked\n  • ToolSearch - status: allowed\n\n",
+      "stderr": "",
+      "timedOut": false,
+      "signal": null,
+      "processCleanup": {
+        "supported": true,
+        "observedProcessCount": 0,
+        "terminatedProcessCount": 0,
+        "remainingProcessIds": [],
+        "complete": true
+      },
+      "bridgeRequests": []
+    },
+    {
+      "name": "auto-model",
+      "args": [
+        "--model",
+        "auto",
+        "--output-format",
+        "json",
+        "Reply AUX_AUTO_OK only. Do not use tools."
+      ],
+      "code": 1,
+      "stdout": "",
+      "stderr": "Invalid model: auto\n\nAvailable built-in models:\n  None\n\nAvailable custom models:\n  custom:Relay-chat-0 (Relay chat), custom:Relay-orchestrator-0 (Relay orchestrator), custom:Relay-worker-0 (Relay worker), custom:Relay-validator-0 (Relay validator)\n\nNote: Custom models are loaded from ~/.factory/settings.json\nInvalid model: auto\n\nAvailable built-in models:\n  None\n\nAvailable custom models:\n  custom:Relay-chat-0 (Relay chat), custom:Relay-orchestrator-0 (Relay orchestrator), custom:Relay-worker-0 (Relay worker), custom:Relay-validator-0 (Relay validator)\n\nNote: Custom models are loaded from ~/.factory/settings.json\n",
+      "timedOut": false,
+      "signal": null,
+      "processCleanup": {
+        "supported": true,
+        "observedProcessCount": 0,
+        "terminatedProcessCount": 0,
+        "remainingProcessIds": [],
+        "complete": true
+      },
+      "bridgeRequests": []
+    },
+    {
+      "name": "native-command",
+      "args": [
+        "--model",
+        "relay-chat",
+        "--auto",
+        "low",
+        "--output-format",
+        "json",
+        "--only-tools",
+        "Execute",
+        "Use the shell exactly once to execute printf AUX_COMMAND_OK. Then reply AUX_COMMAND_OK only. Do not inspect environment variables or credentials."
+      ],
+      "code": 0,
+      "stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"duration_ms\":14127,\"num_turns\":1,\"result\":\"[Bash] Bash printf AUX_COMMAND_OK\\nAUX_COMMAND_OK\",\"session_id\":\"a434541a-91b7-47f3-bf70-2dcaf763caee\",\"usage\":{\"input_tokens\":4742,\"output_tokens\":88,\"cache_read_input_tokens\":35072,\"cache_creation_input_tokens\":0,\"factory_credits\":0,\"ttft_ms\":6093}}\n",
+      "stderr": "",
+      "timedOut": false,
+      "signal": null,
+      "processCleanup": {
+        "supported": true,
+        "observedProcessCount": 0,
+        "terminatedProcessCount": 0,
+        "remainingProcessIds": [],
+        "complete": true
+      },
+      "bridgeRequests": [
+        {
+          "authOk": true,
+          "role": "chat"
+        }
+      ]
+    }
+  ],
+  "sessions": [
+    {
+      "id": "sess_a534c172-cc1c-474d-a6aa-1229f6361e63",
+      "state": "IDLE",
+      "sdkSessionId": "2e2a45e0-4606-4835-9849-867e243ecb9b"
+    }
+  ],
+  "runtime": {
+    "kind": "sdk",
+    "authMode": "byok",
+    "permissionMode": "bypass",
+    "prompt": {
+      "systemPrompt": "preset:claude_code + stable append",
+      "dynamicPlacement": "user input on initial turn or context change",
+      "tools": "preset:claude_code built-ins + Droid-exclusive MCP"
+    },
+    "tools": "preset:claude_code + droid-exclusive MCP",
+    "input": "persistent SDK streaming input",
+    "includePartialMessages": true,
+    "approvalChannel": "external controller",
+    "activeNativeSessions": 0,
+    "activeNativeTurns": 0,
+    "pendingHostCalls": 0,
+    "pendingApprovals": 0,
+    "fatalErrors": [],
+    "overridesAnthropicEnv": true,
+    "upstream": {
+      "provider": "glm",
+      "label": "https://open.bigmodel.cn/api/anthropic",
+      "baseUrl": "https://open.bigmodel.cn/api/anthropic",
+      "model": "glm-5.2",
+      "tokenEnv": "READINESS_MODEL_API_KEY",
+      "authHeader": "x-api-key"
+    },
+    "control": {
+      "pendingApprovals": 0,
+      "failures": [],
+      "activeHostSessions": 0,
+      "boundNativeSessions": 0
+    }
+  },
+  "factoryApiSinkRequests": [],
+  "onlyToolsLimitation": "Factory Execute is mapped to native Claude Bash; this does not execute Factory command-risk or Droid Shield classifiers. Factory Local Signals requires its separate consent/feature configuration.",
+  "nativeTools": [
+    {
+      "type": "tool_use",
+      "id": "call_bf6f3039e1854537b05ffa97",
+      "name": "Bash",
+      "input": {
+        "command": "printf AUX_COMMAND_OK",
+        "description": "Print AUX_COMMAND_OK"
+      }
+    },
+    {
+      "tool_use_id": "call_bf6f3039e1854537b05ffa97",
+      "type": "tool_result",
+      "content": "AUX_COMMAND_OK",
+      "is_error": false
+    }
+  ],
+  "nativeUsage": [
+    {
+      "sdkSessionId": "2e2a45e0-4606-4835-9849-867e243ecb9b",
+      "usage": {
+        "input_tokens": 4742,
+        "output_tokens": 88,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 35072,
+        "status": "reported",
+        "coverage": "partial",
+        "knownFields": [
+          "input_tokens",
+          "output_tokens",
+          "cache_read_input_tokens"
+        ],
+        "scope": "provider_messages",
+        "estimated": true,
+        "modelRequests": 2
+      }
+    }
+  ],
+  "processCleanup": {
+    "supported": true,
+    "observedProcessCount": 11,
+    "terminatedProcessCount": 0,
+    "remainingProcessIds": [],
+    "complete": true
+  },
+  "ownedDirectoriesRemoved": true,
+  "retainedActionEvidence": [
+    {
+      "name": "auto-model.json",
+      "sha256": "ba638dc26cd2c5605f0c2fb7c57cdc8804e7e5830661f6a7e9cd382ce018fcf2"
+    },
+    {
+      "name": "native-command.json",
+      "sha256": "e4f7a32d73c34cb6eb0d1ca3e70162e22fbcc93d0c085ce48f00031c2a946ca4"
+    },
+    {
+      "name": "tool-catalog.json",
+      "sha256": "b9af2b4b5fb5265325692930a5c64071bfaa583710e2bb87f3e1d5b93be4df55"
+    }
+  ],
+  "evidenceDirectory": "/workspace/work/factory-cc-prep/repo/evidence/local/verify-auxiliary-2026-10-16T01-06-30-685Z",
+  "checks": {
+    "toolCatalogRead": true,
+    "autoRejectedBeforeInference": true,
+    "nativeCommandSucceeded": true,
+    "nativeBashResultObserved": true,
+    "unsupportedContractRejected": true,
+    "processCleanupComplete": true,
+    "ownedDirectoriesRemoved": true
+  },
+  "status": "SCOPED_PASS"
+}

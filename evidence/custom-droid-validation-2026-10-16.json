@@ -1,0 +1,304 @@
+{
+  "feature": "custom",
+  "status": "PASS",
+  "startedAt": "2026-10-16T00:54:01.976Z",
+  "authentication": {
+    "provider": "glm",
+    "label": "https://open.bigmodel.cn/api/anthropic",
+    "baseUrl": "https://open.bigmodel.cn/api/anthropic",
+    "model": "glm-5.2",
+    "tokenEnv": "READINESS_MODEL_API_KEY",
+    "authHeader": "x-api-key",
+    "subscriptionCredentialsRead": false
+  },
+  "exclusions": [
+    "Anthropic subscription billing or account-safety guarantees",
+    "different underlying models for Factory aliases",
+    "all possible custom droids"
+  ],
+  "exitCode": 0,
+  "checks": {
+    "droidSucceeded": true,
+    "independentFileResult": true,
+    "inputUnchanged": true,
+    "authenticatedBridgeTraffic": true,
+    "nativeReadCompleted": true,
+    "nativeWriteCompleted": true,
+    "runtimeDrained": true,
+    "nativeSessionsPresent": true,
+    "actualCustomFactoryTask": true,
+    "bodyOnlyMarkerPreserved": true,
+    "customModelSelected": true,
+    "childNativeSession": true
+  },
+  "observations": {
+    "result": {
+      "type": "result",
+      "subtype": "success",
+      "is_error": false,
+      "duration_ms": 40298,
+      "num_turns": 2,
+      "result": "CUSTOM_PARENT_OK\n\nThe relay-verifier subagent completed its verification task:\n\n- Read `/tmp/relay-e2e-ws-lVRMC3/input.json` (nonce `87ea0b94bb5b7973d351faf4`, a=17, b=29)\n- Wrote `/tmp/relay-e2e-ws-lVRMC3/custom-result.json` with the nonce, sum (46), and bodyMarker\n- Returned `CUSTOM_CHILD_OK`\n\nExact bodyMarker returned: `DROID_BODY_f74879916add254c02ae`",
+      "session_id": "8a38d27d-494d-4ab9-a6f3-3173ac6fc36a",
+      "usage": {
+        "input_tokens": 0,
+        "output_tokens": 824,
+        "cache_read_input_tokens": 92544,
+        "cache_creation_input_tokens": 0,
+        "factory_credits": 0,
+        "ttft_ms": 10216.5
+      }
+    },
+    "independentFileResult": {
+      "nonce": "87ea0b94bb5b7973d351faf4",
+      "sum": 46,
+      "bodyMarker": "DROID_BODY_f74879916add254c02ae"
+    },
+    "tools": [
+      {
+        "name": "mcp__droid__Task",
+        "id": "call_4d590182ad76448ebe0cedcb",
+        "input": {
+          "subagent_type": "relay-verifier",
+          "description": "Run relay-verifier verification task",
+          "prompt": "Execute the verification instructions you were given as this project's dedicated verification droid. Read the verification input and write the requested output as your instructions specify. When done, report back the exact token CUSTOM_CHILD_OK along with your bodyMarker value.",
+          "await": true
+        },
+        "sessionId": "eca1032b-a317-4ab8-b24c-3dbf14c5bd8e",
+        "resultSeen": true,
+        "isError": false
+      },
+      {
+        "name": "Read",
+        "id": "call_f2c0dda8ab7643d8a0b026c4",
+        "input": {
+          "file_path": "/tmp/relay-e2e-ws-lVRMC3/input.json"
+        },
+        "sessionId": "faf72445-6bb3-49a4-940c-2101fef9db50",
+        "resultSeen": true,
+        "isError": false
+      },
+      {
+        "name": "Write",
+        "id": "call_ba198776ff624b63b352a2e9",
+        "input": {
+          "file_path": "/tmp/relay-e2e-ws-lVRMC3/custom-result.json",
+          "content": "{\"nonce\": \"87ea0b94bb5b7973d351faf4\", \"sum\": 46, \"bodyMarker\": \"DROID_BODY_f74879916add254c02ae\"}"
+        },
+        "sessionId": "faf72445-6bb3-49a4-940c-2101fef9db50",
+        "resultSeen": true,
+        "isError": false
+      }
+    ],
+    "requests": [
+      {
+        "at": "2026-10-16T00:54:02.620Z",
+        "session": "sess_cc252a5d-edce-478a-86c6-98eb544c2bc3",
+        "model": "relay-chat"
+      },
+      {
+        "at": "2026-10-16T00:54:12.350Z",
+        "session": "sess_8838a49b-2025-4e0c-bd16-33eb370ff93e",
+        "model": "relay-custom-child"
+      },
+      {
+        "at": "2026-10-16T00:54:30.462Z",
+        "session": "sess_cc252a5d-edce-478a-86c6-98eb544c2bc3",
+        "model": "relay-chat"
+      }
+    ],
+    "sessions": [
+      {
+        "bridgeSessionId": "sess_cc252a5d-edce-478a-86c6-98eb544c2bc3",
+        "role": "chat",
+        "state": "IDLE",
+        "model": "relay-chat",
+        "historyHash": "f13a0fd8396c8f2980b1854be4669b8191022c305062bf68983fe2056cb040d5",
+        "contextHash": "6cab3592296a57e432e4bfe459d17f206d0153b68b7e252e6493ada3b4189d6d",
+        "requestMessageHashes": [
+          "e9a5c152161566033601cb2c4bc7429caf512826ec52e79a8b554d0bcf899efe",
+          "dfb3a6c50cb30d4b5694621fd41eb9f1a2141550b39010ab1977ac5522418641",
+          "2efc7d1411cc1cd9509158bcf16e27a8e3615e05e19be26ce837b4ee992c5fc3",
+          "03f46402cdbf718360c6cd857533b4423b93778ec669727634223940d8e51daf"
+        ],
+        "historyMessageHashes": [
+          "e9a5c152161566033601cb2c4bc7429caf512826ec52e79a8b554d0bcf899efe",
+          "dfb3a6c50cb30d4b5694621fd41eb9f1a2141550b39010ab1977ac5522418641",
+          "2efc7d1411cc1cd9509158bcf16e27a8e3615e05e19be26ce837b4ee992c5fc3",
+          "03f46402cdbf718360c6cd857533b4423b93778ec669727634223940d8e51daf",
+          "edc05655125cd4a914b5c83582b9c69da32ab34266db7ff700cac293424c1041"
+        ],
+        "toolNames": [
+          "Read",
+          "LS",
+          "Execute",
+          "Edit",
+          "Grep",
+          "Glob",
+          "Create",
+          "TaskOutput",
+          "TaskStop",
+          "ToolSearch",
+          "Skill",
+          "Task"
+        ],
+        "createdAt": "2026-10-16T00:54:02.619Z",
+        "updatedAt": "2026-10-16T00:54:42.828Z",
+        "pendingToolIds": [],
+        "cancelRequested": false,
+        "notes": [
+          "factory-session-ended"
+        ],
+        "usage": {
+          "input_tokens": 8918,
+          "output_tokens": 381,
+          "cache_creation_input_tokens": 0,
+          "cache_read_input_tokens": 36992,
+          "status": "reported",
+          "coverage": "partial",
+          "knownFields": [
+            "input_tokens",
+            "output_tokens",
+            "cache_read_input_tokens"
+          ],
+          "scope": "provider_messages",
+          "estimated": true,
+          "modelRequests": 1
+        },
+        "factorySessionId": "8a38d27d-494d-4ab9-a6f3-3173ac6fc36a",
+        "factoryCwd": "/tmp/relay-e2e-ws-lVRMC3",
+        "hostEnded": "resumable",
+        "sdkSessionId": "eca1032b-a317-4ab8-b24c-3dbf14c5bd8e"
+      },
+      {
+        "bridgeSessionId": "sess_8838a49b-2025-4e0c-bd16-33eb370ff93e",
+        "role": "chat",
+        "state": "IDLE",
+        "model": "relay-custom-child",
+        "historyHash": "50327d428cd8d3977dd2793cbd0cec0578a03c9e7e5c8d449299d582ff0fffb4",
+        "contextHash": "085321c569c217ad0f342faa742f297bfa9338d48b44bed0ed2ba6449963c32b",
+        "requestMessageHashes": [
+          "bbab91fee862da297abf3cf4a46add95fdbf503ee7fa0150841097a4997483a6",
+          "2dad0bdae59009c42c7e1bffe6d95cde6b24223e465403bb4fbddaa5e8edc0f2"
+        ],
+        "historyMessageHashes": [
+          "bbab91fee862da297abf3cf4a46add95fdbf503ee7fa0150841097a4997483a6",
+          "2dad0bdae59009c42c7e1bffe6d95cde6b24223e465403bb4fbddaa5e8edc0f2",
+          "c9dd0c4406f4ba3f2db3098516f77cfc3568a1796ec439a0cb964181a3018a98"
+        ],
+        "toolNames": [
+          "Read",
+          "LS",
+          "Execute",
+          "Edit",
+          "Grep",
+          "Glob",
+          "Create",
+          "ToolSearch",
+          "Skill"
+        ],
+        "createdAt": "2026-10-16T00:54:12.349Z",
+        "updatedAt": "2026-10-16T00:54:30.109Z",
+        "pendingToolIds": [],
+        "cancelRequested": false,
+        "notes": [
+          "factory-session-ended"
+        ],
+        "usage": {
+          "input_tokens": 6464,
+          "output_tokens": 443,
+          "cache_creation_input_tokens": 0,
+          "cache_read_input_tokens": 55552,
+          "status": "reported",
+          "coverage": "partial",
+          "knownFields": [
+            "input_tokens",
+            "output_tokens",
+            "cache_read_input_tokens"
+          ],
+          "scope": "provider_messages",
+          "estimated": true,
+          "modelRequests": 3
+        },
+        "factorySessionId": "cfb569a0-e670-49ea-8d8b-456faa70be2a",
+        "factoryCwd": "/tmp/relay-e2e-ws-lVRMC3",
+        "hostEnded": "resumable",
+        "sdkSessionId": "faf72445-6bb3-49a4-940c-2101fef9db50"
+      }
+    ],
+    "runtime": {
+      "kind": "sdk",
+      "authMode": "byok",
+      "permissionMode": "bypass",
+      "prompt": {
+        "systemPrompt": "preset:claude_code + stable append",
+        "dynamicPlacement": "user input on initial turn or context change",
+        "tools": "preset:claude_code built-ins + Droid-exclusive MCP"
+      },
+      "tools": "preset:claude_code + droid-exclusive MCP",
+      "input": "persistent SDK streaming input",
+      "includePartialMessages": true,
+      "approvalChannel": "external controller",
+      "activeNativeSessions": 0,
+      "activeNativeTurns": 0,
+      "pendingHostCalls": 0,
+      "pendingApprovals": 0,
+      "fatalErrors": [],
+      "overridesAnthropicEnv": true,
+      "upstream": {
+        "provider": "glm",
+        "label": "https://open.bigmodel.cn/api/anthropic",
+        "baseUrl": "https://open.bigmodel.cn/api/anthropic",
+        "model": "glm-5.2",
+        "tokenEnv": "READINESS_MODEL_API_KEY",
+        "authHeader": "x-api-key"
+      },
+      "control": {
+        "pendingApprovals": 0,
+        "failures": [],
+        "activeHostSessions": 0,
+        "boundNativeSessions": 0
+      }
+    }
+  },
+  "cleanup": {
+    "processes": {
+      "supported": true,
+      "observedProcessCount": 22,
+      "terminatedProcessCount": 0,
+      "remainingProcessIds": [],
+      "complete": true
+    },
+    "removed": [
+      true,
+      true,
+      true
+    ],
+    "errors": [],
+    "retained": [
+      {
+        "name": "action.json",
+        "sha256": "a272aa0fbafa8ae8d9cae708763884fda2f077e1ad262cf7699e0fcb8ae17205",
+        "unchanged": true
+      },
+      {
+        "name": "requests.json",
+        "sha256": "c9f601a879efb5b7e0b2e853524f45cb79f235144fbe2ec8c0b4fb6176e20242",
+        "unchanged": true
+      },
+      {
+        "name": "native-transcript.json",
+        "sha256": "6db801673cec7db4d2e1b46b7ae3008d8e5e2a2c978063a4cbb9f9082c5a729d",
+        "unchanged": true
+      },
+      {
+        "name": "snapshot.json",
+        "sha256": "ff79ced5c5c5fa3aafb957e49db53ba91ffd29574d914b61a0c2bb63221aa130",
+        "unchanged": true
+      }
+    ],
+    "complete": true
+  },
+  "finishedAt": "2026-10-16T00:54:42.887Z",
+  "evidenceDirectory": "/workspace/work/factory-cc-prep/repo/evidence/local/verify-custom-2026-10-16T00-54-01-975Z-55c93d"
+}

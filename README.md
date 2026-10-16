@@ -53,6 +53,8 @@ export BRIDGE_UPSTREAM_TOKEN_ENV=GLM_CN_API_KEY
 npm start
 ```
 
+BYOK 的 endpoint、model、key 变量必须全部明确配置；缺失或错误时直接失败，不探测其他环境密钥。BYOK 子进程清除继承的 OAuth 和 Bedrock/Vertex/Foundry 路由选择，保留代理与 CA；subscription 环境不受此处理。
+
 国际 Z.AI 对应 `https://api.z.ai/api/anthropic` 和 `ZAI_CODING_PLAN_KEY`；请同时更改端点和变量名，密钥必须属于对应服务。这里传给 `BRIDGE_UPSTREAM_TOKEN_ENV` 的是环境变量名，真实密钥留在该变量中。
 
 `ask` 是默认权限策略。需要审批的原生工具会暂停在 SDK `canUseTool` 回调；打开 `http://127.0.0.1:18787/control`，输入 `BRIDGE_ADMIN_TOKEN` 后查看准确参数并选择允许一次或拒绝。批准后由 Claude Code 执行。CLI 也可用 `npm run control -- approvals`、`approve <id>`、`deny <id>` 和 `cancel <sessionId>`。过期、取消、旧会话或重复审批均不能重新执行工具。`BRIDGE_PERMISSION=bypass` 仍须显式设置。
@@ -76,22 +78,26 @@ Bridge 与 wrapper 需共享同一组 `BRIDGE_ADMIN_TOKEN` / `BRIDGE_CLIENT_TOKE
 ## 会话与工具
 
 - 优先使用响应中的 `X-Bridge-Session`；也接受 `X-Session-Id` 或 metadata 的 `session_id` / `sessionId`。`user_id` 不作为会话 ID。
-- 未提供 ID 时，只自动续接唯一匹配的完整历史前缀或所属 pending tool；重复短提示不会被当作同一会话。
-- 同会话修改模型、角色配置标签、工作目录或执行策略返回 409，需新建会话。工具目录不属于会话身份：保留同一个 SDK MCP server 实例，按请求动态增删工具和更新 schema，并发送 `tools/list_changed`；等待 SDK `mcpServerStatus` 确认工具名称列表后再继续。真实 BYOK 热加工具后首次续推已成功调用新工具；状态不提供 schema 版本，不能据此保证同名 schema 更新已即时进入模型，新 schema 由 MCP server 校验。目录变化可能改变缓存前缀。
+- 未提供 ID 时，续接唯一完整历史前缀或所属 pending tool。Factory 压缩改写前缀时，还允许已认证的同一 Factory 会话、同一工作目录、无 pending 工具且最后完整 user/assistant 回合精确匹配的续接；重复短提示不会合并会话。
+- 同会话修改模型、角色配置标签、工作目录或执行策略返回 409，需新建会话。工具目录不属于会话身份：保留同一个 SDK MCP server 实例，按请求动态增删工具和更新 schema，并发送 `tools/list_changed`；等待 SDK `mcpServerStatus` 确认工具名称列表后再继续。schema 或描述改变时使用带版本的 MCP 名称，因此名称确认也确认了本次 schema 版本；JSON Schema 的完整约束经公开 MCP 接口提供，并由 Ajv 校验而不改写参数。真实 BYOK 同名 schema 更新后首次调用已通过。未变化的定义和恢复后的目录保持名称稳定，避免无谓破坏缓存；实际目录变化仍可能造成缓存 miss。
 - Droid host context 的变化进入 user input，不改写原生 system prefix。若请求同时带 `tool_result` 和补充文本/base64 图片，补充内容以 host continuation 标记并附入本批首个新工具结果，交还真实 MCP callback，不伪造额外用户轮次。混入 document 或其它不支持的 MCP 内容在提交前返回 422，不消耗 pending 工具结果。
 - 空闲 CLI 进程按 LRU 有界回收，保留官方 SDK session ID；有持久化 transcript 时使用 SDK `resume`。忙碌会话不会为腾位置而被驱逐。
 - 进程重启后，尚未完成的 MCP 工具往返返回 409。没有 native session 的历史导入仅作为参考重建，不等于完整恢复 Claude Code 的内部状态。
-- 请求明确指定 `tools: []` 或 `tool_choice: none` 时，原生 PreToolUse 强制禁止所有工具，即使启用 bypass。该限制按请求生效，后续恢复工具目录无需重建原生会话；生成标题的辅助请求不能越权修改项目。
+- 原生 PreToolUse 每次检查当前 Factory 工具权限，即使启用 bypass。只广告 Read 就不能用 Bash/Write；省略 tools、空列表或 tool_choice:none 不授予工具权限。工具权限可在同一会话增减；原生 Agent/Skill 不得绕开 Factory 的 Task/Skill。Spec 通过已认证 hooks 锁定只读，只有对应 ExitSpecMode 成功回执才解锁。
 - 对 Droid 传入的工具，仅明确的文件/命令等价工具由 Claude Code 执行：Read/Edit/Write/Create/LS/Grep/Glob/Execute/Bash/MultiEdit/NotebookEdit。Factory `Skill`、`Task`、`ToolSearch`、`ExitSpecMode`、Mission 控制及其它已声明的插件工具均经 `mcp__droid__*` 交回 Droid，保留 Factory 的 skill 注册表和任务 ID；它们与 Claude 原生 Skill/Agent 分开。
 - Factory 提供非空 `system` 时完整保留其角色、skills 和流程指令，不从 header 猜测角色或追加角色模板；`X-Bridge-Role` 仅作为模型配置/session 标签，真实 Task 子 agent 会继承 orchestrator header。只有缺少 host 指令时才用角色辅助，orchestrator 辅助还要求实际存在 Mission 控制工具，`Task` 本身不够。生产 SDK 路径不合成 `StartMissionRun`，也不从残留目录复制 Mission 账本。
 
 ## 当前验证范围
 
+2026-10-16 新增真实路径和修复见[本轮入口验收](docs/FACTORY-SURFACES.md)：Factory 自身压缩与 handoff、Spec 只读及退出、自定义 Droid、交互 review、工具权限收回、schema 更新与缓存均有独立证据。所有线上验证仍只使用隔离 GLM BYOK。
+
+本轮[全新 Mission](evidence/mission-final-validation-2026-10-16-r3.json)已连续通过：18 分 46 秒，实际实施、scrutiny、user-testing 三个 feature 完成，5/5 验证通过，原测试和 package.json 保持不变，零运行错误、零遗留进程。它记录了运行时源码指纹；随后三处独立修正及最终验证范围见[汇总](evidence/final-validation-2026-10-16.json)。此前主动中断与环境断连记录仍保留。
+
 2026-10-15 的 GLM-5.2 BYOK 验证包括：Droid → Bridge → Claude Code 普通回答成功；原生 SDK 与 Bridge 各三轮对话保持上下文；原生 Read 与流式痕迹，以及无显式 ID 的完整历史续接保持同一会话和记忆；真实 SDK MCP `TaskOutput` 往返成功，但该项外部工具结果是本地 fixture。Bridge 的原生手动 `/compact` 产生 `compact_boundary`，压缩后的下一轮仍能回忆先前约定的信息。[原生会话验证摘要](evidence/native-session-validation-2026-10-15.json) 保留该轮测量和离线检查结果。
 
 后续[Factory host 验证](evidence/factory-host-validation-2026-10-15.json) 确认了新工具在首次续推可用、真实 `Skill` 完整正文传递、`Task` 子 agent 和 Mission 启动。过程中发现并修复了工具校验前过早转交、标题辅助请求越权执行工具、worker 结束后原生回调悬挂等问题；失败记录仍保留。
 
-最新[完整 Mission 验收](evidence/mission-validation-2026-10-15.json) 为 **PASS_WITH_RECOVERY**：从没有预置 Mission 产物的缺陷项目开始，真实 orchestrator / worker / validator 完成 3 个 feature、5 个验证断言，原始测试和 package.json 保持不变且测试通过。首次达到旧的 20 分钟测试上限后，使用官方 `droid exec --session-id` 续接同一个 Mission，约 130 秒完成收尾；这不是一次连续运行通过。完成时原生运行、待处理工具、审批和 Bridge 错误均为零，所属进程清理完成。新验收脚本默认总期限为 1 小时；不会合成启动或复制账本来制造完成状态。
+历史[完整 Mission 验收](evidence/mission-validation-2026-10-15.json) 为 **PASS_WITH_RECOVERY**：从没有预置 Mission 产物的缺陷项目开始，真实 orchestrator / worker / validator 完成 3 个 feature、5 个验证断言，原始测试和 package.json 保持不变且测试通过。首次达到旧的 20 分钟测试上限后，使用官方 `droid exec --session-id` 续接同一个 Mission，约 130 秒完成收尾；这不是一次连续运行通过。完成时原生运行、待处理工具、审批和 Bridge 错误均为零，所属进程清理完成。新验收脚本默认总期限为 1 小时；不会合成启动或复制账本来制造完成状态。
 
 Factory 生命周期已通过官方 [hooks](https://docs.factory.com/harness/hooks) 接入独立控制通道。`SessionStart` 注册随机 generation 标识，经官方环境文件传给后续 hooks；该标识在进入 Claude 原生提示前移除。`PostToolUse` 保存实际收到的结果，`SessionEnd` 确认结束后释放原生等待；若 Factory 提前结束而跳过 PostToolUse，则中断等待，不伪造成功结果；普通工具仍等下次 HTTP 续接，保证 ToolSearch 新目录和附加内容同时交付。正常会话结束可从原生 checkpoint 恢复，已结束的 worker 不再接受迟到结果。
 
@@ -105,6 +111,12 @@ Factory 生命周期已通过官方 [hooks](https://docs.factory.com/harness/hoo
 
 ## 测试
 
+仓库专用验证入口是 `npm run verify:relay -- --feature chat`。它按[验证 skill](.cursor/skills/verify-relay-bridge/SKILL.md)启动隔离实例、运行只读 doctor，再通过真实 Droid 验证文件读写和同会话恢复，最后清理进程与私有配置并保留脱敏证据。先按 skill 设置明确的 BYOK 上游；`--offline-check` 只检查本地前提，不调用模型。
+
+[本轮 skill 执行记录](evidence/verification-skill-validation-2026-10-16-r2.json)记录最后 BYOK 隔离修正后的真实 chat/resume 结果；独立场景的验证入口和范围见[入口验收](docs/FACTORY-SURFACES.md)。历史误判和失败记录仍保留。
+
+**不能把固定 BYOK 当成 Factory 全部托管模型能力。** [最新入口验收](docs/FACTORY-SURFACES.md)区分实测修复、可用替代入口与独立服务前提；[早期静态清单](evidence/factory-model-surface-2026-10-15.json)不是当前运行通过清单。REA 文件检查不等于完整调用图，隐藏和服务端入口的总数仍未知。
+
 | 命令 | 范围 | 是否调用真实模型 |
 |---|---|---|
 | `npm test` | unit、protocol、fake relay、SDK adapter 注入事件、resilience | 否 |
@@ -114,6 +126,13 @@ Factory 生命周期已通过官方 [hooks](https://docs.factory.com/harness/hoo
 | `npm run test:resilience` | 重试、取消、图片 | 否 |
 | `npm run tiny-tasks:test` | Tiny Tasks 参考夹具 | 否 |
 | `npm run doctor` | 脱敏诊断 | 否 |
+| `npm run verify:relay -- --feature chat` | 真实 CLI 文件操作、会话恢复与清理证据 | 是，隔离 BYOK |
+| `npm run verify:spec -- --adversarial-spec` | Spec 只读、真实退出后写入 | 是，隔离 BYOK |
+| `npm run verify:custom -- --read-only-custom` | 自定义 Droid、模型选择和工具限制 | 是，隔离 BYOK |
+| `npm run verify:context -- --auto` | Factory 压缩、handoff、恢复与自动触发 | 是，隔离 BYOK |
+| `npm run verify:native-schema` / `npm run verify:native-policy` | 同会话 schema 版本与工具权限变更 | 是，隔离 BYOK |
+| `npm run verify:auxiliary` | 辅助入口可达性和能力拒绝检查 | 是，隔离 BYOK |
+| `npm run verify:mission -- --summary evidence/new-mission.json` | 独立新 Mission 验收，不覆盖旧证据 | 是，隔离 BYOK |
 | `npm run test:g0` | 安装版本的 Droid airgap 行为 | 以具体探针为准 |
 | `npm run probe:upstream` | BYOK 上游工具调用探针 | 是 |
 | `npm run test:e2e:chat` / `npm run test:e2e:mission` | 在线对话 / Mission 验收 | 是，另行执行并记录结果 |

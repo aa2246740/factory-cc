@@ -1,0 +1,422 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-10-16T01:43:42.836497+00:00",
+  "status": "SCOPED_PASS",
+  "allFactoryModelCallsitesCovered": false,
+  "coveragePercentage": null,
+  "authentication": {
+    "mode": "explicit isolated BYOK",
+    "baseUrl": "https://open.bigmodel.cn/api/anthropic",
+    "model": "glm-5.2",
+    "tokenSourceName": "READINESS_MODEL_API_KEY",
+    "realClaudeSubscriptionUsed": false,
+    "officialClaudeBilling": "BLOCKED_AUTH",
+    "binaryOrAuthChecksPatched": false
+  },
+  "fixes": [
+    "Require explicit BYOK selection and isolate 31 competing backend/auth/transport selectors; pin nine model slots without changing proxy/CA or subscription environments.",
+    "Retain native continuity after authenticated Factory manual/automatic compaction; renew user-turn bindings and retire only the authenticated handoff predecessor.",
+    "Enforce current Factory native-tool capabilities in official PreToolUse, including revocation/bypass; hold Spec read-only until its exact successful ExitSpecMode receipt.",
+    "Preserve full JSON Schema validation constraints with Ajv and revisioned MCP names; reject stale calls and support annotated draft-07 dependencies.",
+    "Enable actual CLI Spec ExitSpecMode permission while respecting explicit exclusions.",
+    "Correct final SSE input-token usage; explicitly reject unsupported output contracts before session creation.",
+    "Provide local BYOK Droid generation and actual /relay-droid command, with exclusive file creation and real child invocation proof.",
+    "Resolve the control page connection status and verify actual browser approve/deny/cancel actions."
+  ],
+  "finalRuntimeSource": {
+    "sha256": "d3b8eef8c03ce677460a6304d4e0ad37f22c0d6b89691d6dc5fc408a9851b27e",
+    "files": [
+      {
+        "path": "package-lock.json",
+        "sha256": "20ae8c194cd3f2bb613add4473d9efd6ebf5253f36331b939e9d623b57a1f511"
+      },
+      {
+        "path": "package.json",
+        "sha256": "228f6e5ade138e9dc6ab44fb72e6a565f7d3a6645d404f7048bce9df1c6d9296"
+      },
+      {
+        "path": "scripts/e2e-lib.ts",
+        "sha256": "b9ada2fa7cde87fe4e12350ddd3797d480c5d8bc4bbbaab4d7b7efd60f622362"
+      },
+      {
+        "path": "scripts/e2e-mission.ts",
+        "sha256": "27b82d441da97c2dabdf144bf983ef27bd22e4618840027fa0fff4e5546e1608"
+      },
+      {
+        "path": "scripts/e2e-processes.ts",
+        "sha256": "4c12fcb2973e5cc0596c1a42b98c09cd1efdd8f844405e1b21d7c397a0384d52"
+      },
+      {
+        "path": "scripts/factory-hook.ts",
+        "sha256": "9c8990b356faeed05657de51594c56fca6595d5f7c0197cf9ed364e4c86b1823"
+      },
+      {
+        "path": "src/config.ts",
+        "sha256": "2cb252ffd010751c28cb26560a3c6ed06177cc8a89d3eb10f54f2546aa155ac7"
+      },
+      {
+        "path": "src/control/broker.ts",
+        "sha256": "8a9126d9807dddf668293baf7da2f62453b0f43a1eec0abda88d34d2d7329fe4"
+      },
+      {
+        "path": "src/control/factory-hooks.ts",
+        "sha256": "cb096d8e44d553a4243f5b827d72cd604ae6d29bd000d825a2a9cbed193d866c"
+      },
+      {
+        "path": "src/http/app.ts",
+        "sha256": "4d0796ff388be90c099208f6e2b7d2dfbf9b10ca97a74ff1c5ab89c206127496"
+      },
+      {
+        "path": "src/http/control-page.ts",
+        "sha256": "39d6a87e3ee020fbee919047cafce62d7a3a740230a0fef8f240d27cc2e92a66"
+      },
+      {
+        "path": "src/http/sse-stream.ts",
+        "sha256": "7d167d6540c28b3ff705ee10e4b3e4f9a09be4389958e7f7470552aa534a02b0"
+      },
+      {
+        "path": "src/http/sse.ts",
+        "sha256": "736b7e28d209d0ab6735b888bf2f1df02cea0cf5f4a5dd0c5e176c20947f9bfd"
+      },
+      {
+        "path": "src/http/status-page.ts",
+        "sha256": "923b463d01293252c85b1eb7ba1dc4120f18e34e2dc7d6ef6f911f0ba0eabb46"
+      },
+      {
+        "path": "src/index.ts",
+        "sha256": "3f0d52fbf96a7cdee18ef0fe432aa2b0f9c9be6eee9943b2d692c4b993f4e718"
+      },
+      {
+        "path": "src/logging.ts",
+        "sha256": "e2c92fbb29d0d895b92717de6cdde44ece0ed6277dcdaa417d804c7ccb2675e8"
+      },
+      {
+        "path": "src/protocol/content.ts",
+        "sha256": "199656bed9ab99cc2180c8a69d5ba671287d0ddcdd9e91af44dd1fa09789b147"
+      },
+      {
+        "path": "src/protocol/messages.ts",
+        "sha256": "1ad1e1feb631169277645f395d4e3d6f324e8dab7dc7832f3573353ea79b249b"
+      },
+      {
+        "path": "src/protocol/schema-to-zod.ts",
+        "sha256": "7471c2a10432486026ccf2ca6587d0812d4252bd3df8af9eb733a54ebb37b8e8"
+      },
+      {
+        "path": "src/protocol/tool-names.ts",
+        "sha256": "f4a5f0b14fa922dbfafef4158bce9444ae228d34b55e775568639c10d269904f"
+      },
+      {
+        "path": "src/protocol/validate.ts",
+        "sha256": "dc6eb620522fd65e3e5aefc1398dcf273932af712561cf584d0220afeaa64dc9"
+      },
+      {
+        "path": "src/relay/ids.ts",
+        "sha256": "2711da6afa47ea7e26d947d57517a251cd1d6a138b5045125d0edf06da48762e"
+      },
+      {
+        "path": "src/relay/mailbox.ts",
+        "sha256": "a52a9d7bef0e00c73b0a6e55c8fc699dfc88899fb893fc799564ce7830e238e7"
+      },
+      {
+        "path": "src/runtime/droid-mcp-catalog.ts",
+        "sha256": "bd6494fbebcda021b5afc0f03ce446641e40e227048fdea848053897d284db76"
+      },
+      {
+        "path": "src/runtime/droid-tools.ts",
+        "sha256": "09781bc4bdf76761707afc9d6dab3e98d9629f6f4341ff10eb071cead8be0ea5"
+      },
+      {
+        "path": "src/runtime/factory-capabilities.ts",
+        "sha256": "12d89a54eee639286fc36ffc8a51d2553e06a28b1d586bfbda13436b96312f32"
+      },
+      {
+        "path": "src/runtime/factory.ts",
+        "sha256": "731ff989b00903445819acf61d8108bc80c43bd3c422393ad75eeed32f81d3f8"
+      },
+      {
+        "path": "src/runtime/fake-runtime.ts",
+        "sha256": "da08586a2c97dac39a5e78c768910ade495de89fb409ba96a1ba8027ae1c2690"
+      },
+      {
+        "path": "src/runtime/mission-tools.ts",
+        "sha256": "a1bc9b27954f79fb280e131e98779a3c28698ff9785d9e5ab35367b2472af623"
+      },
+      {
+        "path": "src/runtime/mock-runtime.ts",
+        "sha256": "8299dc619ea7b9ec359d78c3a3035f8f6fcaad4bd48ba3893d756a5e855d3674"
+      },
+      {
+        "path": "src/runtime/native-tool-policy.ts",
+        "sha256": "f78bdab44ae412897ee5bc1a9de0abac6facfd4e3deaca214ac80765c1d2fe5c"
+      },
+      {
+        "path": "src/runtime/safe-tools.ts",
+        "sha256": "82a4122b1d98ede94337f8aa2393c37ab2db15844d5d62c100dd0ddf443e371b"
+      },
+      {
+        "path": "src/runtime/sdk-runtime.ts",
+        "sha256": "c92103cc725ec7646df08e97d03fbe496fb5926dbb571ea3d037bd672b49bc6a"
+      },
+      {
+        "path": "src/runtime/system-prompt.ts",
+        "sha256": "d30bbd9fc565361a1f6219c1f5195c3556b2d1da1536be58217ac2d2eacc67f8"
+      },
+      {
+        "path": "src/runtime/types.ts",
+        "sha256": "f98038399c968f5a4add1fd2aa6db321f111e13c0ec7a0bf0f1de192bcdb1e07"
+      },
+      {
+        "path": "src/runtime/usage.ts",
+        "sha256": "81b25a74b7a37c03f3b42a256099f1f64a35b9ccbef7d912359a771c0228f777"
+      },
+      {
+        "path": "src/security/auth.ts",
+        "sha256": "28b3d0a62769f1501bb67d84dd9f252ee9d603929b28ee4de7da45e0bb363cd3"
+      },
+      {
+        "path": "src/security/limits.ts",
+        "sha256": "f1c5a8b653a826ec257e691b4f48ecb34e75f6dbc232d4418945c7058621986e"
+      },
+      {
+        "path": "src/security/redact.ts",
+        "sha256": "65514578ea87343e0891351966ceaae1e5deedac44d5d53679cf795214b3527f"
+      },
+      {
+        "path": "src/sessions/correlate.ts",
+        "sha256": "411df2d6fbbbbbe1fb49188b93ce72419c33f8e042fb97e4a5052ab7dfd22997"
+      },
+      {
+        "path": "src/sessions/state.ts",
+        "sha256": "e4c75bcdeb2a6fdd1fe183c7ee8641226b8fd574afbdcc931302e2556159f1bf"
+      },
+      {
+        "path": "src/sessions/store.ts",
+        "sha256": "4599fca2fa1369aa76b66cd439501570031dd967095509cb32c973a899176505"
+      },
+      {
+        "path": "src/types.ts",
+        "sha256": "f98912af94b152bbeacd2ce69560855c7769f049c024115ef1199d9ba0b0e82a"
+      },
+      {
+        "path": "src/upstream/providers.ts",
+        "sha256": "df130d84d5875909736498a4bb2d6de53c5dff640696fad7ca904dc463b80387"
+      },
+      {
+        "path": "src/workspace.ts",
+        "sha256": "3f475d5a0ef32c690d3f335e1d4e307d7e95447fc5d8a3c1ddd958944bee1180"
+      }
+    ]
+  },
+  "verification": {
+    "unitProtocolRuntimeTests": {
+      "status": "PASS",
+      "passedTests": 373,
+      "testFiles": 43,
+      "failedTests": 0,
+      "reportSha256": "3df706f5d74e01b2ccc5f2b6b5a1eee75a9d19ad5919e4c60ae90ce2b9cabd07"
+    },
+    "typecheck": {
+      "command": "npx tsc --noEmit",
+      "status": "PASS",
+      "exitCode": 0
+    },
+    "build": {
+      "command": "npm run build",
+      "status": "PASS",
+      "exitCode": 0
+    },
+    "realRuns": [
+      {
+        "path": "evidence/verification-skill-validation-2026-10-16-r2.json",
+        "status": "PASS",
+        "sha256": "a197d4206de49c8411c52a06750387982aa5d77c9fcd3cece65cc10d1de56fd5"
+      },
+      {
+        "path": "evidence/byok-isolation-validation-2026-10-16.json",
+        "status": "PASS",
+        "sha256": "abdcd930a0a9e3b9ca13b22959f18ff70ccbcca931ab743ef37ff0f29034b6f5"
+      },
+      {
+        "path": "evidence/spec-readonly-validation-2026-10-16.json",
+        "status": "PASS",
+        "sha256": "2a7c38d25456a87e000d403300a670a6d273bfb208a9caaa920ae9516e13c1bf"
+      },
+      {
+        "path": "evidence/custom-droid-readonly-validation-2026-10-16-r2.json",
+        "status": "PASS",
+        "sha256": "3dee6dc8b334255c30c022294b02c373fecf6aee476788fcd62d32993c27ea93"
+      },
+      {
+        "path": "evidence/factory-context-validation-2026-10-16-r3.json",
+        "status": "PASS",
+        "sha256": "29c6e72249bdae26071ddf7a219b4c9efbdd1c2763a56b020bc321e51d13879c"
+      },
+      {
+        "path": "evidence/factory-context-handoff-2026-10-16.json",
+        "status": "PASS",
+        "sha256": "ebefc29b65fcfdf8b447c9b9cf1546dd0a890f2863ebbd89d928e721410f136e"
+      },
+      {
+        "path": "evidence/native-schema-validation-2026-10-16-r2.json",
+        "status": "PASS",
+        "sha256": "ebec13fc84ee84c12f38e36850c0c3a12f9c72fe0e9dc1d87b5dea19aabe4e11"
+      },
+      {
+        "path": "evidence/native-tool-policy-validation-2026-10-16.json",
+        "status": "PASS",
+        "sha256": "22c5ab529f0c12126c3ed2599f8731a8338acd78743d327c1852121193b8d017"
+      },
+      {
+        "path": "evidence/interactive-final-validation-2026-10-16.json",
+        "status": "PASS_SCOPED_WITH_HOSTED_REPLACEMENT",
+        "sha256": "ca4c278db3c6dcb6366943a88c659f00027d0a992c0350f0e70332a9ac416f9f"
+      },
+      {
+        "path": "evidence/browser-control-validation-2026-10-16.json",
+        "status": "PASS",
+        "sha256": "2e56aecc992f798242baf0b55d3c43956c075ff6b01fef399b694c1a971edbee"
+      },
+      {
+        "path": "evidence/browser-connect-status-after-2026-10-16.json",
+        "status": "PASS",
+        "sha256": "2530f8ffb4d8be7651677ab4262464c0bfd819fad9549092aab431f343cc060e"
+      },
+      {
+        "path": "evidence/browser-control-private-cleanup-2026-10-16.json",
+        "status": "PASS",
+        "sha256": "a649c9bd81883e4d236257c906e9c1cdff968c2501c6d1545882bd126186e4a8"
+      },
+      {
+        "path": "evidence/auxiliary-validation-2026-10-16.json",
+        "status": "SCOPED_PASS",
+        "sha256": "2ece1e4e4ea5271b29def95ce5304990f85a5d65b49edeea2e21b1cda377e2ee"
+      },
+      {
+        "path": "evidence/mission-final-validation-2026-10-16-r3.json",
+        "status": "PASS",
+        "sha256": "62d9ad4591b22c0f7c5fbead8f09c4558671a28f703317b7d1dd5f61664f0ed6"
+      }
+    ]
+  },
+  "mission": {
+    "status": "PASS",
+    "durationSec": 1126,
+    "uninterrupted": true,
+    "recoveryUsed": false,
+    "completedFeatures": 3,
+    "passedAssertions": 5,
+    "originalTestsPreserved": true,
+    "requiredValidatorsCompleted": true,
+    "matchingWorkerHandoffs": true,
+    "sourceSha256": "22b04c2500b87ac3b7d0f91f9a48d24cc1923d14ff344509f67c8356162ac1d7",
+    "runtimeSourcesStable": true,
+    "processCleanup": {
+      "supported": true,
+      "observedProcessCount": 256,
+      "terminatedProcessCount": 0,
+      "remainingProcessIds": [],
+      "complete": true
+    },
+    "cache": {
+      "input_tokens": 215356,
+      "output_tokens": 63235,
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 2335808,
+      "cache_hit_ratio": null,
+      "requests": 71,
+      "requestCountKnown": true,
+      "status": "reported",
+      "source": "provider_messages",
+      "coverage": "partial",
+      "eventRows": 413,
+      "representativeOfClaudeSubscription": false
+    }
+  },
+  "postMissionChanges": {
+    "fullMissionRerunAfterTheseChanges": false,
+    "reason": "Three independent final fixes were applied after the uninterrupted Mission source snapshot. Their scopes are explicitly verified below; they are not silently attributed to that earlier source fingerprint.",
+    "files": [
+      {
+        "path": "src/http/control-page.ts",
+        "missionSha256": "3b7dee8af80b6924f7111487369ee9858b297364895357986a78c6d31f2bba2c",
+        "finalSha256": "39d6a87e3ee020fbee919047cafce62d7a3a740230a0fef8f240d27cc2e92a66"
+      },
+      {
+        "path": "src/protocol/schema-to-zod.ts",
+        "missionSha256": "45b0cd99c03f84a6fc04375e8f1de3a033a4c597ce51b947d438aa68a0d90c12",
+        "finalSha256": "7471c2a10432486026ccf2ca6587d0812d4252bd3df8af9eb733a54ebb37b8e8"
+      },
+      {
+        "path": "src/upstream/providers.ts",
+        "missionSha256": "5a358752e808ccd2aeb73466fc90e5c3d11f752d5f07fd2463a805441be2a0be",
+        "finalSha256": "df130d84d5875909736498a4bb2d6de53c5dff640696fad7ca904dc463b80387"
+      }
+    ],
+    "validation": {
+      "src/upstream/providers.ts": "31-selector synthetic environment isolation + nine model slots; real official Droid/Claude chat, native file work and resume; published unit tests.",
+      "src/protocol/schema-to-zod.ts": "Draft-07 schema dependency regression: minimum retained, defaults not injected, property dependency arrays unchanged; full 373-test suite.",
+      "src/http/control-page.ts": "Real Chromium connection/refresh/disconnect before FAIL and after PASS; no model request required."
+    }
+  },
+  "preservedFailures": [
+    {
+      "path": "evidence/spec-validation-2026-10-16.json",
+      "status": "FAIL",
+      "sha256": "451a552b4ef89384e444c5e5770a0715d0d41a5d85fc5bb62a97f2c6cdfc48f8"
+    },
+    {
+      "path": "evidence/custom-droid-readonly-validation-2026-10-16.json",
+      "status": "FAIL",
+      "sha256": "e2714df5dac3f8d1a4a39b622307124c0e2606711e19c4386b9024feeb67fa8c"
+    },
+    {
+      "path": "evidence/factory-context-validation-2026-10-16-r2.json",
+      "status": "FAIL",
+      "sha256": "083d58ee679be32797de2caa95dfe237ba1e07020aa14cc6657a6584f090d0b1"
+    },
+    {
+      "path": "evidence/native-schema-validation-2026-10-16.json",
+      "status": "FAIL",
+      "sha256": "f48a9da8961f2e8e674ff555b1163db75cf45deb51b4ac6eea9b27985e4d0baa"
+    },
+    {
+      "path": "evidence/interactive-validation-2026-10-16.json",
+      "status": "FAIL",
+      "sha256": "6d93850ed21607472f5c5dd2633f40a5951276a3f3179d5f5e7ce350a2de4838"
+    },
+    {
+      "path": "evidence/browser-connect-status-before-2026-10-16.json",
+      "status": "FAIL",
+      "sha256": "660e13bdd473e6ef7130d672d3f4d4b72f2f5192709f314e9cbd5a598d046e4e"
+    },
+    {
+      "path": "evidence/mission-final-validation-2026-10-16.json",
+      "status": "FAIL",
+      "sha256": "e8fc233831a118a70c2372450f711e0a2938ebf23a0840f97e2b2ec838f75e40"
+    },
+    {
+      "path": "evidence/mission-final-validation-2026-10-16-r2.json",
+      "status": "INTERRUPTED_ENVIRONMENT",
+      "sha256": "42d4ded0ecf2415b3ce2cb8d9dfc3715c3327dc0e7ea37c019ebef7813a412ba"
+    }
+  ],
+  "missionInterruptionContext": {
+    "path": "evidence/mission-final-interruption-2026-10-16.json",
+    "status": null,
+    "sha256": "7e74daed5ec352f027b481e931095a34cf10c8d45663ac78973039e3a580d65c"
+  },
+  "surfaceInventory": {
+    "path": "evidence/factory-model-surface-followup-2026-10-16.json",
+    "status": "SCOPED_VERIFIED_WITH_BLOCKED_AND_UNKNOWN_PATHS",
+    "sha256": "f38b83357dcab9ef54c3d8eed39136082e8d567df5e5cfaea4131bfbc3862a5c"
+  },
+  "remainingScope": [
+    "Hosted /droids generation still needs independent Factory authorization; /relay-droid is the separately tested BYOK replacement.",
+    "Auto routing and image tools are unavailable in this configured isolated CLI; risk/Shield/Local Signals inference and hidden/server-side paths remain unverified.",
+    "Factory compaction uses a lowered public threshold and a small fixture; native Claude compaction has separate historical evidence.",
+    "The schema revision probe uses a real native SDK with a synthetic host MCP fixture. Browser native approval tests are separate from actual Droid PTY tests.",
+    "Observed Claude-side cache reads demonstrate reuse. Missing cache-create counters leave exact hit ratio unknown; no real Claude subscription billing or account-enforcement guarantee is made.",
+    "Process loss cannot recreate pending in-memory callbacks; unsupported protocol contracts and ambiguous histories are rejected explicitly."
+  ]
+}

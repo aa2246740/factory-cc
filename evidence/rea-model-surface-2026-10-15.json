@@ -1,0 +1,160 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-10-15T23:12:03.856969+00:00",
+  "status": "PASS_ARTIFACT_INVENTORY_ONLY",
+  "question": "Can REA statically establish complete Factory model callsite coverage in this environment?",
+  "answer": "No. The executed REA inspection establishes shipped artifact identity and root inventory, not model callsite semantics or runtime coverage.",
+  "rea": {
+    "executedVersion": "6.5.0",
+    "distribution": "npm rea-agents@6.5.0",
+    "npmIntegrity": "sha512-C6BG7LyrAdR74mSjertM6PrxJkcNZ2bfQNOJornPo9erDEp2tyPRVYPnV5Yodr+1RqewCQla68WulXlVnveD+A==",
+    "referenceCheckout": "/workspace/work/rea-reference",
+    "referenceCommit": "c61c108b522de1a2b46e65b59360c9be66fb038e",
+    "publishedPackageBuildCommit": "not independently attested"
+  },
+  "droid": {
+    "versionReportedElsewhereInSession": "0.242.0",
+    "path": "/workspace/work/factory-cc-prep/tools/node_modules/@factory/cli/bin/droid",
+    "sha256": "409f8cc7f2f461d08b21e1d3fe77d3f5af723f7cef43e14f84c2e851ac42d09c",
+    "sizeBytes": 292567008,
+    "format": "elf"
+  },
+  "executedCommands": [
+    {
+      "cwd": "/workspace/work/rea-reference",
+      "command": "npm install --prefix /workspace/work/factory-cc-prep/work/rea-model-surface-2026-10-15/tooling --ignore-scripts --no-audit --no-fund rea-agents@6.5.0 > /workspace/work/factory-cc-prep/work/rea-model-surface-2026-10-15/install.log 2>&1",
+      "exitCode": 0
+    },
+    {
+      "cwd": "/workspace/work/factory-cc-prep/work/rea-model-surface-2026-10-15",
+      "command": "./tooling/node_modules/.bin/rea --version > version.txt",
+      "exitCode": 0
+    },
+    {
+      "cwd": "/workspace/work/factory-cc-prep/work/rea-model-surface-2026-10-15",
+      "command": "./tooling/node_modules/.bin/rea inspect-artifact /workspace/work/factory-cc-prep/tools/node_modules/@factory/cli/bin/droid --json > inspect-artifact.json 2> inspect-artifact.stderr",
+      "exitCode": 0
+    },
+    {
+      "cwd": "/workspace/work/factory-cc-prep/work/rea-model-surface-2026-10-15",
+      "command": "sha256sum /workspace/work/factory-cc-prep/tools/node_modules/@factory/cli/bin/droid > droid.sha256",
+      "exitCode": 0
+    },
+    {
+      "cwd": "/workspace/work/factory-cc-prep/work/rea-model-surface-2026-10-15",
+      "command": "XDG_CACHE_HOME=/workspace/work/factory-cc-prep/work/rea-model-surface-2026-10-15/cache ./tooling/node_modules/.bin/rea providers --json > providers.json 2> providers.stderr",
+      "exitCode": 0
+    },
+    {
+      "cwd": "/workspace/work/factory-cc-prep/work/rea-model-surface-2026-10-15",
+      "command": "XDG_CACHE_HOME=/workspace/work/factory-cc-prep/work/rea-model-surface-2026-10-15/cache ./tooling/node_modules/.bin/rea capabilities --json > capabilities.json 2> capabilities.stderr",
+      "exitCode": 0
+    }
+  ],
+  "observed": {
+    "reaEvidenceId": "ev_ca185ab9e68545278e7b81b011e02bff9353f53f73f8e623b685cadd45fcdd53",
+    "rootArtifactCount": 1,
+    "childArtifactCount": 0,
+    "modelRequestsExecuted": 0,
+    "targetExecution": false,
+    "targetMutation": false,
+    "formatSpecificAnalysisExecuted": false,
+    "unexploredBranches": [
+      {
+        "branch_id": "aib_c2b6abfc7d32796f038a51bf879f5d6303b0940bb827eb4da9e8c250441407b9",
+        "reason": "format-specific-analysis-required",
+        "detail": "open_binary was not run by provider-neutral artifact inspection.",
+        "next_probe": {
+          "operation": "open_binary",
+          "rationale": "Bind one deep native provider before function-level analysis.",
+          "authority": "native-analysis-provider"
+        },
+        "evidence_id": "ev_1c2311bec00364b94aa05589e1f456d4682b8782199cf481d5c4c144bc159a9e"
+      }
+    ],
+    "nativeProviders": [
+      {
+        "provider": {
+          "id": "ghidra",
+          "name": "Ghidra",
+          "version": null
+        },
+        "availability": {
+          "status": "unavailable",
+          "code": "not_configured",
+          "reason": "Set GHIDRA_INSTALL_DIR to an extracted Ghidra 12.1.x release directory."
+        }
+      },
+      {
+        "provider": {
+          "id": "hopper",
+          "name": "Hopper Disassembler",
+          "version": null
+        },
+        "availability": {
+          "status": "unavailable",
+          "code": "executable_missing",
+          "reason": "Hopper launcher is missing or not executable: /opt/hopper/bin/Hopper"
+        }
+      },
+      {
+        "provider": {
+          "id": "ida",
+          "name": "IDA MCP adapter",
+          "version": "1"
+        },
+        "availability": {
+          "status": "unavailable",
+          "code": "not_configured",
+          "reason": "Set REA_IDA_MCP_CONFIG to an upstream IDA MCP JSON registration; see docs/ida-provider.md."
+        }
+      }
+    ]
+  },
+  "sourceDerivedLimits": [
+    {
+      "source": "https://github.com/morluto/rea/blob/c61c108b522de1a2b46e65b59360c9be66fb038e/docs/javascript-recovery.md#resource-policy-and-verification",
+      "statement": "REA JavaScript recovery requires an explicitly supplied Wakaru executable; its documented adapter does not claim Bun recovery."
+    },
+    {
+      "source": "https://github.com/morluto/rea/blob/c61c108b522de1a2b46e65b59360c9be66fb038e/docs/cli.md#native-analysis",
+      "statement": "Native function analysis requires a configured deep native provider."
+    }
+  ],
+  "limitations": [
+    "Artifact has no child container entries.",
+    "Inspection derives bounded static hypotheses and next probes; it does not execute the artifact or claim format-specific semantics.",
+    "REA inventory coverage complete-within-substeps is not complete program behavior or complete model-callsite coverage.",
+    "Ghidra, Hopper, and IDA were reported unavailable; no large native analysis provider was downloaded or installed.",
+    "No target code, injected hook, debugger, memory dump, authentication, license data, credential file, or model request was used in this probe.",
+    "Additional byte-string callsite inspection is performed separately by the factory_inventory task and must not be attributed to REA."
+  ],
+  "artifacts": {
+    "inspect-artifact.json": {
+      "sha256": "608c5c938ce8848c08dc63a1eb96e672b6df2fb27a51e3b53307d71852274816",
+      "bytes": 5704
+    },
+    "providers.json": {
+      "sha256": "04aad79a104518b0028d19d3cd56d6b466aae57671145c4980f32da1f8e2b965",
+      "bytes": 23661
+    },
+    "capabilities.json": {
+      "sha256": "6ac74ba4d670559c0f38077a21069a4634a6294ef8834605c56f37f4e51ff762",
+      "bytes": 23661
+    },
+    "version.txt": {
+      "sha256": "3eb8e06ca1e02f0a30b0e3eebd289494b35d4fd1466ed907b9148e03b2459b00",
+      "bytes": 6
+    },
+    "droid.sha256": {
+      "sha256": "18e21c467fb76b5215336f2697742764921271505e1849d1588361ddadb27f43",
+      "bytes": 140
+    },
+    "install.log": {
+      "sha256": "50355861165f5de84f58cf5fac740641463ba88d974bf725b58b340fe1476470",
+      "bytes": 176
+    }
+  },
+  "repositoryRawArtifactEvidence": "evidence/rea-droid-artifact-2026-10-15.json",
+  "repositorySurfaceInventory": "evidence/factory-model-surface-2026-10-15.json"
+}
