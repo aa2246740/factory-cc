@@ -49,6 +49,8 @@ const selectedModelSlots = [
 const preserved = {
   HTTPS_PROXY: "http://proxy.invalid:3128", ALL_PROXY: "socks5://proxy.invalid:1080",
   NODE_EXTRA_CA_CERTS: "/nonexistent/byok-audit-ca.pem",
+};
+const notOnAllowlist = {
   CLAUDE_CODE_USE_POWERSHELL_TOOL: "1", CLAUDE_CODE_USE_NATIVE_FILE_SEARCH: "1",
   AWS_PROFILE: "project-tools-profile", GOOGLE_APPLICATION_CREDENTIALS: "/nonexistent/project-tools.json",
 };
@@ -59,7 +61,7 @@ function installCompetingEnvironment() {
   vi.stubEnv("CLAUDE_CODE_HOST_AUTH_ENV_VAR", "BYOK_AUDIT_OTHER_KEY");
   vi.stubEnv("BYOK_AUDIT_OTHER_KEY", "offline-other-key");
   for (const key of selectedModelSlots) vi.stubEnv(key, "offline-ambient-model");
-  for (const [key, value] of Object.entries(preserved)) vi.stubEnv(key, value);
+  for (const [key, value] of Object.entries({ ...preserved, ...notOnAllowlist })) vi.stubEnv(key, value);
   vi.stubEnv("ANTHROPIC_BASE_URL", "https://ambient.invalid/anthropic");
   vi.stubEnv("ANTHROPIC_AUTH_TOKEN", "offline-ambient-token");
   vi.stubEnv("ANTHROPIC_API_KEY", "offline-ambient-api-key");
@@ -74,8 +76,10 @@ describe("explicit BYOK environment isolation", () => {
     const selection = selectionFromConfig({ baseUrl: "https://selected.invalid/anthropic", model: "offline-selected-model", tokenEnv: "BYOK_AUDIT_SELECTED_KEY" });
     const env = sdkEnv(selection, "127.0.0.1:18787", "byok");
     for (const key of competingSelectors) expect(env, key).not.toHaveProperty(key);
+    for (const key of Object.keys(notOnAllowlist)) expect(env, key).not.toHaveProperty(key);
     for (const key of selectedModelSlots) expect(env[key], key).toBe("offline-selected-model");
     expect(env).toMatchObject({ ...preserved, ANTHROPIC_BASE_URL: "https://selected.invalid/anthropic", ANTHROPIC_AUTH_TOKEN: "offline-selected-key", ANTHROPIC_API_KEY: "" });
+    expect(env.BYOK_AUDIT_OTHER_KEY).toBeUndefined();
   });
 
   it("pins fast, default, Fable and workflow subagent routes along with the existing aliases", () => {
@@ -83,10 +87,15 @@ describe("explicit BYOK environment isolation", () => {
     expect(new Set(Object.values(modelSlots("offline-selected-model")))).toEqual(new Set(["offline-selected-model"]));
   });
 
-  it("preserves subscription auth, routing, model and unrelated project-tool settings", () => {
+  it("refuses subscription startup when competing auth selectors are present", () => {
     installCompetingEnvironment();
-    const env = sdkEnv(undefined, "127.0.0.1:18787", "subscription");
-    for (const key of [...competingSelectors, ...selectedModelSlots, "ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_API_KEY"]) expect(env[key], key).toBe(process.env[key]);
-    expect(env).toMatchObject(preserved);
+    let error: unknown;
+    try { sdkEnv(undefined, "127.0.0.1:18787", "subscription"); }
+    catch (caught) { error = caught; }
+    expect(error).toMatchObject({ code: "auth_env_rejected" });
+    expect(String(error)).toContain("CLAUDE_CODE_USE_BEDROCK");
+    expect(String(error)).toContain("cloud");
+    expect(String(error)).not.toContain("offline-ambient-placeholder");
+    expect(String(error)).not.toContain("offline-ambient-token");
   });
 });

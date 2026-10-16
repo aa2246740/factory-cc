@@ -5,6 +5,7 @@ import { createInterface } from "node:readline/promises";
 import { Writable } from "node:stream";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { loadConfig } from "../src/config.js";
+import { isAnthropicHost, preflightAuth } from "../src/upstream/auth-env.js";
 import { installFactoryHooks, removeFactoryHooks } from "../src/control/factory-hooks.js";
 import { createBridgeApp, listen, type BridgeApp } from "../src/http/app.js";
 import { createLogger } from "../src/logging.js";
@@ -15,25 +16,34 @@ import { runDroid } from "./run-droid.js";
 
 const help = `Usage: npm run local -- <project> [options]
 
-Start an isolated BYOK Bridge and interactive Droid for an existing project.
+Start an isolated Bridge and interactive Droid for an existing project.
 Claude Code and Droid must already be installed and available on PATH.
 
+  --auth <mode>     byok (default) | subscription | anthropic-api
   --base-url <URL>  Anthropic-compatible BYOK endpoint (prompted if omitted)
-  --model <ID>      Default BYOK model (prompted if omitted)
-  --models <IDs>    Actual model choices, e.g. glm-5.2,glm-4.7
-  --key-env <NAME>  Read the key from this explicitly named environment variable
+  --model <ID>      Default model (prompted for byok if omitted)
+  --models <IDs>    Actual model choices, e.g. glm-5.2,glm-4.7 or sonnet,opus,haiku
+  --key-env <NAME>  Read the BYOK key from this explicitly named environment variable
   -h, --help       Show help without changing any files
 
-Without --key-env, the key is requested with terminal echo disabled. It is never
+If BRIDGE_AUTH is set and differs from --auth, the launcher exits instead of
+silently using byok. subscription and anthropic-api skip the endpoint, model and
+key prompts and default to sonnet,opus,haiku. They do not isolate CLAUDE_CONFIG_DIR.
+Run \`npm run doctor -- --auth subscription\` before the first real query; that
+check sends no prompt. An sk-ant- key is refused unless the BYOK host is anthropic.com.
+
+Without --key-env, the BYOK key is requested with terminal echo disabled. It is never
 saved. Defaults are https://api.z.ai/api/anthropic and glm-5.2; endpoint and model
 are remembered per project. The launcher installs /relay-droid and its discovery
 skill, preserves other project hooks, and removes its own hooks when Droid exits.
-State stays in this repository's tmp/local directory; global Factory and Claude
-configuration is not used. Native tool permissions stay in ask mode. For native
-approvals, open the printed control URL and load its private admin-token file.
-FACTORY_AIRGAP_ENABLED=1 remains an experimental Factory CLI mode.`;
+State stays in this repository's tmp/local directory. Native tool permissions stay
+in ask mode. For native approvals, open the printed control URL and load its private
+admin-token file. FACTORY_AIRGAP_ENABLED=1 remains an experimental Factory CLI mode.`;
 
-export interface LocalArgs { project: string; baseUrl?: string; model?: string; models?: string[]; keyEnv?: string; help: boolean }
+const LOCAL_AUTH = ["byok", "subscription", "anthropic-api"] as const;
+type LocalAuth = (typeof LOCAL_AUTH)[number];
+
+export interface LocalArgs { project: string; baseUrl?: string; model?: string; models?: string[]; keyEnv?: string; auth: LocalAuth; help: boolean }
 
 function endpoint(value: string): string {
   let url: URL;
@@ -51,7 +61,7 @@ function modelId(value: string): string {
 }
 
 export function parseLocalArgs(argv: string[]): LocalArgs {
-  const result: LocalArgs = { project: "", help: false };
+  const result: LocalArgs = { project: "", auth: "byok", help: false };
   const seen = new Set<string>();
   for (let index = 0; index < argv.length; index++) {
     const flag = argv[index]!;
@@ -61,7 +71,7 @@ export function parseLocalArgs(argv: string[]): LocalArgs {
       if (/[\x00-\x1f\x7f]/.test(flag)) throw new Error("Project path cannot contain control characters.");
       result.project = resolve(flag); continue;
     }
-    if (!["--base-url", "--model", "--models", "--key-env"].includes(flag)) throw new Error("Unknown local option; use --help. Credentials must not appear in command arguments.");
+    if (!["--base-url", "--model", "--models", "--key-env", "--auth"].includes(flag)) throw new Error("Unknown local option; use --help. Credentials must not appear in command arguments.");
     if (seen.has(flag)) throw new Error(`Duplicate option ${flag}.`);
     seen.add(flag);
     const value = argv[++index];
@@ -69,7 +79,10 @@ export function parseLocalArgs(argv: string[]): LocalArgs {
     if (flag === "--base-url") result.baseUrl = endpoint(value);
     else if (flag === "--model") result.model = modelId(value);
     else if (flag === "--models") result.models = parseModelIds(value);
-    else {
+    else if (flag === "--auth") {
+      if (!(LOCAL_AUTH as readonly string[]).includes(value)) throw new Error("--auth must be byok, subscription or anthropic-api.");
+      result.auth = value as LocalAuth;
+    } else {
       if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(value) || ["HOME", "PATH", "SHELL", "PWD", "USER", "LOGNAME", "CODEX_HOME"].includes(value)) throw new Error("--key-env must name a dedicated key environment variable.");
       result.keyEnv = value;
     }
@@ -150,6 +163,9 @@ function safeDroidEnv(source: NodeJS.ProcessEnv, key: string, keyEnv?: string): 
 export async function runLocal(argv: string[], env: NodeJS.ProcessEnv = process.env): Promise<number> {
   const args = parseLocalArgs(argv);
   if (args.help) { process.stdout.write(`${help}\n`); return 0; }
+  if (env.BRIDGE_AUTH && env.BRIDGE_AUTH !== args.auth) {
+    throw new Error(`BRIDGE_AUTH=${env.BRIDGE_AUTH} does not match --auth ${args.auth}. Refusing to start; this launcher will not silently use a different auth mode. Pass --auth ${env.BRIDGE_AUTH} or unset BRIDGE_AUTH.`);
+  }
   const project = realpathSync(args.project);
   if (!lstatSync(project).isDirectory()) throw new Error("Project path must be an existing directory.");
   const state = localStateDirectory(project);
@@ -168,13 +184,30 @@ export async function runLocal(argv: string[], env: NodeJS.ProcessEnv = process.
   let hookAttempted = false, adminWritten = false;
   try {
     const baseDefault = saved.baseUrl ?? "https://api.z.ai/api/anthropic", modelDefault = saved.model ?? "glm-5.2";
-    const baseUrl = args.baseUrl ?? saved.baseUrl ?? endpoint((await question(`BYOK endpoint [${baseDefault}]: `, abort.signal)).trim() || baseDefault);
-    const available = args.models ?? (args.model && !saved.models?.includes(args.model) ? [args.model] : saved.models);
-    const model = args.model ?? (available ? (saved.model && available.includes(saved.model) ? saved.model : available[0]!) : saved.model)
-      ?? modelId((await question(`BYOK model [${modelDefault}]: `, abort.signal)).trim() || modelDefault);
-    const ids = available ?? [model], catalog = modelsFromIds(ids);
-    key = (args.keyEnv ? env[args.keyEnv] ?? "" : await question("BYOK API key (hidden; never saved): ", abort.signal, true)).trim();
-    if (!key || /[\x00-\x20\x7f]/.test(key) || key.length > 16384) throw new Error("Provide a nonempty BYOK API key without whitespace; no other credentials will be tried.");
+    let baseUrl: string | undefined;
+    let model: string;
+    let ids: string[];
+    let catalog;
+    if (args.auth === "byok") {
+      baseUrl = args.baseUrl ?? saved.baseUrl ?? endpoint((await question(`BYOK endpoint [${baseDefault}]: `, abort.signal)).trim() || baseDefault);
+      const available = args.models ?? (args.model && !saved.models?.includes(args.model) ? [args.model] : saved.models);
+      model = args.model ?? (available ? (saved.model && available.includes(saved.model) ? saved.model : available[0]!) : saved.model)
+        ?? modelId((await question(`BYOK model [${modelDefault}]: `, abort.signal)).trim() || modelDefault);
+      ids = available ?? [model];
+      catalog = modelsFromIds(ids);
+      key = (args.keyEnv ? env[args.keyEnv] ?? "" : await question("BYOK API key (hidden; never saved): ", abort.signal, true)).trim();
+      if (!key || /[\x00-\x20\x7f]/.test(key) || key.length > 16384) throw new Error("Provide a nonempty BYOK API key without whitespace; no other credentials will be tried.");
+      if (key.startsWith("sk-ant-") && !isAnthropicHost(new URL(baseUrl).hostname)) {
+        throw new Error("Refusing to send an Anthropic API key (sk-ant-) to a host outside anthropic.com. Use --auth anthropic-api, or point --base-url at https://api.anthropic.com.");
+      }
+    } else {
+      if (args.baseUrl || args.keyEnv) throw new Error("--base-url and --key-env are only used with --auth byok.");
+      ids = args.models ?? (args.model ? [args.model] : ["sonnet", "opus", "haiku"]);
+      if (args.model && !ids.includes(args.model)) throw new Error("The default --model must be included in --models.");
+      model = args.model ?? ids[0]!;
+      catalog = modelsFromIds(ids, args.auth);
+      preflightAuth(args.auth, env);
+    }
     if (abort.signal.aborted) return 130;
     directory(join(repository, "tmp/local"), true, true); directory(state, true, true);
     const lockPath = join(state, "launcher.lock");
@@ -188,24 +221,25 @@ export async function runLocal(argv: string[], env: NodeJS.ProcessEnv = process.
     directory(join(state, "bridge-data"), true, true);
     for (const path of [settingsPath, `${settingsPath}.relay-bridge.bak`, `${settingsPath}.relay-bridge.bak.absent`, `${settingsPath}.relay-bridge.models.json`, hooksPath, hookConfig, adminPath, join(state, "manifest.env")]) regularFile(path);
     installDroidCommand(project);
-    setEnv(runtimeKey, key);
+    if (args.auth === "byok") setEnv(runtimeKey, key);
     setEnv("BRIDGE_DROID_HOME", home); setEnv("BRIDGE_SDK_CWD", project); setEnv("BRIDGE_WAIT_FOR_MISSION_DIR", undefined);
     const clientToken = randomBytes(24).toString("hex"), adminToken = randomBytes(24).toString("hex");
-    const config = loadConfig({ mode: "sdk", authMode: "byok", permissionMode: "ask", host: "127.0.0.1", port: 0,
+    const config = loadConfig({ mode: "sdk", authMode: args.auth, permissionMode: "ask", host: "127.0.0.1", port: 0,
       clientToken, adminToken, dataDir: join(state, "bridge-data"), sdkCwd: project, persistSessions: true,
       maxBodyBytes: 8 * 1024 * 1024, maxSessions: 32, maxTurns: 160, toolWaitMs: 8 * 60 * 60 * 1000, requestTimeoutMs: 10 * 60 * 1000,
-      claudeExecutable: env.BRIDGE_CLAUDE_EXECUTABLE ?? "claude", upstreamBaseUrl: baseUrl, upstreamModel: model, upstreamTokenEnv: runtimeKey, models: catalog });
+      claudeExecutable: env.BRIDGE_CLAUDE_EXECUTABLE ?? "claude", models: catalog,
+      ...(args.auth === "byok" ? { upstreamBaseUrl: baseUrl, upstreamModel: model, upstreamTokenEnv: runtimeKey } : {}) });
     app = createBridgeApp(config, createLogger(config.logDir), join(config.sandboxDir, "CANARY.txt"));
     await listen(app, config);
     configureDroid(["--settings", settingsPath, "--base-url", app.url, "--manifest", join(state, "manifest.env"), "--models", ids.join(","),
-      ...(args.model ? ["--model", model] : [])], { BRIDGE_CLIENT_TOKEN: clientToken, BRIDGE_UPSTREAM_MODEL: model, BRIDGE_AUTH: "byok" }, catalog);
+      ...(args.model ? ["--model", model] : [])], { BRIDGE_CLIENT_TOKEN: clientToken, ...(args.auth === "byok" ? { BRIDGE_UPSTREAM_MODEL: model } : {}), BRIDGE_AUTH: args.auth }, catalog);
     hookAttempted = true;
     installFactoryHooks({ hooksPath, configPath: hookConfig, url: app.url, adminToken });
     privateWrite(adminPath, `${adminToken}\n`); adminWritten = true;
-    privateWrite(preferencesPath, `${JSON.stringify({ baseUrl, model, models: ids }, null, 2)}\n`);
+    if (args.auth === "byok" && baseUrl) privateWrite(preferencesPath, `${JSON.stringify({ baseUrl, model, models: ids }, null, 2)}\n`);
     const childEnv: NodeJS.ProcessEnv = { ...safeDroidEnv(env, key, args.keyEnv), BRIDGE_CLIENT_TOKEN: clientToken, BRIDGE_ADMIN_TOKEN: adminToken,
       BRIDGE_CONTROL_URL: app.url, BRIDGE_DROID_HOME: home, BRIDGE_SDK_CWD: project, BRIDGE_MODEL_ID: model, FACTORY_HOME_OVERRIDE: home, FACTORY_AIRGAP_ENABLED: "1",
-      CLAUDE_CONFIG_DIR: join(config.dataDir, "claude-config") };
+      ...(args.auth === "byok" ? { CLAUDE_CONFIG_DIR: join(config.dataDir, "claude-config") } : {}) };
     process.stdout.write(`Droid ready for ${project}\nModels: ${catalog.map((item) => item.displayName).join(", ")}\nControl: ${app.url}/control\nAdmin token file: ${adminPath}\nNative tool permissions: ask. Open Control for approval requests.\n`);
     return await runDroid(["--home", home, "--cwd", project, "--airgap", "1", "--", "--settings", settingsPath], { env: childEnv, signal: abort.signal, handleProcessSignals: false });
   } catch (error) {

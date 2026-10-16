@@ -42,10 +42,13 @@ describe("explicit BYOK authorization boundary", () => {
     vi.stubEnv("NODE_EXTRA_CA_CERTS", "/tmp/ca.pem");
     const selection = selectionFromConfig(configured)!;
     const byok = sdkEnv(selection, "127.0.0.1:18787", "byok");
-    const subscription = sdkEnv(undefined, "127.0.0.1:18787", "subscription");
+    let refused: unknown;
+    try { sdkEnv(undefined, "127.0.0.1:18787", "subscription"); }
+    catch (caught) { refused = caught; }
+    expect(refused).toMatchObject({ code: "auth_env_rejected" });
+    expect(String(refused)).not.toContain("ambient-selector");
     for (const name of selectors) {
       expect(byok[name]).toBeUndefined();
-      expect(subscription[name]).toBe("ambient-selector");
       expect(process.env[name]).toBe("ambient-selector");
     }
     expect(byok).toMatchObject({ ANTHROPIC_AUTH_TOKEN: "offline-explicit-key", ANTHROPIC_API_KEY: "",

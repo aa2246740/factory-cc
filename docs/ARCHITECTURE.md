@@ -61,7 +61,7 @@ Factory's official environment file carries generation identity to later hooks. 
 - Bridge listens on `127.0.0.1` by default.
 - Droid tests use explicit settings and `FACTORY_HOME_OVERRIDE` rather than the operator's Factory login.
 - SDK cwd defaults to `tmp/bridge-data/sandbox`. For a real Droid project, explicitly set `BRIDGE_SDK_CWD` to the same workspace used by the hook; mismatched workspaces are rejected.
-- `BRIDGE_AUTH=byok` (default) points Claude Code at a probed Anthropic-compatible endpoint via `ANTHROPIC_BASE_URL` + `ANTHROPIC_AUTH_TOKEN` (`ANTHROPIC_API_KEY` empty). `BRIDGE_AUTH=subscription` does not touch those three variables.
+- `BRIDGE_AUTH=byok` (default) points Claude Code at an explicit Anthropic-compatible endpoint via `ANTHROPIC_BASE_URL` + `ANTHROPIC_AUTH_TOKEN` (`ANTHROPIC_API_KEY` empty) on top of a base environment allowlist. `subscription`, `anthropic-api` and `cloud` refuse environment that would select a different credential. `inherit` copies the shell, except bridge-internal tokens.
 - That URL is never the Bridge listen address.
 - System prompt is Claude Code’s `claude_code` preset plus a stable Droid append. Built-in tools stay enabled.
 - Mission tools run only when Claude Code actually calls a registered Droid MCP tool. The bridge does not synthesize `StartMissionRun` or copy artifacts from unrelated missions.

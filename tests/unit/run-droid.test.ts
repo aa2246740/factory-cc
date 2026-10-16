@@ -107,7 +107,7 @@ describe("Droid launch wrapper", () => {
     expect(code).toBe(0);
     expect(JSON.parse(readFileSync(observedFile, "utf8"))).toEqual({ args: ["--settings", '{"key":"literal"}', "--auto", "low"], home: "/original/home-not-read", factory: directory, launch: "owned-launch", airgap: "1", hasFactoryKey: false, hasAdminToken: false, hasBinding: false });
     expect(requests).toEqual([
-      { path: "/internal/launches", body: { cwd: directory }, authenticated: true },
+      { path: "/internal/launches", body: { cwd: realpathSync(directory) }, authenticated: true },
       { path: "/internal/launches/owned-launch/end", body: {}, authenticated: true },
     ]);
   });

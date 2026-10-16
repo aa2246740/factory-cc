@@ -1,6 +1,6 @@
 import { appendFileSync, mkdirSync } from "node:fs";
 import { randomUUID } from "node:crypto";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 import { canonicalWorkspacePath } from "../workspace.js";
 import { asBlocks } from "../protocol/content.js";
 import { assistantMessage } from "../protocol/messages.js";
@@ -15,6 +15,7 @@ import { hostAllowsAnyTools, nativeToolAllowed } from "./native-tool-policy.js";
 import { buildDynamicUserContent, buildHostContext, buildInitialUserContent, buildPresetSystemPrompt, describePromptLayout } from "./system-prompt.js";
 import { UsageLedger } from "./usage.js";
 import type { BridgeRuntime, RuntimeApprovalRequest, RuntimeControl, RuntimeEvent, RuntimeHostCall, RuntimeHostCompletion, RuntimeHostEnd, RuntimePermissionDecision, RuntimeRequest, RuntimeTurn, StreamSink } from "./types.js";
+import { classifyAuth, maskEmail, type AuthClassification, type AuthObservation } from "../upstream/auth-env.js";
 import { publicSelection, sdkEnv, selectionFromConfig, type UpstreamSelection } from "../upstream/providers.js";
 import { resolveRequestModel } from "../models.js";
 
@@ -26,6 +27,7 @@ export interface SdkHandle {
     interrupt?: () => Promise<unknown>;
     close?: () => void;
     mcpServerStatus?: () => Promise<Array<{ name: string; status: string; tools?: Array<{ name: string; description?: string }> }>>;
+    accountInfo?: () => Promise<Record<string, unknown>>;
   };
   tool(name: string, description: string, schema: unknown, handler: (args: Record<string, unknown>, extra?: unknown) => Promise<unknown>, extras?: Record<string, unknown>): unknown;
   createSdkMcpServer(options: Record<string, unknown>): unknown;
@@ -141,6 +143,8 @@ interface LiveSdk {
   sentUserTurns: number;
   starting: boolean;
   queryEpoch: number;
+  initApiKeySource?: string;
+  accountSnapshot?: AuthObservation;
   lastTouched: number;
   backgroundTasks: Set<string>;
 }
@@ -156,6 +160,7 @@ export class SdkRuntime implements BridgeRuntime {
   private readonly lives = new Map<string, LiveSdk>();
   private readonly usageFile: string;
   private control?: RuntimeControl;
+  private authVerification?: AuthVerification;
 
   constructor(private readonly config: BridgeConfig, private readonly logger: Logger, sdk?: SdkHandle) {
     this.sdk = sdk;
@@ -174,7 +179,8 @@ export class SdkRuntime implements BridgeRuntime {
       pendingApprovals: [...this.lives.values()].reduce((total, live) => total + live.approvals.size, 0),
       fatalErrors: [...this.lives.entries()].flatMap(([sessionId, live]) => live.terminal && !["cancelled", "host_session_ended"].includes(live.terminal.code)
         ? [{ sessionId, code: live.terminal.code, message: live.terminal.message }] : []),
-      overridesAnthropicEnv: this.config.authMode !== "subscription",
+      overridesAnthropicEnv: this.config.authMode === "byok",
+      authVerification: this.authVerification ?? null,
       upstream: this.selection ? publicSelection(this.selection) : { selected: false, authMode: this.config.authMode },
       ...(this.config.models !== undefined ? {
         modelRouting: "explicit-catalog",
@@ -249,7 +255,7 @@ export class SdkRuntime implements BridgeRuntime {
   }
 
   async ensureSelection(): Promise<UpstreamSelection | undefined> {
-    if (this.config.authMode === "subscription") return undefined;
+    if (this.config.authMode !== "byok") return undefined;
     if (this.selection) return this.selection;
     if (this.selectionPromise) return this.selectionPromise;
     this.selectionPromise = (async () => {
@@ -613,7 +619,9 @@ export class SdkRuntime implements BridgeRuntime {
     // The native worker receives its provider credential, never the host
     // controller's authority or Factory lifecycle generation.
     for (const name of ["BRIDGE_ADMIN_TOKEN", "BRIDGE_FACTORY_BINDING", "BRIDGE_FACTORY_LAUNCH_ID", "BRIDGE_LAUNCH_ID"]) delete env[name];
-    if (this.config.authMode !== "subscription") {
+    // Subscription, anthropic-api and inherit need the user's own Claude config/login.
+    // BYOK and cloud get an empty config dir so user settings cannot reroute them.
+    if (this.config.authMode === "byok" || this.config.authMode === "cloud") {
       const configDir = join(this.config.dataDir, "claude-config");
       mkdirSync(configDir, { recursive: true });
       env.CLAUDE_CONFIG_DIR = configDir;
@@ -634,6 +642,20 @@ export class SdkRuntime implements BridgeRuntime {
         ? this.canUseTool(live, name, toolInput, context)
         : { behavior: "deny", message: "This native query has been retired." },
     };
+    // Empty setting sources keep settings.json env blocks and permissions.allow
+    // from bypassing this bridge. inherit keeps the CLI default (all sources).
+    if (this.config.authMode !== "inherit") {
+      options.settingSources = [];
+      options.strictMcpConfig = true;
+    }
+    if (this.config.authMode === "anthropic-api") {
+      const helper = process.env.BRIDGE_API_KEY_HELPER?.trim();
+      if (helper) {
+        if (!isAbsolute(helper)) throw new BridgeError(400, "invalid_api_key_helper", "BRIDGE_API_KEY_HELPER must be an absolute path.");
+        // SDK 0.3.300 loads this object as the --settings flag layer, above filesystem settings.
+        options.settings = { apiKeyHelper: helper };
+      }
+    }
     // The host can change its tool capability between turns without rebuilding
     // native history. Check at invocation, including under native bypass mode.
     options.hooks = { PreToolUse: [{ hooks: [async (hook: { tool_name?: string; tool_use_id?: string }) => {
@@ -657,9 +679,88 @@ export class SdkRuntime implements BridgeRuntime {
       live.query = sdk.query({ prompt: live.inputs, options });
       // Iterate the Query itself. Its close() owns process shutdown; never call raw generator.return().
       live.loop = this.consume(live, live.query, live.queryEpoch, expectedResumeId);
+      // Gate before this method returns, so handle() has not pushed a user message yet.
+      await this.verifyDeclaredAuth(live);
     } catch (error) {
       this.stop(live, asBridgeError(error));
       throw asBridgeError(error);
+    }
+  }
+
+  private async verifyDeclaredAuth(live: LiveSdk): Promise<void> {
+    const mode = this.config.authMode;
+    if (mode === "inherit") {
+      void this.observeInheritAuth(live);
+      return;
+    }
+    if (mode !== "subscription" && mode !== "anthropic-api") return;
+    const query = live.query;
+    if (!query?.accountInfo) {
+      this.rejectAuth(live, mode, "unknown", `Declared BRIDGE_AUTH=${mode} but the SDK query does not expose accountInfo(). Refusing to send a prompt.`);
+      return;
+    }
+    const timeoutMs = Math.min(10_000, Math.max(1, this.config.requestTimeoutMs));
+    let info: Record<string, unknown>;
+    try {
+      info = await withTimeout(query.accountInfo(), timeoutMs);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "accountInfo failed";
+      const safe = /sk-ant-|Bearer /i.test(detail) ? "accountInfo failed or timed out" : detail;
+      this.rejectAuth(live, mode, "unknown", `Declared BRIDGE_AUTH=${mode} but account verification did not succeed: ${safe}`);
+      return;
+    }
+    const observed = observationFrom(info);
+    live.accountSnapshot = observed;
+    const email = maskEmail(stringField(info, "email"));
+    const classification = classifyAuth(observed, live.initApiKeySource);
+    this.rememberAuth(mode, classification, observed, email);
+    if (classification.kind !== mode) {
+      const error = new BridgeError(401, "auth_mode_mismatch", mismatchMessage(mode, classification, observed, email));
+      this.stop(live, error);
+      throw error;
+    }
+  }
+
+  private observeInheritAuth(live: LiveSdk): void {
+    const query = live.query;
+    if (!query?.accountInfo) return;
+    const timeoutMs = Math.min(10_000, Math.max(1, this.config.requestTimeoutMs));
+    void withTimeout(query.accountInfo(), timeoutMs).then((info) => {
+      if (live.terminal) return;
+      const observed = observationFrom(info);
+      live.accountSnapshot = observed;
+      const classification = classifyAuth(observed, live.initApiKeySource);
+      this.rememberAuth("inherit", classification, observed, maskEmail(stringField(info, "email")));
+    }).catch(() => undefined);
+  }
+
+  private rememberAuth(mode: BridgeConfig["authMode"], classification: AuthClassification, observed: AuthObservation, email?: string): void {
+    const record: AuthVerification = {
+      mode, kind: classification.kind, reason: classification.reason,
+      subscriptionType: observed.subscriptionType, apiKeySource: observed.apiKeySource, tokenSource: observed.tokenSource,
+      email, at: now(),
+    };
+    this.authVerification = record;
+    const gated = mode === "subscription" || mode === "anthropic-api";
+    this.logger.info("auth_verified", { ...record, ok: gated ? classification.kind === mode : true });
+  }
+
+  private rejectAuth(live: LiveSdk, mode: BridgeConfig["authMode"], kind: AuthClassification["kind"], message: string): never {
+    const error = new BridgeError(401, "auth_mode_mismatch", message);
+    this.authVerification = { mode, kind, at: now(), reason: message };
+    this.logger.info("auth_verified", { mode, kind, ok: false, at: this.authVerification.at });
+    this.stop(live, error);
+    throw error;
+  }
+
+  private recheckInitAuth(live: LiveSdk): void {
+    const mode = this.config.authMode;
+    if (!live.accountSnapshot || (mode !== "subscription" && mode !== "anthropic-api" && mode !== "inherit")) return;
+    const classification = classifyAuth(live.accountSnapshot, live.initApiKeySource);
+    const email = this.authVerification?.email;
+    this.rememberAuth(mode, classification, live.accountSnapshot, email);
+    if ((mode === "subscription" || mode === "anthropic-api") && classification.kind !== mode) {
+      this.stop(live, new BridgeError(401, "auth_mode_mismatch", mismatchMessage(mode, classification, live.accountSnapshot, email)));
     }
   }
 
@@ -786,6 +887,11 @@ export class SdkRuntime implements BridgeRuntime {
         : iterator;
       for await (const message of source) {
         if (live.terminal || live.queryEpoch !== epoch) return;
+        if (message.type === "system" && message.subtype === "init" && typeof message.apiKeySource === "string" && !live.initApiKeySource) {
+          live.initApiKeySource = message.apiKeySource;
+          this.recheckInitAuth(live);
+          if (live.terminal) return;
+        }
         if (typeof message.session_id === "string") {
           if (expectedResumeId && !message.parent_tool_use_id && message.session_id !== expectedResumeId) {
             throw new BridgeError(502, "sdk_resume_identity_changed", "The SDK did not resume the requested native session; refusing to continue without its history.");
@@ -1050,4 +1156,43 @@ function asBridgeError(error: unknown): BridgeError {
   const message = error instanceof Error ? error.message : String(error);
   return new BridgeError(/auth|login|unauthorized|api key|credit|billing/i.test(message) ? 401 : 502, /auth|login|unauthorized|api key|credit|billing/i.test(message) ? "blocked_auth" : "sdk_error", message);
 }
+interface AuthVerification {
+  mode: BridgeConfig["authMode"];
+  kind: AuthClassification["kind"];
+  reason?: string;
+  subscriptionType?: string;
+  apiKeySource?: string;
+  tokenSource?: string;
+  /** Masked. Never the raw address. */
+  email?: string;
+  at: string;
+}
+
+function observationFrom(info: Record<string, unknown>): AuthObservation {
+  return {
+    subscriptionType: stringField(info, "subscriptionType"),
+    apiKeySource: stringField(info, "apiKeySource"),
+    tokenSource: stringField(info, "tokenSource"),
+  };
+}
+
+function stringField(record: Record<string, unknown>, key: string): string | undefined {
+  const value = record[key];
+  return typeof value === "string" && value ? value : undefined;
+}
+
+function mismatchMessage(mode: string, classification: AuthClassification, observed: AuthObservation, email?: string): string {
+  return `Declared BRIDGE_AUTH=${mode} but Claude Code reported ${classification.kind} (${classification.reason}). `
+    + `subscriptionType=${observed.subscriptionType ?? "unset"} apiKeySource=${observed.apiKeySource ?? "unset"} `
+    + `tokenSource=${observed.tokenSource ?? "unset"} email=${email ?? "unset"}.`;
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => reject(new BridgeError(401, "auth_mode_mismatch", `accountInfo timed out after ${timeoutMs}ms`)), timeoutMs);
+  });
+  return Promise.race([promise, timeout]).finally(() => { if (timer) clearTimeout(timer); });
+}
+
 function now(): string { return new Date().toISOString(); }

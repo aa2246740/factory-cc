@@ -35,7 +35,7 @@ export function statusPageHtml(opts: {
   <main>
     <h1>Relay Bridge</h1>
     <p><a href="/control">打开原生工具审批与会话控制</a></p>
-    <p>本机 Anthropic Messages 兼容入口，按 T3 Code 方式接入官方 Claude Agent SDK：<code>systemPrompt</code> 用 <code>claude_code</code> 预设再追加 Droid 说明；Claude Code 自己执行 Read/Edit/Bash；只有 Mission 等 Droid 专有工具走 MCP。本环境默认 BYOK（MiniMax / GLM），<code>BRIDGE_AUTH=subscription</code> 不改写 <code>ANTHROPIC_*</code>。</p>
+    <p>本机 Anthropic Messages 兼容入口，按 T3 Code 方式接入官方 Claude Agent SDK：<code>systemPrompt</code> 用 <code>claude_code</code> 预设再追加 Droid 说明；Claude Code 自己执行 Read/Edit/Bash；只有 Mission 等 Droid 专有工具走 MCP。默认 <code>byok</code>。另外可选 <code>subscription</code>、<code>anthropic-api</code>、<code>cloud</code>、<code>inherit</code>。声明的模式和实际环境不一致时，Bridge 会直接拒绝启动。</p>
     <div class="grid">
       <div class="card"><div class="label">Health</div><div class="value ${opts.healthy ? "ok" : "warn"}">${opts.healthy ? "ok" : "down"}</div></div>
       <div class="card"><div class="label">Mode</div><div class="value">${escapeHtml(opts.mode)}</div></div>
@@ -51,7 +51,7 @@ export function statusPageHtml(opts: {
         <li><code>POST /v1/messages/count_tokens</code> 明确不支持精确计数</li>
         <li><code>GET /internal/sessions</code> 管理接口，需要管理员令牌</li>
       </ul>
-      <p><code>mock</code> / <code>fake</code> 零上游费用。<code>sdk</code> + <code>BRIDGE_AUTH=byok</code> 把 Claude Code 指到已探测的兼容端点。<code>BRIDGE_AUTH=subscription</code> 使用本机 Claude 登录。不要把 <code>ANTHROPIC_BASE_URL</code> 指回本 Bridge。</p>
+      <p><code>mock</code> / <code>fake</code> 零上游费用。<code>byok</code> 只使用显式上游。<code>subscription</code> 用本机 Claude 登录，发现 API key 或 <code>CLAUDE_CODE_USE_*</code> 就拒绝。<code>anthropic-api</code> 只接受 Anthropic 官方 API。<code>cloud</code> 要求恰好一个 Bedrock、Vertex 或 Foundry 开关。<code>inherit</code> 沿用当前 shell。不要把 <code>ANTHROPIC_BASE_URL</code> 指回本 Bridge。</p>
     </div>
   </main>
 </body>

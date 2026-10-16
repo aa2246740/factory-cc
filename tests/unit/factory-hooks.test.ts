@@ -130,7 +130,11 @@ describe("Factory hook forwarding", () => {
       if (bindingToken !== undefined) env.BRIDGE_FACTORY_BINDING = bindingToken;
       const child = spawn(process.execPath, ["--import", "tsx", resolve("scripts/factory-hook.ts"), "--factory-cc-hook-config", configPath], { env, stdio: ["pipe", "pipe", "pipe"] });
       let stderr = ""; child.stderr.on("data", (chunk) => { stderr += chunk.toString(); });
-      const completed = new Promise<{ code: number | null; stderr: string }>((done, reject) => { child.once("error", reject); child.once("close", (code) => done({ code, stderr })); });
+      const completed = new Promise<{ code: number | null; stderr: string }>((done, reject) => { child.once("error", reject); child.once("close", (code) => done({
+        code,
+        // Node prints this when the harness sets both NO_COLOR and FORCE_COLOR. It is not hook output.
+        stderr: stderr.replace(/\(node:\d+\) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set\.\n\(Use `node --trace-warnings \.\.\.` to show where the warning was created\)\n/g, ""),
+      })); });
       child.stdin.end(JSON.stringify({ ...start, hook_event_name: hook }));
       return completed;
     };

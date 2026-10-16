@@ -3,6 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { modelsFromIds, parseModelIds, validateModels, type BridgeModel } from "../src/models.js";
+import { AUTH_MODES, type AuthMode } from "../src/upstream/auth-env.js";
 import { controlBaseUrl } from "./control.js";
 
 interface CustomModel extends Record<string, unknown> { model: string; displayName?: string }
@@ -16,7 +17,8 @@ const help = `Usage: npm run configure-droid -- [options]
   --base-url <URL>     Local Bridge URL
   --models <IDs>      Comma-separated actual model IDs, e.g. glm-5.2,glm-4.7
   --model <ID>        Default model, selected from --models
-  --auth byok|subscription  BYOK needs explicit model IDs; subscription defaults to sonnet,opus,haiku
+  --auth byok|subscription|anthropic-api|cloud|inherit
+                       subscription and anthropic-api default to sonnet,opus,haiku; the others need explicit model IDs
   --manifest <path>   Private script manifest
   --revert            Restore original settings and remove managed-model metadata
 BRIDGE_CLIENT_TOKEN is required. BRIDGE_UPSTREAM_MODEL can supply the BYOK default.
@@ -34,7 +36,7 @@ function parseArgs(argv: string[]): Record<string, string> {
     if (!value || value.startsWith("--")) throw new Error(`Missing value for ${flag}.`);
     out[flag.slice(2)] = value;
   }
-  if (out.auth !== undefined && !["byok", "subscription"].includes(out.auth)) throw new Error("--auth must be byok or subscription.");
+  if (out.auth !== undefined && !(AUTH_MODES as readonly string[]).includes(out.auth)) throw new Error(`--auth must be ${AUTH_MODES.join(" | ")}.`);
   return out;
 }
 
@@ -97,14 +99,16 @@ export function configureDroid(argv: string[], env: NodeJS.ProcessEnv = process.
   const token = env.BRIDGE_CLIENT_TOKEN;
   if (!token?.trim()) throw new Error("BRIDGE_CLIENT_TOKEN is required; settings were not changed.");
   const baseUrl = controlBaseUrl(args["base-url"] ?? "http://127.0.0.1:18787");
-  const auth = args.auth ?? env.BRIDGE_AUTH ?? "byok";
-  if (auth !== "byok" && auth !== "subscription") throw new Error("Authentication must be byok or subscription.");
+  const auth = (args.auth ?? env.BRIDGE_AUTH ?? "byok") as string;
+  if (!(AUTH_MODES as readonly string[]).includes(auth)) throw new Error(`Authentication must be ${AUTH_MODES.join(" | ")}.`);
+  const mode = auth as AuthMode;
   const requestedIds = args.models ? parseModelIds(args.models) : undefined;
-  const selectedId = args.model ?? (auth === "byok" ? env.BRIDGE_UPSTREAM_MODEL : undefined);
+  const selectedId = args.model ?? (mode === "byok" ? env.BRIDGE_UPSTREAM_MODEL : undefined);
   if (selectedId && parseModelIds(selectedId).length !== 1) throw new Error("--model must select one model ID.");
-  const ids = requestedIds ?? (selectedId ? [selectedId] : auth === "subscription" ? ["sonnet", "opus", "haiku"] : []);
-  if (!catalog && !ids.length) throw new Error("BYOK requires explicit actual model IDs: pass --models, --model, or BRIDGE_UPSTREAM_MODEL.");
-  const configured = catalog ? validateModels(catalog) : modelsFromIds(ids, auth);
+  const claudeDefaults = mode === "subscription" || mode === "anthropic-api";
+  const ids = requestedIds ?? (selectedId ? [selectedId] : claudeDefaults ? ["sonnet", "opus", "haiku"] : []);
+  if (!catalog && !ids.length) throw new Error("byok, cloud and inherit require explicit actual model IDs: pass --models, --model, or BRIDGE_UPSTREAM_MODEL.");
+  const configured = catalog ? validateModels(catalog) : modelsFromIds(ids, mode);
   if (requestedIds && (requestedIds.length !== configured.length || requestedIds.some((id) => !configured.some((model) => model.id === id)))) throw new Error("--models must match the configured catalog.");
   const defaultId = selectedId ?? configured[0]!.id;
   if (!configured.some((model) => model.id === defaultId)) throw new Error("The default model must be included in --models.");

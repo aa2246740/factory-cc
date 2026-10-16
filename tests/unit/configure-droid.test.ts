@@ -169,6 +169,17 @@ describe("configure Droid", () => {
     expect(updated.missionModelSettings.workerModel).toBe("custom:GLM-4.7-0");
   });
 
+  it("anthropic-api defaults to the same Claude aliases and cloud still requires explicit ids", () => {
+    const { settings, args } = paths();
+    configureDroid([...args.slice(0, -2), "--auth", "anthropic-api"], { BRIDGE_CLIENT_TOKEN: "local-token" });
+    const parsed = JSON.parse(readFileSync(settings, "utf8"));
+    expect(parsed.customModels.map((model: { model: string; displayName: string }) => [model.model, model.displayName])).toEqual([
+      ["sonnet", "Claude Sonnet"], ["opus", "Claude Opus"], ["haiku", "Claude Haiku"],
+    ]);
+    expect(() => configureDroid(args.slice(0, -2), { BRIDGE_CLIENT_TOKEN: "local-token", BRIDGE_AUTH: "cloud" })).toThrow(/explicit actual model/);
+    expect(() => configureDroid([...args.slice(0, -2), "--auth", "nope"], { BRIDGE_CLIENT_TOKEN: "local-token" })).toThrow(/--auth/);
+  });
+
   it("subscription configuration exposes real Claude aliases without touching subscription credentials", () => {
     const { settings, args } = paths();
     const env = { BRIDGE_CLIENT_TOKEN: "local-token", ANTHROPIC_AUTH_TOKEN: "do-not-use-or-change", BRIDGE_UPSTREAM_MODEL: "glm-5.2" };

@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadConfig } from "../../src/config.js";
 import { SdkRuntime, type SdkHandle, type SdkUserInput } from "../../src/runtime/sdk-runtime.js";
+import { forbiddenNamesIn } from "../../src/upstream/auth-env.js";
 import type { RuntimeApprovalRequest, RuntimePermissionDecision, RuntimeRequest } from "../../src/runtime/types.js";
 import type { SessionRecord } from "../../src/sessions/state.js";
 import type { ContentBlock } from "../../src/types.js";
@@ -58,6 +59,7 @@ class FakeSdk implements SdkHandle {
       interrupt: this.interrupt,
       close: this.close,
       mcpServerStatus: this.mcpStatus,
+      accountInfo: async () => ({ subscriptionType: "max", apiKeySource: "none", email: "a@example.com" }),
       async *[Symbol.asyncIterator]() {
         for await (const input of args.prompt) {
           self.inputs.push(input);
@@ -154,22 +156,35 @@ describe("official SDK streaming-input lifecycle (injected offline SDK)", () => 
     expect(sdk.calls).toHaveLength(2);
   });
 
-  it("switches subscription models through resume while preserving the original authentication environment", async () => {
-    vi.stubEnv("ANTHROPIC_BASE_URL", "https://subscription-offline.invalid");
-    vi.stubEnv("ANTHROPIC_AUTH_TOKEN", "synthetic-existing-auth-token");
-    vi.stubEnv("ANTHROPIC_API_KEY", "synthetic-existing-api-key");
+  it("switches subscription models through resume on an allowlisted environment", async () => {
+    const saved: Array<[string, string | undefined]> = [];
+    for (const name of forbiddenNamesIn("subscription", process.env)) {
+      saved.push([name, process.env[name]]);
+      delete process.env[name];
+    }
     vi.stubEnv("CLAUDE_CODE_OAUTH_TOKEN", "synthetic-existing-oauth-token");
-    const sdk = new FakeSdk(async function* () { yield success("ok"); });
-    const { runtime } = create(sdk, { authMode: "subscription", models: modelCatalog });
-    const s = session();
-    await runtime.handle(request(s, "first turn", { model: "first-model" }));
-    await runtime.handle(request(s, "second turn", { model: "second-model" }));
-    expect(sdk.calls[1]!.options).toMatchObject({ model: "native-model-b", resume: "native-sdk-session" });
-    for (const call of sdk.calls) expect(call.options.env).toMatchObject({
-      ANTHROPIC_BASE_URL: "https://subscription-offline.invalid", ANTHROPIC_AUTH_TOKEN: "synthetic-existing-auth-token",
-      ANTHROPIC_API_KEY: "synthetic-existing-api-key", CLAUDE_CODE_OAUTH_TOKEN: "synthetic-existing-oauth-token",
-    });
-    expect((sdk.calls[1]!.options.env as Record<string, string>).BRIDGE_MODEL_ID).toBe("second-model");
+    try {
+      const sdk = new FakeSdk(async function* () { yield success("ok"); });
+      const { runtime } = create(sdk, { authMode: "subscription", models: modelCatalog });
+      const s = session();
+      await runtime.handle(request(s, "first turn", { model: "first-model" }));
+      await runtime.handle(request(s, "second turn", { model: "second-model" }));
+      expect(sdk.calls[1]!.options).toMatchObject({ model: "native-model-b", resume: "native-sdk-session", settingSources: [], strictMcpConfig: true });
+      for (const call of sdk.calls) {
+        const env = call.options.env as Record<string, string>;
+        expect(env.CLAUDE_CODE_OAUTH_TOKEN).toBe("synthetic-existing-oauth-token");
+        expect(env.ANTHROPIC_BASE_URL).toBeUndefined();
+        expect(env.ANTHROPIC_AUTH_TOKEN).toBeUndefined();
+        expect(env.ANTHROPIC_API_KEY).toBeUndefined();
+      }
+      expect((sdk.calls[1]!.options.env as Record<string, string>).BRIDGE_MODEL_ID).toBe("second-model");
+      expect(JSON.stringify(runtime.describe().authVerification)).not.toContain("a@example.com");
+    } finally {
+      for (const [name, value] of saved) {
+        if (value === undefined) delete process.env[name];
+        else process.env[name] = value;
+      }
+    }
   });
 
   it("refuses to switch while a host tool is pending without breaking its original callback", async () => {

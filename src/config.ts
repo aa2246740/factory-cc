@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import type { BridgeMode } from "./types.js";
+import { parseAuthMode, type AuthMode } from "./upstream/auth-env.js";
 import { canonicalWorkspacePath } from "./workspace.js";
 import { modelsFromIds, parseModelIds, validateModels, type BridgeModel } from "./models.js";
 
@@ -22,7 +23,7 @@ export interface BridgeConfig {
   claudeExecutable?: string;
   sdkCwd: string;
   persistSessions: boolean;
-  authMode: "byok" | "subscription";
+  authMode: AuthMode;
   permissionMode: "bypass" | "ask";
   upstreamBaseUrl?: string;
   upstreamModel?: string;
@@ -54,9 +55,7 @@ export function loadConfig(overrides: Partial<BridgeConfig> = {}): BridgeConfig 
   if (!["mock", "fake", "sdk"].includes(mode)) {
     throw new Error(`Invalid BRIDGE_MODE=${mode}. Use mock | fake | sdk.`);
   }
-  const authMode = (overrides.authMode ?? (env("BRIDGE_AUTH", "byok") === "subscription" ? "subscription" : "byok")) as
-    | "byok"
-    | "subscription";
+  const authMode = parseAuthMode(overrides.authMode ?? env("BRIDGE_AUTH", "byok"));
   const permissionRaw = overrides.permissionMode ?? env("BRIDGE_PERMISSION");
   const permissionMode = (permissionRaw === "ask" || permissionRaw === "bypass"
     ? permissionRaw

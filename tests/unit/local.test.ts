@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { BridgeConfig } from "../../src/config.js";
@@ -31,7 +31,7 @@ function fixture() {
     LOCAL_TEST_PROVIDER_KEY: providerKey, DUPLICATE_PROVIDER_ALIAS: providerKey,
     ANTHROPIC_API_KEY: "ambient-anthropic-key", ANTHROPIC_AUTH_TOKEN: "ambient-anthropic-token", CLAUDE_CODE_OAUTH_TOKEN: "ambient-subscription-token",
     FACTORY_API_KEY: "ambient-factory-key", BRIDGE_FACTORY_BINDING: "old-parent-generation",
-    BRIDGE_MODE: "mock", BRIDGE_AUTH: "subscription", BRIDGE_PERMISSION: "bypass", BRIDGE_SDK_CWD: root,
+    BRIDGE_MODE: "mock", BRIDGE_PERMISSION: "bypass", BRIDGE_SDK_CWD: root,
     BRIDGE_DROID_EXECUTABLE: process.execPath, BRIDGE_CLAUDE_EXECUTABLE: process.execPath,
   };
   const argv = [project, "--base-url", "https://provider.invalid/anthropic", "--model", "offline-selected-model", "--key-env", "LOCAL_TEST_PROVIDER_KEY"];
@@ -63,11 +63,11 @@ describe("one-command isolated local launch", () => {
     observed.runDroid.mockImplementationOnce(async (argv: string[], options: { env: NodeJS.ProcessEnv }) => {
       expect(observed.apps).toHaveLength(1);
       const { app, config } = observed.apps[0]!; url = app.url;
-      expect(config).toMatchObject({ mode: "sdk", authMode: "byok", permissionMode: "ask", sdkCwd: f.project, upstreamModel: "offline-selected-model" });
+      expect(config).toMatchObject({ mode: "sdk", authMode: "byok", permissionMode: "ask", sdkCwd: realpathSync(f.project), upstreamModel: "offline-selected-model" });
       expect(app.server.listening).toBe(true);
       const health = await fetch(`${url}/healthz`).then((response) => response.json()) as { upstream: unknown };
       expect(health.upstream).toMatchObject({ authMode: "byok", permissionMode: "ask" });
-      expect(argument(argv, "--cwd")).toBe(f.project);
+      expect(argument(argv, "--cwd")).toBe(realpathSync(f.project));
       expect(argument(argv, "--airgap")).toBe("1");
       expect(JSON.stringify(argv)).not.toContain(providerKey);
       expect(Object.values(options.env)).not.toContain(providerKey);
@@ -209,5 +209,22 @@ describe("one-command isolated local launch", () => {
       return 0;
     });
     expect(await runLocal([f.project, "--key-env", "LOCAL_TEST_PROVIDER_KEY"], f.env)).toBe(0);
+  });
+
+  it("refuses to ignore BRIDGE_AUTH when it disagrees with --auth", async () => {
+    const f = fixture();
+    await expect(runLocal(f.argv, { ...f.env, BRIDGE_AUTH: "subscription" })).rejects.toThrow(/does not match --auth byok/);
+    expect(observed.apps).toHaveLength(0);
+    expect(observed.runDroid).not.toHaveBeenCalled();
+  });
+
+  it("refuses an sk-ant- key for a third-party BYOK host before starting", async () => {
+    const f = fixture();
+    const secret = "sk-ant-offline-not-a-real-key";
+    const env = { ...f.env, LOCAL_TEST_PROVIDER_KEY: secret };
+    await expect(runLocal(f.argv, env)).rejects.toThrow(/outside anthropic.com/);
+    expect(observed.apps).toHaveLength(0);
+    const text = vi.mocked(process.stdout.write).mock.calls.map((call) => String(call[0])).join("");
+    expect(text).not.toContain(secret);
   });
 });

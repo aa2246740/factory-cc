@@ -118,7 +118,7 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
       return;
     }
     if (req.method === "GET" && path === "/healthz") {
-      const { fatalErrors: _errors, ...publicRuntime } = runtime.describe?.() ?? {};
+      const { fatalErrors: _errors, authVerification: _auth, ...publicRuntime } = runtime.describe?.() ?? {};
       json(res, 200, {
         ok: true,
         mode: config.mode,
