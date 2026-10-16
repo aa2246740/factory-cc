@@ -350,6 +350,9 @@ export function listen(app: BridgeApp, config: BridgeConfig): Promise<BridgeApp>
     app.server.listen(config.port, config.host, () => {
       const address = app.server.address();
       if (address && typeof address !== "string") {
+        // The runtime shares this config and supplies the local client URL to
+        // native skill commands, including when the OS chose an ephemeral port.
+        config.port = address.port;
         const url = new URL(app.url);
         url.port = String(address.port);
         app.url = url.toString().replace(/\/$/, "");

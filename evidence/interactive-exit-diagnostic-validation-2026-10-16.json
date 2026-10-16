@@ -1,0 +1,314 @@
+{
+  "suite": "real-interactive-surfaces",
+  "status": "FAIL",
+  "startedAt": "2026-10-16T02:20:15.361Z",
+  "evidence": "/workspace/work/factory-cc-prep/repo/evidence/local/interactive-2026-10-16T02-20-15-360Z-69851c",
+  "authentication": "isolated explicit BYOK; no subscription credential access",
+  "allFactoryModelCallsitesCovered": false,
+  "diagnosticHookEntry": "/workspace/work/factory-cc-prep/work/hook-exit-diagnostic/entry.mts",
+  "diagnosticScope": "Explicit diagnostic hook wrapper; this run cannot certify the uninstrumented production hook entry.",
+  "exitOnlyConversation": [
+    {
+      "prompt": "法国的首都是哪里？只回答城市中文名。",
+      "status": "PASS",
+      "checks": {
+        "finalAnswerCorrect": true,
+        "noToolsInvoked": true,
+        "finalResponsePresent": true
+      },
+      "parentSdkSessionId": "13863f65-aa53-40b5-9d40-36903b5642fc",
+      "finalText": "巴黎",
+      "toolCalls": []
+    },
+    {
+      "prompt": "日本的首都是哪里？只回答城市中文名。",
+      "status": "PASS",
+      "checks": {
+        "finalAnswerCorrect": true,
+        "noToolsInvoked": true,
+        "finalResponsePresent": true
+      },
+      "parentSdkSessionId": "13863f65-aa53-40b5-9d40-36903b5642fc",
+      "finalText": "东京",
+      "toolCalls": []
+    }
+  ],
+  "command": {
+    "code": 0,
+    "stdout": "",
+    "stderr": "",
+    "timedOut": false,
+    "signal": null,
+    "processCleanup": {
+      "supported": true,
+      "observedProcessCount": 0,
+      "terminatedProcessCount": 0,
+      "remainingProcessIds": [],
+      "complete": true
+    }
+  },
+  "ptyExit": {
+    "exitStatus": 0,
+    "signalStatus": null
+  },
+  "requests": [
+    {
+      "at": "2026-10-16T02:20:19.780Z",
+      "method": "POST",
+      "path": "/v1/messages",
+      "role": "chat",
+      "authOk": true,
+      "sessionHint": "sess_867226f9-a955-47dd-b977-004b71b69279",
+      "model": "relay-chat",
+      "stream": true,
+      "toolNames": [],
+      "messageCount": 1,
+      "notes": [
+        "new-session"
+      ]
+    },
+    {
+      "at": "2026-10-16T02:20:19.947Z",
+      "method": "POST",
+      "path": "/v1/messages",
+      "role": "chat",
+      "authOk": true,
+      "sessionHint": "sess_8e916dbc-6b3b-4076-a4a5-200214580a3f",
+      "model": "relay-chat",
+      "stream": true,
+      "toolNames": [
+        "Read",
+        "LS",
+        "Execute",
+        "Edit",
+        "Grep",
+        "Glob",
+        "Create",
+        "ExitSpecMode",
+        "AskUser",
+        "TodoWrite",
+        "TaskOutput",
+        "TaskStop",
+        "ToolSearch",
+        "Skill",
+        "Task"
+      ],
+      "messageCount": 2,
+      "notes": [
+        "new-session"
+      ]
+    },
+    {
+      "at": "2026-10-16T02:20:43.293Z",
+      "method": "POST",
+      "path": "/v1/messages",
+      "role": "chat",
+      "authOk": true,
+      "sessionHint": "sess_8e916dbc-6b3b-4076-a4a5-200214580a3f",
+      "model": "relay-chat",
+      "stream": true,
+      "toolNames": [
+        "Read",
+        "LS",
+        "Execute",
+        "Edit",
+        "Grep",
+        "Glob",
+        "Create",
+        "ExitSpecMode",
+        "AskUser",
+        "TodoWrite",
+        "TaskOutput",
+        "TaskStop",
+        "ToolSearch",
+        "Skill",
+        "Task"
+      ],
+      "messageCount": 4,
+      "notes": [
+        "history-prefix"
+      ]
+    }
+  ],
+  "sessions": [
+    {
+      "bridgeSessionId": "sess_867226f9-a955-47dd-b977-004b71b69279",
+      "role": "chat",
+      "state": "IDLE",
+      "model": "relay-chat",
+      "historyHash": "e1af2629dea628c8eebb7ec426ea6bbd9694406cf7b2f31a036b7ce3dbbfc0fe",
+      "contextHash": "5cfed9a20b60f096c2874a38a77f54d063b4fd7e2a0e320335f7d0abe529ca93",
+      "requestMessageHashes": [
+        "bbd278b3e766bece3bf5fd92227f130fc2d1965ca05232aaabfd2246fd30b37b"
+      ],
+      "historyMessageHashes": [
+        "bbd278b3e766bece3bf5fd92227f130fc2d1965ca05232aaabfd2246fd30b37b",
+        "4904ecc91dace9447c52f417b25929971f4101d95ecf69f0aa142c2ebc0eb31c"
+      ],
+      "toolNames": [],
+      "createdAt": "2026-10-16T02:20:19.779Z",
+      "updatedAt": "2026-10-16T02:20:42.951Z",
+      "pendingToolIds": [],
+      "cancelRequested": false,
+      "notes": [],
+      "usage": {
+        "input_tokens": 11458,
+        "output_tokens": 1210,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 7552,
+        "status": "reported",
+        "coverage": "partial",
+        "knownFields": [
+          "input_tokens",
+          "output_tokens",
+          "cache_read_input_tokens"
+        ],
+        "scope": "provider_messages",
+        "estimated": true,
+        "modelRequests": 1
+      },
+      "sdkSessionId": "13388f7c-d79d-4806-b7ef-af42f9f93b96"
+    },
+    {
+      "bridgeSessionId": "sess_8e916dbc-6b3b-4076-a4a5-200214580a3f",
+      "role": "chat",
+      "state": "IDLE",
+      "model": "relay-chat",
+      "historyHash": "df8bc657a6ca634f42c4d37f40efaafb2a4a51ea4a3292c22a65494ce47aadd2",
+      "contextHash": "5cfed9a20b60f096c2874a38a77f54d063b4fd7e2a0e320335f7d0abe529ca93",
+      "requestMessageHashes": [
+        "c8aa2d50acd70c93ebced54c4b2e5a9bb8422f43342fb49f80b52dffbd0bd50d",
+        "bbd278b3e766bece3bf5fd92227f130fc2d1965ca05232aaabfd2246fd30b37b",
+        "7b410203d6843566579dce1f6607f8773725c14a1d5692adfc7fbed097cf32a6",
+        "573d8f62d93d94d7d41df2ab547d8507651c974f27bd5e14150a22b506b87f21"
+      ],
+      "historyMessageHashes": [
+        "c8aa2d50acd70c93ebced54c4b2e5a9bb8422f43342fb49f80b52dffbd0bd50d",
+        "bbd278b3e766bece3bf5fd92227f130fc2d1965ca05232aaabfd2246fd30b37b",
+        "7b410203d6843566579dce1f6607f8773725c14a1d5692adfc7fbed097cf32a6",
+        "573d8f62d93d94d7d41df2ab547d8507651c974f27bd5e14150a22b506b87f21",
+        "8a352411c4a718a9961c07bb0d7285fa69a0263aff7b4bc734bb2add456abe62"
+      ],
+      "toolNames": [
+        "Read",
+        "LS",
+        "Execute",
+        "Edit",
+        "Grep",
+        "Glob",
+        "Create",
+        "ExitSpecMode",
+        "AskUser",
+        "TodoWrite",
+        "TaskOutput",
+        "TaskStop",
+        "ToolSearch",
+        "Skill",
+        "Task"
+      ],
+      "createdAt": "2026-10-16T02:20:19.946Z",
+      "updatedAt": "2026-10-16T02:20:53.734Z",
+      "pendingToolIds": [],
+      "cancelRequested": false,
+      "notes": [
+        "factory-session-ended"
+      ],
+      "usage": {
+        "input_tokens": 108,
+        "output_tokens": 31,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 24704,
+        "status": "reported",
+        "coverage": "partial",
+        "knownFields": [
+          "input_tokens",
+          "output_tokens",
+          "cache_read_input_tokens"
+        ],
+        "scope": "provider_messages",
+        "estimated": true,
+        "modelRequests": 1
+      },
+      "factorySessionId": "b5702ba4-c62f-464b-b343-0267ca92f6e4",
+      "factoryCwd": "/tmp/relay-e2e-ws-VumNU6",
+      "hostEnded": "resumable",
+      "sdkSessionId": "13863f65-aa53-40b5-9d40-36903b5642fc"
+    }
+  ],
+  "runtimeBeforeClose": {
+    "kind": "sdk",
+    "authMode": "byok",
+    "permissionMode": "bypass",
+    "prompt": {
+      "systemPrompt": "preset:claude_code + stable append",
+      "dynamicPlacement": "user input on initial turn or context change",
+      "tools": "preset:claude_code built-ins + Droid-exclusive MCP"
+    },
+    "tools": "preset:claude_code + droid-exclusive MCP",
+    "input": "persistent SDK streaming input",
+    "includePartialMessages": true,
+    "approvalChannel": "external controller",
+    "activeNativeSessions": 1,
+    "activeNativeTurns": 0,
+    "pendingHostCalls": 0,
+    "pendingApprovals": 0,
+    "fatalErrors": [],
+    "overridesAnthropicEnv": true,
+    "upstream": {
+      "provider": "glm",
+      "label": "https://open.bigmodel.cn/api/anthropic",
+      "baseUrl": "https://open.bigmodel.cn/api/anthropic",
+      "model": "glm-5.2",
+      "tokenEnv": "READINESS_MODEL_API_KEY",
+      "authHeader": "x-api-key"
+    },
+    "control": {
+      "pendingApprovals": 0,
+      "failures": [],
+      "activeHostSessions": 0,
+      "boundNativeSessions": 0
+    }
+  },
+  "completionChecks": {
+    "noActiveTurns": true,
+    "noPendingHostCalls": true,
+    "noPendingApprovals": true,
+    "noActiveHostSessions": true,
+    "noFatalErrors": true,
+    "noControlFailures": true,
+    "terminalLifecycleDeliverySucceeded": false
+  },
+  "error": "Interactive completion retained active work, fatal runtime errors or controller failures.",
+  "interactiveTitles": {
+    "entries": [
+      {
+        "factorySessionId": "b5702ba4-c62f-464b-b343-0267ca92f6e4",
+        "type": "session_start",
+        "title": "查询法国首都"
+      }
+    ],
+    "scope": "Observed persisted interactive session titles; first-file-edit and fallback variants are not independently established."
+  },
+  "processCleanup": {
+    "supported": true,
+    "observedProcessCount": 28,
+    "terminatedProcessCount": 0,
+    "remainingProcessIds": [],
+    "complete": true
+  },
+  "removedOwnedDirectories": [
+    {
+      "path": "/tmp/relay-e2e-home-5jZKIF",
+      "removed": true
+    },
+    {
+      "path": "/tmp/relay-e2e-ws-VumNU6",
+      "removed": true
+    },
+    {
+      "path": "/tmp/relay-verify-private-YAm6jm",
+      "removed": true
+    }
+  ],
+  "finishedAt": "2026-10-16T02:20:54.178Z"
+}

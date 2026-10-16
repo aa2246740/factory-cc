@@ -228,6 +228,9 @@ export async function runDroid(argv: string[], options: RunDroidOptions = {}): P
     // Hooks authenticate through their private configuration; the child does
     // not need the wrapper's administrator credential in its environment.
     delete env.BRIDGE_ADMIN_TOKEN;
+    // A new launch must obtain its own SessionStart generation. In particular,
+    // a nested launch must not leave its UI client holding the parent's binding.
+    delete env.BRIDGE_FACTORY_BINDING;
     if (!parsed.keepFactoryKey) delete env.FACTORY_API_KEY;
     if (parsed.airgap === "0") delete env.FACTORY_AIRGAP_ENABLED;
     if (parsed.airgap === "1") env.FACTORY_AIRGAP_ENABLED = "1";

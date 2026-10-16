@@ -1,0 +1,19 @@
+{
+  "status": "FAIL_LIFECYCLE_DELIVERY",
+  "source": "evidence/interactive-natural-generation-validation-2026-10-16-r2.json",
+  "sourceSha256": "c4d2a92c9e41a62fd5087e6e21ea285678f3206fa9aaba2b7ba7082895588169",
+  "terminalSource": "/workspace/work/factory-cc-prep/repo/evidence/local/interactive-2026-10-16T02-14-30-352Z-a41241/terminal.txt",
+  "checks": {
+    "naturalCreation": true,
+    "authenticatedGenerator": true,
+    "readonlyDefinition": true,
+    "separateTaskDelegation": true,
+    "existingAgentNotRegenerated": true,
+    "ordinaryChatNoTools": true,
+    "normalPtyExit": true,
+    "ownedCleanup": true,
+    "terminalLifecycleDeliverySucceeded": false
+  },
+  "observedError": "Hooks SessionEnd: Exit code 1; Factory lifecycle bridge unavailable; event delivery failed.",
+  "scope": "The original r2 functional gates passed. This independent terminal review found a lifecycle delivery error omitted by the original pass gate. Creation/routing/delegation evidence remains valid; a clean end-to-end journey needs the exit delivery issue resolved. Original evidence is preserved unchanged."
+}

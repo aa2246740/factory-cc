@@ -745,10 +745,12 @@ describe("official SDK streaming-input lifecycle (injected offline SDK)", () => 
 
   it("enforces explicit tools:[] through public PreToolUse even in bypass mode and strips controller authority", async () => {
     vi.stubEnv("BRIDGE_ADMIN_TOKEN", "must-not-reach-worker");
+    vi.stubEnv("BRIDGE_CLIENT_TOKEN", "stale-client-token");
+    vi.stubEnv("BRIDGE_CONTROL_URL", "http://unrelated.invalid:1234");
     vi.stubEnv("BRIDGE_FACTORY_BINDING", "parent-hook-generation");
     vi.stubEnv("BRIDGE_FACTORY_LAUNCH_ID", "parent-launch");
     const sdk = new FakeSdk(async function* () { yield success("title"); });
-    const { runtime } = create(sdk, { permissionMode: "bypass" });
+    const { runtime } = create(sdk, { permissionMode: "bypass", clientToken: "actual-local-client", host: "127.0.0.1", port: 23456 });
     const controller = vi.fn(async () => ({ behavior: "allow" as const }));
     runtime.setControl({ requestApproval: controller });
     await runtime.handle(request(session(), "generate title", { tools: [] }));
@@ -762,6 +764,7 @@ describe("official SDK streaming-input lifecycle (injected offline SDK)", () => 
     expect(await check("Bash", { command: "modify project" })).toMatchObject({ behavior: "deny" });
     expect(controller).not.toHaveBeenCalled();
     for (const key of ["BRIDGE_ADMIN_TOKEN", "BRIDGE_FACTORY_BINDING", "BRIDGE_FACTORY_LAUNCH_ID"]) expect(options.env).not.toHaveProperty(key);
+    expect(options.env).toMatchObject({ BRIDGE_CLIENT_TOKEN: "actual-local-client", BRIDGE_CONTROL_URL: "http://127.0.0.1:23456" });
     await runtime.handle(request(session(), "enable tools", { tools: [tool, { name: "Create", input_schema: { type: "object" } }, { name: "Execute", input_schema: { type: "object" } }] }));
     expect(await hooks.PreToolUse[0]!.hooks[0]!({ tool_name: "Write" })).toEqual({});
     expect(await check("Bash", { command: "explicitly allowed by controller" })).toMatchObject({ behavior: "allow" });

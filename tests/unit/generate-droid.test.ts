@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, lstatSync, mkdtempSync, mkdirSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { generateDroid, installDroidCommand, parseGenerateDroidArgs, validateGeneratedDroid } from "../../scripts/generate-droid.js";
@@ -58,9 +59,65 @@ describe("local BYOK Droid generation", () => {
     await expect(generateDroid(args(root), { BRIDGE_CLIENT_TOKEN: "test-only" })).rejects.toThrow("symlink");
     expect(existsSync(join(outside, "json-auditor.md"))).toBe(false);
   });
-  it("installs a credential-free executable project command without overwriting", () => {
+  it("installs a credential-free executable command and discoverable Factory skill", () => {
     const root = own(), path = installDroidCommand(root), text = readFileSync(path, "utf8");
     expect(text).toContain('"$@"'); expect(text).not.toContain("BRIDGE_CLIENT_TOKEN=");
+    expect(lstatSync(path).mode & 0o777).toBe(0o700);
+    const skillPath = join(root, ".factory/skills/relay-droid/SKILL.md"), skill = readFileSync(skillPath, "utf8");
+    expect(skill).toMatch(/^---\nname: relay-droid\ndescription: /);
+    expect(skill).toContain("新建、创建或生成自定义"); expect(skill).toContain("Factory's Task tool");
+    expect(skill).toContain("Mission"); expect(skill).toContain("Agent Readiness");
+    expect(skill).toContain("separate user request"); expect(skill).toContain("Read,LS,Grep,Glob");
+    expect(skill).toContain("sequence '\\''.");
+    expect(skill).toContain(`'${path}' --name 'NAME' --description 'TASK'`);
+    expect(skill).not.toContain("BRIDGE_CLIENT_TOKEN="); expect(lstatSync(skillPath).mode & 0o777).toBe(0o600);
+  });
+  it("reuses exact installations and upgrades the previous command-only install without rewriting", () => {
+    const root = own(), path = installDroidCommand(root), entry = lstatSync(path);
+    const skillPath = join(root, ".factory/skills/relay-droid/SKILL.md"), skill = readFileSync(skillPath, "utf8");
+    expect(installDroidCommand(root)).toBe(path);
+    expect(lstatSync(path).ino).toBe(entry.ino); expect(lstatSync(path).mtimeMs).toBe(entry.mtimeMs);
+    rmSync(join(root, ".factory/skills"), { recursive: true });
+    expect(installDroidCommand(root)).toBe(path);
+    expect(lstatSync(path).ino).toBe(entry.ino); expect(lstatSync(path).mtimeMs).toBe(entry.mtimeMs);
+    expect(readFileSync(skillPath, "utf8")).toBe(skill);
+  });
+  it("preflights conflicting user files before installing either artifact", () => {
+    for (const conflict of ["commands/relay-droid.sh", "skills/relay-droid/SKILL.md"]) {
+      const root = own(), path = join(root, ".factory", conflict);
+      mkdirSync(join(path, ".."), { recursive: true }); writeFileSync(path, "USER CONTENT", { mode: 0o700 });
+      expect(() => installDroidCommand(root)).toThrow("already exists");
+      expect(readFileSync(path, "utf8")).toBe("USER CONTENT");
+      const other = conflict.startsWith("commands") ? "skills/relay-droid/SKILL.md" : "commands/relay-droid.sh";
+      expect(existsSync(join(root, ".factory", other))).toBe(false);
+    }
+  });
+  it("preserves an edited discovery skill and disabled command permissions", () => {
+    const root = own(), path = installDroidCommand(root), skillPath = join(root, ".factory/skills/relay-droid/SKILL.md");
+    writeFileSync(skillPath, "MY EDITED SKILL");
     expect(() => installDroidCommand(root)).toThrow("already exists");
+    expect(readFileSync(skillPath, "utf8")).toBe("MY EDITED SKILL");
+    rmSync(skillPath); chmodSync(path, 0o600);
+    expect(() => installDroidCommand(root)).toThrow("permissions");
+    expect(lstatSync(path).mode & 0o777).toBe(0o600); expect(existsSync(skillPath)).toBe(false);
+  });
+  it("rejects symlinked configuration parents or destinations without writing through them", () => {
+    for (const component of [".factory", ".factory/commands", ".factory/skills", ".factory/skills/relay-droid", ".factory/commands/relay-droid.sh", ".factory/skills/relay-droid/SKILL.md"]) {
+      const root = own(), outside = own(), path = join(root, component);
+      mkdirSync(join(path, ".."), { recursive: true }); symlinkSync(outside, path);
+      expect(() => installDroidCommand(root)).toThrow();
+      expect(existsSync(join(outside, "relay-droid.sh"))).toBe(false);
+      expect(existsSync(join(outside, "SKILL.md"))).toBe(false);
+      expect(lstatSync(path).isSymbolicLink()).toBe(true);
+    }
+  });
+  it("keeps shell metacharacters in project paths literal in the executable and skill invocation", () => {
+    const parent = own(), root = join(parent, "quoted ' project $(touch injected) `touch injected`"); mkdirSync(root);
+    const path = installDroidCommand(root), skill = readFileSync(join(root, ".factory/skills/relay-droid/SKILL.md"), "utf8");
+    const invocation = skill.match(/```sh\n(.+) --name 'NAME' --description 'TASK'\n```/)?.[1];
+    expect(invocation).toBeDefined();
+    const result = spawnSync("/bin/sh", ["-c", `${invocation} --help`], { cwd: parent, env: { PATH: process.env.PATH }, encoding: "utf8" });
+    expect(result.status).toBe(0); expect(result.stdout).toContain("Generate a project Droid");
+    expect(existsSync(join(parent, "injected"))).toBe(false); expect(existsSync(path)).toBe(true);
   });
 });

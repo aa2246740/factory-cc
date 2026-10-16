@@ -75,6 +75,7 @@ npm run verify:native-schema -- --summary evidence/new-schema.json
 npm run verify:native-policy -- --summary evidence/new-policy.json
 npm run verify:auxiliary -- --summary evidence/new-auxiliary.json
 node --import tsx scripts/verify-interactive.ts --help
+node --import tsx scripts/verify-interactive.ts --natural-generation-only evidence/new-natural-generation.json
 npm run verify:mission -- --summary evidence/new-mission.json
 ```
 

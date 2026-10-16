@@ -100,12 +100,12 @@ describe("Droid launch wrapper", () => {
     const { env, requests } = await control();
     const observedFile = join(directory, "observed.json");
     const script = join(directory, "droid.mjs");
-    writeFileSync(script, `import { writeFileSync } from 'node:fs'; writeFileSync(process.argv[2], JSON.stringify({args:process.argv.slice(3), home:process.env.HOME, factory:process.env.FACTORY_HOME_OVERRIDE, launch:process.env.BRIDGE_FACTORY_LAUNCH_ID, airgap:process.env.FACTORY_AIRGAP_ENABLED, hasFactoryKey:!!process.env.FACTORY_API_KEY, hasAdminToken:!!process.env.BRIDGE_ADMIN_TOKEN}));`);
+    writeFileSync(script, `import { writeFileSync } from 'node:fs'; writeFileSync(process.argv[2], JSON.stringify({args:process.argv.slice(3), home:process.env.HOME, factory:process.env.FACTORY_HOME_OVERRIDE, launch:process.env.BRIDGE_FACTORY_LAUNCH_ID, airgap:process.env.FACTORY_AIRGAP_ENABLED, hasFactoryKey:!!process.env.FACTORY_API_KEY, hasAdminToken:!!process.env.BRIDGE_ADMIN_TOKEN, hasBinding:process.env.BRIDGE_FACTORY_BINDING!==undefined}));`);
     const code = await runDroid(["--home", directory, "--cwd", directory, "--airgap", "1", "--", script, observedFile, "--settings", '{"key":"literal"}', "--auto", "low"], {
-      env: { ...env, HOME: "/original/home-not-read", FACTORY_API_KEY: "unused-real-login-marker" }, stdio: "ignore", handleProcessSignals: false,
+      env: { ...env, HOME: "/original/home-not-read", FACTORY_API_KEY: "unused-real-login-marker", BRIDGE_FACTORY_BINDING: "stale-parent-binding", BRIDGE_FACTORY_LAUNCH_ID: "stale-parent-launch" }, stdio: "ignore", handleProcessSignals: false,
     });
     expect(code).toBe(0);
-    expect(JSON.parse(readFileSync(observedFile, "utf8"))).toEqual({ args: ["--settings", '{"key":"literal"}', "--auto", "low"], home: "/original/home-not-read", factory: directory, launch: "owned-launch", airgap: "1", hasFactoryKey: false, hasAdminToken: false });
+    expect(JSON.parse(readFileSync(observedFile, "utf8"))).toEqual({ args: ["--settings", '{"key":"literal"}', "--auto", "low"], home: "/original/home-not-read", factory: directory, launch: "owned-launch", airgap: "1", hasFactoryKey: false, hasAdminToken: false, hasBinding: false });
     expect(requests).toEqual([
       { path: "/internal/launches", body: { cwd: directory }, authenticated: true },
       { path: "/internal/launches/owned-launch/end", body: {}, authenticated: true },

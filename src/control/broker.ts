@@ -185,6 +185,20 @@ export class ControlBroker implements RuntimeControl {
     const cwd = canonicalWorkspacePath(event.cwd);
     const key = `${cwd}\0${event.session_id}`;
     let host = this.hosts.get(key);
+    if (event.hook_event_name === "SessionEnd" && token === undefined && launchId !== undefined) {
+      // Factory's interactive client emits SessionEnd outside the agent scope
+      // that loaded CLAUDE_ENV_FILE. Only the authenticated wrapper launch may
+      // identify that exact session, and only when its generation is unique.
+      const launch = typeof launchId === "string" ? this.launches.get(launchId) : undefined;
+      if (!launch || launch.cwd !== cwd) throw new BridgeError(409, "invalid_host_launch", "Factory client SessionEnd requires its registered wrapper launch and workspace.");
+      const owned = [...launch.hosts].filter((candidate) => candidate.sessionId === event.session_id && candidate.cwd === cwd);
+      if (!owned.length) throw new BridgeError(409, "host_not_registered", "Factory session is not registered under this wrapper launch.");
+      if (owned.length !== 1) throw new BridgeError(409, "ambiguous_host_generation", "Factory client SessionEnd cannot identify a reused session generation without its binding.");
+      // An old launch's late acknowledgement must never select a newer host
+      // from the global session map, even when the Factory session ID matches.
+      host = owned[0]!;
+      token = host.token;
+    }
     if (!host && event.hook_event_name === "SessionEnd" && typeof token === "string") {
       const owned = this.tokens.get(token);
       // Once an alias becomes dangling, realpath cannot recover its old target.
