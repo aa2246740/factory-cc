@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-10-16T03:34:11.455172+00:00",
+  "captureMethod": "Unedited Chromium page.screenshot PNGs. Droid images render the single live PTY original ANSI bytes via SSE into xterm.js; the helper header explicitly identifies the live terminal. Control image is the actual product /control page before an actual Playwright locator.click on Allow once. Diagnostic image is Chromium native JSON viewer, Pretty-print checkbox clicked, showing the actual authenticated /internal/runtime response. No image generation, mock UI, reconstructed content or image editing.",
+  "runEvidenceDirectory": "evidence/local/local-files-2026-10-16T03-29-49-809Z-cc05fa",
+  "nativeSessionId": "05c59482-a290-4382-a899-ad4634325cf1",
+  "browserApproval": {
+    "at": "2026-10-16T03:31:04.776Z",
+    "op": "approve",
+    "tool": "Write",
+    "status": 200,
+    "matched": "result.json"
+  },
+  "screenshots": [
+    {
+      "at": "2026-10-16T03:30:27.542Z",
+      "name": "01-droid-model-menu",
+      "bytes": 75635,
+      "sha256": "3d7ae9e831b5ca6fc28547a90a5adf9626f131ae4b0d8679d7b5d9b0d1a92e0e",
+      "url": "http://127.0.0.1:39409/",
+      "rawBytes": 175741,
+      "rawSha256": "1c0b3ac0af628dbe69787ec44013f3eeb8cba3fce1c3b165bf3f77f0254e2f22",
+      "path": "evidence/droid-local-files-2026-10-16/01-droid-model-menu.png"
+    },
+    {
+      "at": "2026-10-16T03:31:04.747Z",
+      "name": "03-native-write-approval",
+      "bytes": 94929,
+      "sha256": "7670667cb97fde2f1d7a2d2816a6ac9ace7b86bdb0fe72df67b7e95a16be156d",
+      "url": "http://127.0.0.1:38191/control",
+      "rawBytes": 438202,
+      "rawSha256": "f91d89a9a351a7fad8b3feeaa4c16922d7f6e3269a3710727a785477f9ab693f",
+      "path": "evidence/droid-local-files-2026-10-16/03-native-write-approval.png"
+    },
+    {
+      "at": "2026-10-16T03:32:48.076Z",
+      "name": "05-droid-read-write-complete",
+      "bytes": 140694,
+      "sha256": "6a8781368fcf976d0fc946b88c2edf1609b52b5b8f8bb51acba56820e03c1491",
+      "url": "http://127.0.0.1:39409/",
+      "rawBytes": 628764,
+      "rawSha256": "d3da46328d5cb6c7a7acd45221b86377f41d096fabfcbafbe0bbf64cf0a333f1",
+      "path": "evidence/droid-local-files-2026-10-16/05-droid-read-write-complete.png"
+    },
+    {
+      "at": "2026-10-16T03:32:16.333Z",
+      "name": "04b-runtime-upstream-pretty",
+      "url": "http://127.0.0.1:38191/internal/runtime",
+      "sha256": "2d0c13500b7253005291d2461678e63b2c5e12b9633cb10c2bc1d56430ad3d02",
+      "method": "Actual Chromium JSON viewer Pretty-print checkbox click",
+      "path": "evidence/droid-local-files-2026-10-16/04b-runtime-upstream-pretty.png",
+      "bytes": 71403
+    }
+  ],
+  "privacy": {
+    "tokenInputsEmptyBeforeCapture": true,
+    "rawTerminalScannedForKeyAndBinding": true,
+    "allPublishedScreenshotsVisuallyReviewed": true,
+    "privateControllerFileRemoved": true
+  },
+  "captureProcessCleanup": {
+    "observedProcessCount": 12,
+    "remainingProcessIds": [],
+    "complete": true
+  },
+  "scope": "Visual proof of this one real /model menu and native Read/Write invocation. Functional correctness and Droid cleanup are independently verified by the interactive run report; these screenshots do not establish coverage of every Factory feature."
+}

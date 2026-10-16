@@ -1,0 +1,224 @@
+{
+  "status": "PASS_SCOPED_NATIVE_FILE_OPERATION",
+  "recordedAt": "2026-10-16T03:37:50.771Z",
+  "scope": "Offline independent recheck of one real official Droid/Claude Code native Read→approved Write run and normal /exit. No second model run. Does not establish Mission or all-model coverage.",
+  "originalObserver": {
+    "path": "evidence/local-file-operation-validation-2026-10-16.json",
+    "preservedStatus": "FAIL",
+    "preservedError": "fetch failed",
+    "findings": [
+      "PTY action sent the complete prompt, but the actual user prompt after leaving /model lacks its first character. The exact-string observer therefore kept waiting after the real task completed. The precise origin of the dropped character is not independently established.",
+      "Normal /exit was sent directly after screenshots. The still-waiting observer then received fetch failed because the production Bridge had closed.",
+      "A further, unexecuted observer assertion used nonexistent SessionRecord.cwd. This recheck binds actual native JSONL cwd to the same SDK session and SessionRecord.factoryCwd without fallback."
+    ]
+  },
+  "project": "/workspace/work/factory-cc-prep/work/relay-file-demo-5bL6u4/project",
+  "requestedPrompt": "读取当前项目的 input.json，保持 nonce 原样，将 numbers 求和，把只有 nonce 和 sum 两个字段的 JSON 写入当前项目 result.json。不要修改其他文件。请直接使用 Read 和 Write 文件工具，不调用其他代理。完成后用中文报告实际工作目录和结果。",
+  "actualPrompt": "取当前项目的 input.json，保持 nonce 原样，将 numbers 求和，把只有 nonce 和 sum 两个字段的 JSON 写入当前项目 result.json。不要修改其他文件。请直接使用 Read 和 Write 文件工具，不调用其他代理。完成后用中文报告实际工作目录和结果。",
+  "expected": {
+    "nonce": "a1a18cb5a68f39fb8d7b8577",
+    "sum": 56
+  },
+  "independentDiskResult": {
+    "nonce": "a1a18cb5a68f39fb8d7b8577",
+    "sum": 56
+  },
+  "session": {
+    "bridgeSessionId": "sess_466a6306-b8bb-475b-9a77-6145ab0a5ffb",
+    "nativeSdkSessionId": "05c59482-a290-4382-a899-ad4634325cf1",
+    "factorySessionId": "0fa7c256-02e1-4b18-821a-fc3dd4a54cfe",
+    "factoryCwd": "/workspace/work/factory-cc-prep/work/relay-file-demo-5bL6u4/project",
+    "nativeCwd": "/workspace/work/factory-cc-prep/work/relay-file-demo-5bL6u4/project"
+  },
+  "nativeToolProof": {
+    "readCall": {
+      "type": "tool_use",
+      "id": "call_d155e68b0ee64dd5855b92c3",
+      "name": "Read",
+      "input": {
+        "file_path": "/workspace/work/factory-cc-prep/work/relay-file-demo-5bL6u4/project/input.json"
+      }
+    },
+    "readResult": {
+      "tool_use_id": "call_d155e68b0ee64dd5855b92c3",
+      "type": "tool_result",
+      "content": "1\t{\n2\t  \"nonce\": \"a1a18cb5a68f39fb8d7b8577\",\n3\t  \"numbers\": [\n4\t    17,\n5\t    31,\n6\t    8\n7\t  ]\n8\t}"
+    },
+    "writeCall": {
+      "type": "tool_use",
+      "id": "call_ba45151d11f94802aaecff1b",
+      "name": "Write",
+      "input": {
+        "file_path": "/workspace/work/factory-cc-prep/work/relay-file-demo-5bL6u4/project/result.json",
+        "content": "{\n  \"nonce\": \"a1a18cb5a68f39fb8d7b8577\",\n  \"sum\": 56\n}\n"
+      }
+    },
+    "writeResult": {
+      "tool_use_id": "call_ba45151d11f94802aaecff1b",
+      "type": "tool_result",
+      "content": "File created successfully at: /workspace/work/factory-cc-prep/work/relay-file-demo-5bL6u4/project/result.json (file state is current in your context — no need to Read it back)"
+    },
+    "finalText": "已完成。\n\n- 实际工作目录:`/workspace/work/factory-cc-prep/work/relay-file-demo-5bL6u4/project`\n- 结果：已创建 `result.json`,仅包含两个字段：\n  - `nonce`:`\"a1a18cb5a68f39fb8d7b8577\"`(保持原样)\n  - `sum`:`56`(17 + 31 + 8)\n\n未修改其他文件。"
+  },
+  "approvalProof": {
+    "observed": {
+      "bridgeSessionId": "sess_466a6306-b8bb-475b-9a77-6145ab0a5ffb",
+      "sdkSessionId": "05c59482-a290-4382-a899-ad4634325cf1",
+      "toolName": "Write",
+      "input": {
+        "file_path": "/workspace/work/factory-cc-prep/work/relay-file-demo-5bL6u4/project/result.json",
+        "content": "{\n  \"nonce\": \"a1a18cb5a68f39fb8d7b8577\",\n  \"sum\": 56\n}\n"
+      },
+      "toolUseId": "call_ba45151d11f94802aaecff1b",
+      "requestId": "4e56ad30-6f7c-421c-83fc-b6b2160f6af9",
+      "description": "result.json",
+      "id": "32fb078a-dff4-4841-87b4-77ede5e0b4ab",
+      "createdAt": "2026-10-16T03:31:01.283Z",
+      "expiresAt": "2026-10-16T03:41:01.283Z"
+    },
+    "browser": {
+      "at": "2026-10-16T03:31:04.776Z",
+      "op": "approve",
+      "tool": "Write",
+      "status": 200,
+      "matched": "result.json"
+    },
+    "captureManifest": "evidence/droid-local-files-2026-10-16/capture-manifest.json"
+  },
+  "auxiliaryToolGuard": {
+    "requestIndex": 0,
+    "bridgeSessionId": "sess_826d6ae9-d91c-47da-8d9b-40db188bf2c7",
+    "nativeSdkSessionId": "406e7089-ab35-4315-989d-323a8f31ba7f",
+    "advertisedToolNames": [],
+    "attemptedRead": {
+      "type": "tool_use",
+      "id": "call_f430c8c6b2dd44a19a4fa277",
+      "name": "Read",
+      "input": {
+        "file_path": "/workspace/work/factory-cc-prep/work/relay-file-demo-5bL6u4/project/input.json"
+      }
+    },
+    "denial": {
+      "type": "tool_result",
+      "content": "PreToolUse:Read hook error: BRIDGE_HOST_TOOL_ACCESS_NONE: This host request permits no tools. Answer using the supplied conversation only.",
+      "is_error": true,
+      "tool_use_id": "call_f430c8c6b2dd44a19a4fa277"
+    },
+    "scope": "This auxiliary Read was rejected before file access; its tool_use is not a successful file read."
+  },
+  "checks": {
+    "actualMainPromptBoundToObservedSdkSession": true,
+    "randomNonceAbsentFromInitialPrompt": true,
+    "readCallAndSuccessfulResultPaired": true,
+    "readResultContainsOriginalRandomFixture": true,
+    "writeAfterActualRead": true,
+    "writeInputCorrect": true,
+    "successfulWriteResultPaired": true,
+    "independentDiskResultCorrect": true,
+    "exactlyNativeReadAndWriteInMainTurn": true,
+    "writeApprovalMatchesExactToolCall": true,
+    "actualBrowserApproveSucceeded": true,
+    "nativeCwdMatchesProject": true,
+    "factoryCwdMatchesSameSdkSession": true,
+    "finalAnswerReportsActualDirectoryAndResult": true,
+    "authenticatedMainBridgeRequestIsRelayChat": true,
+    "actualUpstreamAndAskPermissions": true,
+    "auxiliaryToolAttemptBlocked": true,
+    "runtimeIdleAndHealthy": true,
+    "normalInteractiveExit": true,
+    "matchingFactorySessionEndAccepted": true,
+    "terminalLifecycleDeliverySucceeded": true,
+    "allOwnedProcessesExitedWithoutForcedCleanup": true,
+    "ownedStateAndProjectRemoved": true,
+    "bridgeListenerClosed": true,
+    "upstreamKeyNotWritten": true,
+    "testedProductSourcesUnchanged": true,
+    "screenshotFilesAndOriginalPtyHashesMatch": true
+  },
+  "terminalLifecycle": {
+    "status": "PASS",
+    "failures": [],
+    "reservedFailureMessages": []
+  },
+  "ptyExit": {
+    "exitStatus": 0,
+    "signalStatus": null
+  },
+  "processCleanup": {
+    "supported": true,
+    "observedProcessCount": 23,
+    "terminatedProcessCount": 0,
+    "remainingProcessIds": [],
+    "complete": true
+  },
+  "credentialPrivacy": {
+    "scannedFiles": 56,
+    "upstreamKeyHits": 0,
+    "upstreamKeyNeverWritten": true
+  },
+  "currentSourceHashes": {
+    "scripts/local.ts": "30160c5472172361ed59c7fc3e865ccbbcf0f7430a757711ed897dead7dc23c3",
+    "scripts/run-droid.ts": "3e93f7d95d74d3e8dd160a4ba1008f5b1e40b7320acff9191f531bc624d348f5",
+    "scripts/configure-droid.ts": "832af1a8c1fb453fa1029c46ad062109247113bf6839583c68af6314056ca336",
+    "scripts/generate-droid.ts": "ffb141601f5220819bd39ab158322cb2b9460fdf981d3e1f2e39b0b021c4c5d1",
+    "src/control/factory-hooks.ts": "0581a23488cf28615a8a124993784ff90914023ed0fd9b14f11b99d832a4f903",
+    "src/control/broker.ts": "6ffdcb56a44408efdd136b0351ac32e3e7cba627fb9ae2fc5e28f0a8f639296c",
+    "src/http/app.ts": "ddaa45796f4c1a34f828649f29010e86bb90cd8889c97d4356cee1ac2017a1af",
+    "src/runtime/sdk-runtime.ts": "c7cd71b704c15d3b6316cd1aa4168cb6abc310afbe22a4702773dbd79d8554ac"
+  },
+  "screenshotChecks": [
+    {
+      "path": "evidence/droid-local-files-2026-10-16/01-droid-model-menu.png",
+      "pngHashMatches": true,
+      "originalPtyPrefixHashMatches": true
+    },
+    {
+      "path": "evidence/droid-local-files-2026-10-16/03-native-write-approval.png",
+      "pngHashMatches": true,
+      "originalPtyPrefixHashMatches": true
+    },
+    {
+      "path": "evidence/droid-local-files-2026-10-16/05-droid-read-write-complete.png",
+      "pngHashMatches": true,
+      "originalPtyPrefixHashMatches": true
+    },
+    {
+      "path": "evidence/droid-local-files-2026-10-16/04b-runtime-upstream-pretty.png",
+      "pngHashMatches": true
+    }
+  ],
+  "sourceArtifacts": [
+    {
+      "path": "evidence/local/local-files-2026-10-16T03-29-49-809Z-cc05fa/native-proof.json",
+      "sha256": "69f66e96ed2b26951bbdca3ca79d2e492822d716678070cc28b51b9d306659d4"
+    },
+    {
+      "path": "evidence/local/local-files-2026-10-16T03-29-49-809Z-cc05fa/request-proof.json",
+      "sha256": "396c4c4971a0454bbdf1624af56fc75ccacaf51c9b8f209315f5da7f076240b8"
+    },
+    {
+      "path": "evidence/local/local-files-2026-10-16T03-29-49-809Z-cc05fa/sessions-after-operation.json",
+      "sha256": "975322bfd3055da93e39b46b94772f82c0bc8d9d73aa61d08789b4262460915f"
+    },
+    {
+      "path": "evidence/local/local-files-2026-10-16T03-29-49-809Z-cc05fa/runtime-after-operation.json",
+      "sha256": "6fc6c98e0e4fe5e3defdd0d39c016f993502d7ef9e2f7baeafbdaa5a75c9598e"
+    },
+    {
+      "path": "evidence/local/local-files-2026-10-16T03-29-49-809Z-cc05fa/disk-result.json",
+      "sha256": "7b536f3d8baf2b11158f0602fab46ec23036ec419b95a44e595f2537f9d7d971"
+    },
+    {
+      "path": "evidence/local/local-files-2026-10-16T03-29-49-809Z-cc05fa/observed-approvals.json",
+      "sha256": "5a8915e377c43c15b53fd36c2583a343d15077fc142a2853adbbad2db27ea68f"
+    },
+    {
+      "path": "evidence/local/local-files-2026-10-16T03-29-49-809Z-cc05fa/host-events.json",
+      "sha256": "ee360962014a3cd536c8575b6c038c684eeecf84314cb38005014f5ccca8c94d"
+    },
+    {
+      "path": "evidence/local/local-files-2026-10-16T03-29-49-809Z-cc05fa/pty-state.json",
+      "sha256": "c68eee3b8fcd40db6f047ae707ea9805021f2cea568ea0cb206ac61aef642943"
+    }
+  ]
+}

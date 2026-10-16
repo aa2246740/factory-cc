@@ -1,0 +1,102 @@
+{
+  "suite": "real-local-file-operation-with-screenshots",
+  "status": "FAIL",
+  "evidence": "/workspace/work/factory-cc-prep/repo/evidence/local/local-files-2026-10-16T03-29-49-809Z-cc05fa",
+  "startedAt": "2026-10-16T03:29:49.815Z",
+  "authentication": {
+    "endpoint": "https://open.bigmodel.cn/api/anthropic",
+    "model": "glm-5.2",
+    "keyVariable": "READINESS_MODEL_API_KEY",
+    "readiness": "current and ready",
+    "subscriptionCredentialsRead": false
+  },
+  "sourceHashesAtStart": {
+    "scripts/local.ts": "30160c5472172361ed59c7fc3e865ccbbcf0f7430a757711ed897dead7dc23c3",
+    "scripts/run-droid.ts": "3e93f7d95d74d3e8dd160a4ba1008f5b1e40b7320acff9191f531bc624d348f5",
+    "scripts/configure-droid.ts": "832af1a8c1fb453fa1029c46ad062109247113bf6839583c68af6314056ca336",
+    "scripts/generate-droid.ts": "ffb141601f5220819bd39ab158322cb2b9460fdf981d3e1f2e39b0b021c4c5d1",
+    "src/control/factory-hooks.ts": "0581a23488cf28615a8a124993784ff90914023ed0fd9b14f11b99d832a4f903",
+    "src/control/broker.ts": "6ffdcb56a44408efdd136b0351ac32e3e7cba627fb9ae2fc5e28f0a8f639296c",
+    "src/http/app.ts": "ddaa45796f4c1a34f828649f29010e86bb90cd8889c97d4356cee1ac2017a1af",
+    "src/runtime/sdk-runtime.ts": "c7cd71b704c15d3b6316cd1aa4168cb6abc310afbe22a4702773dbd79d8554ac"
+  },
+  "scope": "Official CLI PTY /model view then real native Read/Write under ask permissions, browser Control approval, production hooks and exit. No Mission execution.",
+  "command": [
+    "npm",
+    "run",
+    "local",
+    "--",
+    "/workspace/work/factory-cc-prep/work/relay-file-demo-5bL6u4/project",
+    "--base-url",
+    "https://open.bigmodel.cn/api/anthropic",
+    "--model",
+    "glm-5.2",
+    "--key-env",
+    "READINESS_MODEL_API_KEY"
+  ],
+  "startup": {
+    "missionOrchestratorModel": "custom:Relay-Orchestrator-0",
+    "missionModelSettings": {
+      "workerModel": "custom:Relay-Worker-0",
+      "validationWorkerModel": "custom:Relay-Validator-0",
+      "skipScrutiny": false,
+      "skipUserTesting": false
+    },
+    "automaticallyInstalledCommand": true,
+    "automaticallyInstalledSkill": true,
+    "hooksPresent": true,
+    "adminTokenPermissions": "600",
+    "settingsPermissions": "600",
+    "runtime": {
+      "kind": "sdk",
+      "authMode": "byok",
+      "permissionMode": "ask",
+      "prompt": {
+        "systemPrompt": "preset:claude_code + stable append",
+        "dynamicPlacement": "user input on initial turn or context change",
+        "tools": "preset:claude_code built-ins + Droid-exclusive MCP"
+      },
+      "tools": "preset:claude_code + droid-exclusive MCP",
+      "input": "persistent SDK streaming input",
+      "includePartialMessages": true,
+      "approvalChannel": "external controller",
+      "activeNativeSessions": 0,
+      "activeNativeTurns": 0,
+      "pendingHostCalls": 0,
+      "pendingApprovals": 0,
+      "fatalErrors": [],
+      "overridesAnthropicEnv": true,
+      "upstream": {
+        "selected": false,
+        "authMode": "byok"
+      },
+      "control": {
+        "pendingApprovals": 0,
+        "failures": [],
+        "activeHostSessions": 0,
+        "boundNativeSessions": 0
+      }
+    }
+  },
+  "prompt": "读取当前项目的 input.json，保持 nonce 原样，将 numbers 求和，把只有 nonce 和 sum 两个字段的 JSON 写入当前项目 result.json。不要修改其他文件。请直接使用 Read 和 Write 文件工具，不调用其他代理。完成后用中文报告实际工作目录和结果。",
+  "expected": {
+    "nonce": "a1a18cb5a68f39fb8d7b8577",
+    "sum": 56
+  },
+  "error": "fetch failed",
+  "credentialPrivacy": {
+    "scannedFiles": 56,
+    "upstreamKeyHits": 0,
+    "upstreamKeyNeverWritten": true
+  },
+  "processCleanup": {
+    "supported": true,
+    "observedProcessCount": 23,
+    "terminatedProcessCount": 0,
+    "remainingProcessIds": [],
+    "complete": true
+  },
+  "removedOwnedState": true,
+  "removedOwnedProject": true,
+  "finishedAt": "2026-10-16T03:33:46.119Z"
+}

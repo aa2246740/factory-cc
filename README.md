@@ -19,11 +19,17 @@ npm run local -- /你的项目路径
 
 这一个命令会启动 Bridge，配置独立的 Droid 数据目录、聊天和 Mission 各角色模型，安装生命周期 hooks 和 `relay-droid` skill。以后继续运行 `npm run local -- /你的项目路径` 即可。退出 Droid 时会停止本次服务并移除自己的 hooks，保留项目原有 hooks。
 
+当前入口仍由这个项目参数固定工作目录；Droid hook 报告的目录用于核对会话归属，尚未实现全局安装后自动跟随 Droid 的项目目录。
+
+`/model` 中的 Relay Chat、Orchestrator、Worker、Validator、Probe 是角色通道，共用启动时选定的一个 BYOK 模型。它们不是五个不同的模型，也不会自动读取 Claude Code 的模型列表。目前可通过启动参数 `--model <模型ID>` 更换上游；同一会话中自由切换不同上游模型尚未实现。本入口已实测 GLM-5.2，不能据此宣称 Sonnet、Opus 或其它模型已验证。
+
 需要允许原生工具操作时，打开启动时显示的控制页；管理员令牌保存在同时显示的私有文件中。默认仍逐次审批。接口地址和模型可记住，上游 Key 不落盘；不会使用你的 Claude 订阅登录。
 
 更多参数见 `npm run local -- --help`。首次不需要手工修改下面的环境变量或 settings。
 
 [入口实测记录](evidence/local-entry-validation-2026-10-16-r2.json)：真实 Linux PTY 从该命令启动、自动选择 Relay Chat、GLM BYOK 对话和正常退出均通过；本轮只核对 Mission 角色配置，没有重新运行完整 Mission。
+
+[查看真实截图与文件读写验收](docs/LOCAL-VISUAL-PROOF.md)：包含 Droid 模型菜单、Claude Code 原生 Write 审批、磁盘结果和实际 BYOK 上游；同时说明当前目录与模型选择的边界。
 
 ## 手工运行与诊断
 
