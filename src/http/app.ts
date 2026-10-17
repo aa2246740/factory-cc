@@ -1,9 +1,9 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import { appendFileSync, mkdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { BridgeConfig } from "../config.js";
-import type { Logger } from "../logging.js";
+import { appendLogLine, type Logger } from "../logging.js";
 import { parseMessagesRequest } from "../protocol/validate.js";
 import { apiError } from "../protocol/messages.js";
 import { explicitSessionId, historyMessageHashes, historyPrefixHash, resolveSession, roleFromHeaders, sessionContextHash } from "../sessions/correlate.js";
@@ -125,7 +125,7 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
       const envelope = await readJson(req, config.maxBodyBytes);
       const result = await control.hostEvent(envelope);
       const event = (envelope as { event?: Record<string, unknown> }).event;
-      appendFileSync(join(config.logDir, "host-events.jsonl"), `${JSON.stringify({ at: new Date().toISOString(), eventId: (envelope as { eventId?: string }).eventId, hook: event?.hook_event_name, hostSessionId: event?.session_id, toolName: event?.tool_name, matched: result.matched, ended: result.ended, sessions: result.sessions })}\n`);
+      appendLogLine(join(config.logDir, "host-events.jsonl"), JSON.stringify({ at: new Date().toISOString(), eventId: (envelope as { eventId?: string }).eventId, hook: event?.hook_event_name, hostSessionId: event?.session_id, toolName: event?.tool_name, matched: result.matched, ended: result.ended, sessions: result.sessions }));
       json(res, 200, result);
       return;
     }
@@ -197,7 +197,8 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
       throw error;
     }
 
-    const raw = await readJson(req, config.maxBodyBytes);
+    const rawBody = await readBody(req, config.maxBodyBytes);
+    const raw = parseJsonBody(rawBody);
     if (res.destroyed || req.aborted) return;
     // Shutdown may begin while an already accepted request is uploading its
     // body. Such requests must not create an SDK query after runtime.close().
@@ -333,9 +334,13 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
         messageCount: request.messages.length,
         notes: [resolved.reason],
       });
-      appendFileSync(
+      // Message text and prompts stay out of the log unless the operator opts in.
+      const loggedBody = config.logBodies
+        ? redactJson(raw)
+        : { sha256: createHash("sha256").update(rawBody).digest("hex"), bytes: rawBody.length, toolNames: (request.tools ?? []).map((t) => t.name) };
+      appendLogLine(
         requestLog,
-        `${JSON.stringify({ at: new Date().toISOString(), path: "/v1/messages", headers: redactHeaders(headers as Record<string, string | string[] | undefined>), body: redactJson(raw), session: sessionId })}\n`,
+        JSON.stringify({ at: new Date().toISOString(), path: "/v1/messages", headers: redactHeaders(headers as Record<string, string | string[] | undefined>), body: loggedBody, session: sessionId }),
       );
       res.setHeader("X-Bridge-Session", sessionId);
       res.setHeader("X-Bridge-Role", role);
@@ -359,7 +364,7 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
         usage: { ...turn.response.usage, estimated: turn.response.usage.estimated ?? false },
       });
       store.setState(sessionId, turn.pendingToolIds.length ? "WAITING_DROID_TOOL" : "IDLE");
-      appendFileSync(turnLog, `${JSON.stringify(redactJson({
+      appendLogLine(turnLog, JSON.stringify(redactJson({
         at: new Date().toISOString(),
         session: sessionId,
         sdkSessionId: turn.sdkSessionId ?? session.sdkSessionId,
@@ -368,7 +373,7 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
         sdkBillingUsage: turn.sdkBillingUsage,
         compactMetadata: turn.compactMetadata,
         events: (turn.events ?? []).filter((event) => /usage|compact/i.test(event.type)),
-      }))}\n`);
+      })));
       completed = true;
       if (writer) writer.finish(turn.response);
       else json(res, 200, turn.response);
@@ -512,7 +517,7 @@ export function listen(app: BridgeApp, config: BridgeConfig): Promise<BridgeApp>
   });
 }
 
-async function readJson(req: IncomingMessage, max: number): Promise<unknown> {
+async function readBody(req: IncomingMessage, max: number): Promise<Buffer> {
   const chunks: Buffer[] = [];
   let size = 0;
   for await (const chunk of req) {
@@ -521,9 +526,17 @@ async function readJson(req: IncomingMessage, max: number): Promise<unknown> {
     assertBodySize(size, max);
     chunks.push(buf);
   }
-  if (size === 0) return {};
-  try { return JSON.parse(Buffer.concat(chunks).toString("utf8")); }
+  return Buffer.concat(chunks);
+}
+
+function parseJsonBody(body: Buffer): unknown {
+  if (body.length === 0) return {};
+  try { return JSON.parse(body.toString("utf8")); }
   catch { throw new BridgeError(400, "invalid_request_error", "Request body must contain valid JSON."); }
+}
+
+async function readJson(req: IncomingMessage, max: number): Promise<unknown> {
+  return parseJsonBody(await readBody(req, max));
 }
 
 function duration(ms: number): string {

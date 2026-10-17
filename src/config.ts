@@ -33,6 +33,8 @@ export interface BridgeConfig {
   claudeExecutable?: string;
   sdkCwd: string;
   persistSessions: boolean;
+  /** Write full request bodies to the request log. Off by default: only a hash, size and tool names. */
+  logBodies: boolean;
   authMode: AuthMode;
   permissionMode: "bypass" | "ask";
   upstreamBaseUrl?: string;
@@ -125,6 +127,7 @@ export function loadConfig(overrides: Partial<BridgeConfig> = {}): BridgeConfig 
     claudeExecutable: overrides.claudeExecutable ?? env("BRIDGE_CLAUDE_EXECUTABLE"),
     sdkCwd: canonicalWorkspacePath(overrides.sdkCwd ?? env("BRIDGE_SDK_CWD", resolve(dataDir, "sandbox"))!),
     persistSessions: overrides.persistSessions ?? env("BRIDGE_PERSIST", "1") !== "0",
+    logBodies: overrides.logBodies ?? env("BRIDGE_LOG_BODIES") === "1",
     authMode,
     permissionMode,
     upstreamBaseUrl: overrides.upstreamBaseUrl ?? env("BRIDGE_UPSTREAM_BASE_URL"),

@@ -1,4 +1,4 @@
-import { appendFileSync, mkdirSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { isAbsolute, join } from "node:path";
 import { canonicalWorkspacePath } from "../workspace.js";
@@ -8,7 +8,7 @@ import { ToolMailbox } from "../relay/mailbox.js";
 import type { BridgeConfig } from "../config.js";
 import type { ContentBlock, Json, Usage } from "../types.js";
 import { BridgeError } from "../types.js";
-import type { Logger } from "../logging.js";
+import { appendLogLine, type Logger } from "../logging.js";
 import { claudeToolTraceDetail, isDroidMcpName, selectDroidMcpTools } from "./droid-tools.js";
 import { DroidMcpCatalog, StableDroidToolNames } from "./droid-mcp-catalog.js";
 import { hostAllowsAnyTools, nativeToolAllowed } from "./native-tool-policy.js";
@@ -1089,7 +1089,7 @@ export class SdkRuntime implements BridgeRuntime {
     if (!event) return;
     const data = { ...event, sessionId: live.current?.session.bridgeSessionId, sdkSessionId: live.sdkSessionId };
     mkdirSync(this.config.logDir, { recursive: true });
-    appendFileSync(this.usageFile, `${JSON.stringify({ at: now(), ...data })}\n`);
+    appendLogLine(this.usageFile, JSON.stringify({ at: now(), ...data }));
     live.events.push({ at: now(), type: "usage", data });
   }
 

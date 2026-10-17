@@ -117,6 +117,8 @@ npm run configure-hooks -- --hooks "$PROJECT/.factory/hooks.json" --config "$PWD
 
 `BRIDGE_REQUEST_TIMEOUT_MS`（默认 10 分钟）现在是**空闲**期限，不再是单次响应的绝对期限：每条 SDK 消息、文本增量或工具事件都会重新计时，只有持续没有进展才超时；等待控制页审批期间暂停计时，审批自己的期限是 `BRIDGE_APPROVAL_TIMEOUT_MS`（默认 30 分钟）。另有绝对上限 `BRIDGE_TURN_MAX_MS`（默认 2 小时）。超时先调用 SDK `interrupt()`：5 秒内收尾则会话回到 IDLE 并可续接，否则标记 FAILED 并终止进程。流式响应立即发送 `message_start`，之后每 15 秒发送一次 `event: ping`。注意：原生工具若长时间既不输出也不结束（例如跑超过 10 分钟的测试），同样算空闲，需要时调大该值。会话停在外部工具往返上、Droid 一直没有回传结果时，空闲 30 分钟后过期（`BRIDGE_TOOL_WAIT_TIMEOUT_MS`；`BRIDGE_TOOL_WAIT_MS` 仍是单个工具 8 小时的绝对上限）。长时间不返回的 Mission 工具需要调大前者。过期、被取消或 Bridge 重启后，该会话标记为中断并释放名额，其工具调用不会重放；Droid 之后再回传同一个结果得到 409，新的文本消息则新建会话，并把此前历史作为参考导入。官方结束事件会提前释放会话，无需等计时器。
 
+日志在数据目录的 `logs/`，文件权限 `0600`，单个文件超过 50 MB 时轮转为 `.1`（只保留一代）。请求日志默认只记录请求体的 SHA-256、字节数和工具名，不含消息或提示词；需要完整请求体（已脱敏）时设置 `BRIDGE_LOG_BODIES=1`。
+
 在目标项目安装自定义 Agent 生成入口：
 
 ```bash
