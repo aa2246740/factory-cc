@@ -208,6 +208,8 @@ export class ControlBroker implements RuntimeControl {
     }
     if (event.hook_event_name === "SessionStart") {
       const launch = typeof launchId === "string" ? this.launches.get(launchId) : undefined;
+      // Once the bridge is serving wrapper launches, a start with no launch is an unrelated Droid session in the same project.
+      if (launchId === undefined && this.launches.size > 0) throw new BridgeError(409, "invalid_host_launch", "Factory SessionStart needs a wrapper launch; this session was not started by run-droid or local.");
       if (launchId !== undefined && (!launch || launch.ended || launch.cwd !== cwd)) throw new BridgeError(409, "invalid_host_launch", "Factory launch is unknown, ended or uses another workspace.");
       if (host && !host.ended && launchId !== host.launchId) throw new BridgeError(409, "conflicting_host_launch", "Factory session is already owned by another launch.");
       // Official compact/handoff SessionStart identifies its predecessor. Retire

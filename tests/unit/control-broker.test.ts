@@ -311,6 +311,17 @@ describe("authentic Factory lifecycle", () => {
     await expect(f.broker.hostEvent({ eventId: randomUUID(), event: f.event("SessionStart", { session_id: "late-child" }), launchId })).rejects.toMatchObject({ code: "invalid_host_launch" });
   });
 
+  it("rejects a launch-less SessionStart once a launch is registered, but accepts it while none is", async () => {
+    const f = fixture();
+    // No wrapper launch exists yet (plain hook-only deployments): unchanged behaviour.
+    expect(await f.send("SessionStart", undefined, { session_id: "before-any-launch" })).toMatchObject({ ok: true, bindingToken: expect.any(String) });
+    const { launchId } = f.broker.createLaunch({ cwd: f.dir });
+    await expect(f.send("SessionStart", undefined, { session_id: "unrelated-droid" })).rejects.toMatchObject({ code: "invalid_host_launch" });
+    expect(await f.broker.hostEvent({ eventId: randomUUID(), event: f.event("SessionStart", { session_id: "owned" }), launchId })).toMatchObject({ ok: true });
+    // The unrelated session left no registration to bind or end through.
+    await expect(f.send("PreToolUse", "a".repeat(64), { session_id: "unrelated-droid" })).rejects.toMatchObject({ code: "host_not_registered" });
+  });
+
   it("blocks late HTTP and new bindings while a host generation is draining", async () => {
     const f = fixture(); const start = await f.send("SessionStart"); const token = start.bindingToken as string;
     f.broker.bind(token, f.session());

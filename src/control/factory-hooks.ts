@@ -173,13 +173,10 @@ export async function forwardFactoryHook(
   throw new Error("Factory lifecycle event was not accepted by the bridge");
 }
 class HookRejectedError extends Error {}
-class MissingClientLaunchError extends Error {}
 
 /** Fixed diagnostics only: hook inputs, response bodies and errors may contain secrets. */
-export function factoryHookFailureMessage(error: unknown): string {
-  return error instanceof MissingClientLaunchError
-    ? "Factory SessionEnd has no agent binding or wrapper launch; start interactive Droid with npm run run-droid so its lifecycle can be authenticated."
-    : "Factory lifecycle bridge unavailable; event delivery failed.";
+export function factoryHookFailureMessage(_error: unknown): string {
+  return "Factory lifecycle bridge unavailable; event delivery failed.";
 }
 
 /** Factory loads this official SessionStart environment file for later hooks. */
@@ -193,7 +190,11 @@ export function persistFactoryBinding(event: unknown, bindingToken: string): voi
   finally { closeSync(fd); }
 }
 
-export async function factoryHookMain(argv = process.argv.slice(2)): Promise<void> {
+export async function factoryHookMain(argv = process.argv.slice(2), env: NodeJS.ProcessEnv = process.env): Promise<void> {
+  // Project hooks fire for every Droid session in the project. Only a Droid started by
+  // run-droid / local carries the launch ID; any other session must send nothing to the bridge.
+  const launchId = env.BRIDGE_FACTORY_LAUNCH_ID;
+  if (!launchId?.trim()) return;
   const index = argv.indexOf(CONFIG_FLAG);
   const path = index < 0 ? undefined : argv[index + 1];
   if (!path || !isAbsolute(path)) throw new Error("Factory hook requires an absolute private configuration path");
@@ -210,10 +211,8 @@ export async function factoryHookMain(argv = process.argv.slice(2)): Promise<voi
   }
   let event: unknown;
   try { event = JSON.parse(Buffer.concat(chunks).toString("utf8")); } catch { throw new Error("Invalid Factory lifecycle hook JSON"); }
-  const bindingToken = process.env.BRIDGE_FACTORY_BINDING;
-  const launchId = process.env.BRIDGE_FACTORY_LAUNCH_ID;
+  const bindingToken = env.BRIDGE_FACTORY_BINDING;
   const clientSessionEnd = object(event) && event.hook_event_name === "SessionEnd" && bindingToken === undefined;
-  if (clientSessionEnd && !launchId?.trim()) throw new MissingClientLaunchError();
   if (object(event) && event.hook_event_name !== "SessionStart" && !clientSessionEnd && (!bindingToken || !/^[a-f0-9]{64}$/.test(bindingToken))) {
     throw new Error("Factory lifecycle event has no SessionStart generation binding");
   }

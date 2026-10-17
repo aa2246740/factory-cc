@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createServer } from "node:http";
 import { spawn } from "node:child_process";
-import { FACTORY_HOOK_EVENTS, factoryHookEndpoint, forwardFactoryHook, installFactoryHooks, persistFactoryBinding, removeFactoryHooks } from "../../src/control/factory-hooks.js";
+import { FACTORY_HOOK_EVENTS, factoryHookEndpoint, factoryHookMain, forwardFactoryHook, installFactoryHooks, persistFactoryBinding, removeFactoryHooks } from "../../src/control/factory-hooks.js";
 
 const directories: string[] = [];
 afterEach(() => { for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true }); });
@@ -155,13 +155,26 @@ describe("Factory hook forwarding", () => {
       expect(await invoke("SessionEnd", "owned-launch")).toEqual({ code: 0, stderr: "" });
       expect(received).toHaveLength(1); expect(received[0]).toMatchObject({ launchId: "owned-launch", event: { hook_event_name: "SessionEnd" } });
       expect(received[0]).not.toHaveProperty("bindingToken");
-      expect(await invoke("SessionEnd")).toMatchObject({ code: 1, stderr: expect.stringContaining("npm run run-droid") });
+      // A Droid session not started by run-droid / local has no launch ID: the hook exits quietly and sends nothing.
+      for (const hook of ["SessionStart", "SessionEnd", "PostToolUse"]) expect(await invoke(hook)).toEqual({ code: 0, stderr: "" });
+      expect(await invoke("SessionEnd", "   ")).toEqual({ code: 0, stderr: "" });
+      expect(received).toHaveLength(1);
       expect(await invoke("SessionEnd", "owned-launch", "")).toMatchObject({ code: 1 });
       expect(await invoke("UserPromptSubmit", "owned-launch")).toMatchObject({ code: 1 });
       expect(received).toHaveLength(1);
     } finally {
       server.closeAllConnections(); await new Promise<void>((done) => server.close(() => done()));
     }
+  });
+
+  it("factoryHookMain sends nothing without a launch ID and does not even read its configuration", async () => {
+    const send = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ ok: true })));
+    vi.stubGlobal("fetch", send);
+    try {
+      await expect(factoryHookMain(["--factory-cc-hook-config", join(tmpdir(), "relay-missing-hook-config.json")], {})).resolves.toBeUndefined();
+      await expect(factoryHookMain(["--factory-cc-hook-config", join(tmpdir(), "relay-missing-hook-config.json")], { BRIDGE_FACTORY_LAUNCH_ID: "" })).resolves.toBeUndefined();
+    } finally { vi.unstubAllGlobals(); }
+    expect(send).not.toHaveBeenCalled();
   });
 
   it("never converts a response for another event into model context", async () => {
