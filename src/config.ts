@@ -24,7 +24,12 @@ export interface BridgeConfig {
   toolWaitMs: number;
   /** Idle expiry for a session parked on a Droid tool result. */
   toolWaitTimeoutMs: number;
+  /** Idle limit for one native turn. Any SDK message, delta or tool event restarts it; approvals pause it. */
   requestTimeoutMs: number;
+  /** How long a human has to answer an approval on the Control page. */
+  approvalTimeoutMs: number;
+  /** Absolute cap for one native turn, whatever progress it reports. */
+  turnMaxMs: number;
   claudeExecutable?: string;
   sdkCwd: string;
   persistSessions: boolean;
@@ -115,6 +120,8 @@ export function loadConfig(overrides: Partial<BridgeConfig> = {}): BridgeConfig 
     toolWaitMs: overrides.toolWaitMs ?? intEnv("BRIDGE_TOOL_WAIT_MS", 8 * 60 * 60 * 1000),
     toolWaitTimeoutMs: overrides.toolWaitTimeoutMs ?? intEnv("BRIDGE_TOOL_WAIT_TIMEOUT_MS", 30 * 60 * 1000),
     requestTimeoutMs: overrides.requestTimeoutMs ?? intEnv("BRIDGE_REQUEST_TIMEOUT_MS", 10 * 60 * 1000),
+    approvalTimeoutMs: overrides.approvalTimeoutMs ?? intEnv("BRIDGE_APPROVAL_TIMEOUT_MS", 30 * 60 * 1000),
+    turnMaxMs: overrides.turnMaxMs ?? intEnv("BRIDGE_TURN_MAX_MS", 2 * 60 * 60 * 1000),
     claudeExecutable: overrides.claudeExecutable ?? env("BRIDGE_CLAUDE_EXECUTABLE"),
     sdkCwd: canonicalWorkspacePath(overrides.sdkCwd ?? env("BRIDGE_SDK_CWD", resolve(dataDir, "sandbox"))!),
     persistSessions: overrides.persistSessions ?? env("BRIDGE_PERSIST", "1") !== "0",

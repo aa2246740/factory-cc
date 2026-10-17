@@ -755,14 +755,158 @@ describe("official SDK streaming-input lifecycle (injected offline SDK)", () => 
     await expect(bare.handle(request(session(), "unused", { messages: messages([stale]) }))).rejects.toMatchObject({ status: 409, code: "unknown_tool_use_id" });
   });
 
-  it("times out by aborting, interrupting and closing the underlying query", async () => {
-    const sdk = new FakeSdk(async function* (_input, _index, fake) { await fake.untilClosed; yield success("late"); });
-    const { runtime } = create(sdk, { requestTimeoutMs: 20 });
-    await expect(runtime.handle(request(session(), "wait forever"))).rejects.toMatchObject({ status: 504, code: "sdk_turn_timeout" });
-    expect((sdk.calls[0]!.options.abortController as AbortController).signal.aborted).toBe(true);
-    expect(sdk.interrupt).toHaveBeenCalledTimes(1);
-    expect(sdk.close).toHaveBeenCalledTimes(1);
-    await expect(runtime.handle(request(session(), "retry"))).rejects.toMatchObject({ code: "sdk_turn_timeout" });
+  it("backstops callers without the HTTP layer: an idle turn is aborted, interrupted and closed", async () => {
+    vi.useFakeTimers();
+    try {
+      const sdk = new FakeSdk(async function* (_input, _index, fake) { await fake.untilClosed; yield success("late"); });
+      const { runtime } = create(sdk, { requestTimeoutMs: 20 });
+      const turn = runtime.handle(request(session(), "wait forever"));
+      const rejected = expect(turn).rejects.toMatchObject({ status: 504, code: "sdk_turn_timeout", message: expect.stringContaining("no progress") });
+      // The backstop waits out the HTTP layer's own limit and interrupt grace first.
+      await vi.advanceTimersByTimeAsync(20);
+      expect(sdk.close).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(6_000);
+      await rejected;
+      expect((sdk.calls[0]!.options.abortController as AbortController).signal.aborted).toBe(true);
+      expect(sdk.interrupt).toHaveBeenCalledTimes(1);
+      expect(sdk.close).toHaveBeenCalledTimes(1);
+      await expect(runtime.handle(request(session(), "retry"))).rejects.toMatchObject({ code: "sdk_turn_timeout" });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("reports every SDK message to the HTTP layer as progress", async () => {
+    const sdk = new FakeSdk(async function* () {
+      yield { type: "stream_event", event: { type: "content_block_delta", delta: { type: "text_delta", text: "Hel" } } };
+      yield { type: "system", subtype: "task_started", task_id: "background-a" };
+      yield { type: "assistant", message: { content: [{ type: "text", text: "Hello" }] } };
+      yield success("Hello");
+    });
+    const { runtime } = create(sdk);
+    const activity = vi.fn();
+    await runtime.handle(request(session(), "go"), { textDelta: vi.fn(), toolTrace: vi.fn(), activity });
+    // The CLI's init message plus the four above.
+    expect(activity).toHaveBeenCalledTimes(5);
+  });
+
+  it("tells the HTTP layer how many approvals are pending, including ones left by an earlier request", async () => {
+    const sdk = new FakeSdk(async function* (_input, index) { yield success(`reply-${index}`); });
+    const { runtime } = create(sdk);
+    const decisions: Array<(decision: RuntimePermissionDecision) => void> = [];
+    runtime.setControl({ requestApproval: () => new Promise((resolve) => { decisions.push(resolve); }) });
+    const s = session();
+    const advertised = { tools: [{ name: "Execute", input_schema: { type: "object" as const } }] };
+    const first = { textDelta: vi.fn(), toolTrace: vi.fn(), approvalsPending: vi.fn() };
+    await runtime.handle(request(s, "start", advertised), first);
+    const check = sdk.calls[0]!.options.canUseTool as (name: string, input: unknown) => Promise<unknown>;
+    const pending = check("Bash", { command: "ls" });
+    await vi.waitFor(() => expect(decisions).toHaveLength(1));
+    // No request is attached now, so the first request's sink is not told.
+    expect(first.approvalsPending).not.toHaveBeenCalledWith(1);
+    const second = { textDelta: vi.fn(), toolTrace: vi.fn(), approvalsPending: vi.fn() };
+    await runtime.handle(request(s, "next", advertised), second);
+    expect(second.approvalsPending).toHaveBeenCalledWith(1);
+    decisions[0]!({ behavior: "allow" });
+    expect(await pending).toMatchObject({ behavior: "allow" });
+
+    const third = { textDelta: vi.fn(), toolTrace: vi.fn(), approvalsPending: vi.fn() };
+    const slow = new FakeSdk(async function* (_input, _index, fake) { await fake.untilClosed; yield success("late"); });
+    const live = create(slow);
+    live.runtime.setControl({ requestApproval: () => new Promise((resolve) => { decisions.push(resolve); }) });
+    const turn = live.runtime.handle(request(session(), "needs approval", advertised), third);
+    const ended = expect(turn).rejects.toMatchObject({ code: "cancelled" });
+    await vi.waitFor(() => expect(slow.calls).toHaveLength(1));
+    const decided = (slow.calls[0]!.options.canUseTool as (name: string, input: unknown) => Promise<unknown>)("Bash", {});
+    await vi.waitFor(() => expect(third.approvalsPending).toHaveBeenLastCalledWith(1));
+    decisions.at(-1)!({ behavior: "deny", message: "no" });
+    await decided;
+    expect(third.approvalsPending.mock.calls.map(([count]) => count)).toEqual([0, 1, 0]);
+    await live.runtime.cancel("session-a", "cleanup");
+    await ended;
+  });
+
+  describe("interrupting a turn", () => {
+    /** A CLI that ends the aborted turn with an error result once its interrupt arrives. */
+    function interruptible(options: { resumed?: boolean } = {}) {
+      let abort!: () => void;
+      const aborted = new Promise<void>((resolve) => { abort = resolve; });
+      const sdk = new FakeSdk(async function* (_input, index) {
+        if (index === 0) {
+          await aborted;
+          yield { type: "result", subtype: "error_during_execution", is_error: true, errors: ["interrupted by the user"], session_id: "native-sdk-session" };
+        } else if (options.resumed !== false) yield success("resumed");
+      });
+      sdk.interrupt.mockImplementation(async () => { abort(); });
+      return sdk;
+    }
+
+    it("waits for the turn to wind down, then retires the process and keeps a resumable checkpoint", async () => {
+      const sdk = interruptible();
+      const { runtime } = create(sdk);
+      const s = session();
+      const turn = runtime.handle(request(s, "long task"));
+      const ended = expect(turn).rejects.toMatchObject({ code: "host_session_ended" });
+      await vi.waitFor(() => expect(sdk.inputs).toHaveLength(1));
+      expect(await runtime.interrupt("session-a", "request-timeout")).toBe(true);
+      await ended;
+      expect(sdk.interrupt).toHaveBeenCalled();
+      expect(sdk.close).toHaveBeenCalledTimes(1);
+      expect(runtime.describe()).toMatchObject({ activeNativeSessions: 0, fatalErrors: [] });
+      const resumed = await runtime.handle(request(s, "continue after the interrupted turn"));
+      expect(resumed.response.content).toEqual([{ type: "text", text: "resumed" }]);
+      expect(sdk.calls).toHaveLength(2);
+      expect(sdk.calls[1]!.options.resume).toBe("native-sdk-session");
+    });
+
+    it("does not call a turn wound down when it ignores the interrupt for the whole grace period", async () => {
+      vi.useFakeTimers();
+      try {
+        const sdk = new FakeSdk(async function* (_input, _index, fake) { await fake.untilClosed; yield success("late"); });
+        const { runtime } = create(sdk);
+        const turn = runtime.handle(request(session(), "stuck"));
+        const ended = expect(turn).rejects.toMatchObject({ code: "cancelled" });
+        await vi.waitFor(() => expect(sdk.inputs).toHaveLength(1));
+        let settled: boolean | undefined;
+        void runtime.interrupt("session-a", "request-timeout").then((value) => { settled = value; });
+        await vi.advanceTimersByTimeAsync(4_999);
+        expect(sdk.interrupt).toHaveBeenCalledTimes(1);
+        expect(settled).toBeUndefined();
+        await vi.advanceTimersByTimeAsync(1);
+        expect(settled).toBe(false);
+        // The caller kills it; interrupt() itself never pretends the checkpoint is safe.
+        expect(sdk.close).not.toHaveBeenCalled();
+        await runtime.cancel("session-a", "request-timeout");
+        expect(sdk.close).toHaveBeenCalledTimes(1);
+        await ended;
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("is not resumable without a persisted native session, and is a no-op for unknown or non-interruptible queries", async () => {
+      const volatile = interruptible();
+      const { runtime } = create(volatile, { persistSessions: false });
+      const turn = runtime.handle(request(session(), "long task"));
+      const ended = expect(turn).rejects.toMatchObject({ code: "host_session_ended" });
+      await vi.waitFor(() => expect(volatile.inputs).toHaveLength(1));
+      expect(await runtime.interrupt("session-a", "request-timeout")).toBe(false);
+      await ended;
+      expect(volatile.close).toHaveBeenCalledTimes(1);
+      expect(await runtime.interrupt("never-seen", "request-timeout")).toBe(false);
+
+      const plain = new FakeSdk(async function* (_input, _index, fake) { await fake.untilClosed; yield success("late"); });
+      const original = plain.query.bind(plain);
+      plain.query = (args) => ({ ...original(args), interrupt: undefined }) as unknown as ReturnType<FakeSdk["query"]>;
+      const other = create(plain).runtime;
+      const parked = other.handle(request(session(), "stuck"));
+      const parkedEnded = expect(parked).rejects.toMatchObject({ code: "cancelled" });
+      await vi.waitFor(() => expect(plain.inputs).toHaveLength(1));
+      expect(await other.interrupt("session-a", "request-timeout")).toBe(false);
+      expect(plain.close).not.toHaveBeenCalled();
+      await other.cancel("session-a", "cleanup");
+      await parkedEnded;
+    });
   });
 
   it("does not turn SDK execution errors or max-turn errors into successful text", async () => {
@@ -853,7 +997,7 @@ describe("official SDK streaming-input lifecycle (injected offline SDK)", () => 
 
   it("bounds disconnected approval waits and fails closed on controller errors", async () => {
     const sdk = new FakeSdk(async function* () { yield success("ready"); });
-    const { runtime } = create(sdk, { requestTimeoutMs: 30 });
+    const { runtime } = create(sdk, { approvalTimeoutMs: 30 });
     runtime.setControl({ requestApproval: () => new Promise(() => {}) });
     await runtime.handle(request(session(), "start", { tools: [{ name: "Execute", input_schema: { type: "object" } }] }));
     const check = sdk.calls[0]!.options.canUseTool as (name: string, input: unknown) => Promise<unknown>;

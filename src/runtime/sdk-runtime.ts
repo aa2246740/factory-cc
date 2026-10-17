@@ -14,6 +14,7 @@ import { DroidMcpCatalog, StableDroidToolNames } from "./droid-mcp-catalog.js";
 import { hostAllowsAnyTools, nativeToolAllowed } from "./native-tool-policy.js";
 import { buildDynamicUserContent, buildHostContext, buildInitialUserContent, buildPresetSystemPrompt, describePromptLayout } from "./system-prompt.js";
 import { UsageLedger } from "./usage.js";
+import { INTERRUPT_GRACE_MS, TurnWatchdog } from "./turn-watchdog.js";
 import type { BridgeRuntime, RuntimeApprovalRequest, RuntimeControl, RuntimeEvent, RuntimeHostCall, RuntimeHostCompletion, RuntimeHostEnd, RuntimeLifecycle, RuntimePermissionDecision, RuntimeRequest, RuntimeTurn, StreamSink } from "./types.js";
 import { classifyAuth, maskEmail, type AuthClassification, type AuthObservation } from "../upstream/auth-env.js";
 import { publicSelection, sdkEnv, selectionFromConfig, type UpstreamSelection } from "../upstream/providers.js";
@@ -149,7 +150,19 @@ interface LiveSdk {
   lastTouched: number;
   backgroundTasks: Set<string>;
   toolWaitTimer?: ReturnType<typeof setTimeout>;
+  /** Backstop deadline of the HTTP request currently waiting for this session's turn. */
+  watchdog?: TurnWatchdog;
+  /** Set while interrupt() waits for the aborted turn to end. */
+  interrupting?: boolean;
+  windDown?: () => void;
 }
+
+/**
+ * The HTTP layer enforces the idle and maximum limits and interrupts cleanly
+ * first. The runtime's own deadline only guards callers that drive it without
+ * that layer, so it waits long enough for an interrupt to finish.
+ */
+const BACKSTOP_SLACK_MS = INTERRUPT_GRACE_MS + 1_000;
 
 type DroidResult = { tool_use_id: string; content: string | ContentBlock[]; is_error?: boolean };
 
@@ -310,6 +323,8 @@ export class SdkRuntime implements BridgeRuntime {
     this.refreshToolWait(live);
     live.lastTouched = Date.now();
     live.sink = sink;
+    // An approval left pending by an earlier request still pauses this one's idle limit.
+    this.notifyApprovals(live);
     const requestKey = JSON.stringify({ request: input.request, role: input.role, cwd: resolveCwd(input, this.config), missionDir: input.headers["x-bridge-mission-dir"] });
     let waiting: Promise<RuntimeTurn> | undefined;
     try {
@@ -399,6 +414,31 @@ export class SdkRuntime implements BridgeRuntime {
     if (live.terminal) throw live.terminal;
     this.validateResults(live, results);
     return this.submitResults(live, results);
+  }
+
+  async interrupt(sessionId: string, reason: string): Promise<boolean> {
+    const live = this.lives.get(sessionId);
+    const query = live?.query;
+    if (!live || live.terminal || live.interrupting || !query?.interrupt) return false;
+    live.interrupting = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const woundDown = new Promise<boolean>((resolve) => {
+        live.windDown = () => resolve(true);
+        timer = setTimeout(() => resolve(false), INTERRUPT_GRACE_MS);
+        timer.unref();
+      });
+      // Not awaited: the abort is acknowledged only when the turn's result arrives.
+      try { void query.interrupt().catch(() => undefined); } catch { /* best effort */ }
+      if (!(await woundDown)) return false;
+    } finally {
+      if (timer) clearTimeout(timer);
+      live.interrupting = false;
+      live.windDown = undefined;
+    }
+    // The turn stopped at a clean boundary. Retire the process but keep the
+    // native checkpoint, so the next request resumes it like after a host exit.
+    return (await this.endHostSession(sessionId, reason)).resumable;
   }
 
   async cancel(sessionId: string, reason: string): Promise<void> {
@@ -825,10 +865,12 @@ export class SdkRuntime implements BridgeRuntime {
     const approval = new AbortController();
     const epoch = live.queryEpoch;
     live.approvals.add(approval);
+    this.notifyApprovals(live);
     const cancel = () => approval.abort();
     context.signal?.addEventListener("abort", cancel, { once: true });
     if (context.signal?.aborted) approval.abort();
-    const timer = setTimeout(cancel, this.config.requestTimeoutMs);
+    // Approvals wait on a human, not on the model: they have their own limit.
+    const timer = setTimeout(cancel, this.config.approvalTimeoutMs);
     timer.unref();
     let interrupted!: () => void;
     const aborted = new Promise<RuntimePermissionDecision>((resolve) => {
@@ -868,8 +910,16 @@ export class SdkRuntime implements BridgeRuntime {
       context.signal?.removeEventListener("abort", cancel);
       approval.signal.removeEventListener("abort", interrupted);
       live.approvals.delete(approval);
+      this.notifyApprovals(live);
       approval.abort();
     }
+  }
+
+  /** Report how many approvals are pending, so the idle limit can pause while a human decides. */
+  private notifyApprovals(live: LiveSdk): void {
+    const pending = live.approvals.size;
+    live.watchdog?.setPaused(pending > 0);
+    live.sink?.approvalsPending?.(pending);
   }
 
   private claimCall(live: LiveSdk, name: string, input: Record<string, unknown>, callId?: string, mcpName?: string): Promise<DroidCall> {
@@ -936,6 +986,8 @@ export class SdkRuntime implements BridgeRuntime {
         : iterator;
       for await (const message of source) {
         if (live.terminal || live.queryEpoch !== epoch) return;
+        live.watchdog?.touch();
+        live.sink?.activity?.();
         if (message.type === "system" && message.subtype === "init" && typeof message.apiKeySource === "string" && !live.initApiKeySource) {
           live.initApiKeySource = message.apiKeySource;
           this.recheckInitAuth(live);
@@ -1001,6 +1053,14 @@ export class SdkRuntime implements BridgeRuntime {
         }
         if (message.type === "result") {
           if (message.parent_tool_use_id) continue;
+          if (live.interrupting) {
+            // The aborted turn has ended, whatever subtype it reports. What it left
+            // unmatched is moot: interrupt() now retires this process.
+            for (const id of live.candidates.keys()) live.retiredCandidates.add(id);
+            live.candidates.clear();
+            live.windDown?.();
+            continue;
+          }
           if (message.is_error === true || (typeof message.subtype === "string" && message.subtype !== "success")) {
             const errors = Array.isArray(message.errors) ? message.errors.filter((item): item is string => typeof item === "string").join("; ") : "";
             throw new BridgeError(502, "sdk_execution_error", errors || extractText(message) || String(message.subtype ?? "SDK execution failed"));
@@ -1056,11 +1116,23 @@ export class SdkRuntime implements BridgeRuntime {
 
   private waitForTurn(live: LiveSdk): Promise<RuntimeTurn> {
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => this.stop(live, new BridgeError(504, "sdk_turn_timeout", "SDK turn timed out and was cancelled")), this.config.requestTimeoutMs);
-      live.waiter = {
-        resolve: (turn) => { clearTimeout(timer); live.waiter = undefined; resolve(turn); },
-        reject: (error) => { clearTimeout(timer); live.waiter = undefined; reject(error); },
+      const watchdog = new TurnWatchdog({
+        idleMs: this.config.requestTimeoutMs + BACKSTOP_SLACK_MS,
+        maxMs: this.config.turnMaxMs + BACKSTOP_SLACK_MS,
+        onTimeout: (kind) => this.stop(live, new BridgeError(504, "sdk_turn_timeout",
+          kind === "idle" ? "SDK turn made no progress and was cancelled" : "SDK turn exceeded its maximum duration and was cancelled")),
+      });
+      live.watchdog = watchdog;
+      const finish = (): void => {
+        watchdog.dispose();
+        if (live.watchdog === watchdog) live.watchdog = undefined;
+        live.waiter = undefined;
       };
+      live.waiter = {
+        resolve: (turn) => { finish(); resolve(turn); },
+        reject: (error) => { finish(); reject(error); },
+      };
+      watchdog.setPaused(live.approvals.size > 0);
       if (live.terminal) live.waiter.reject(live.terminal);
     });
   }

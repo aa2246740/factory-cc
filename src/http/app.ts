@@ -10,7 +10,8 @@ import { explicitSessionId, historyMessageHashes, historyPrefixHash, resolveSess
 import { isEnded } from "../sessions/state.js";
 import { SessionStore } from "../sessions/store.js";
 import { createRuntime } from "../runtime/factory.js";
-import type { RuntimeTurn } from "../runtime/types.js";
+import type { RuntimeTurn, StreamSink } from "../runtime/types.js";
+import { TurnWatchdog, type TurnTimeout } from "../runtime/turn-watchdog.js";
 import { header, requireAdminOrHookToken, requireAdminToken, requireClientToken } from "../security/auth.js";
 import { assertBodySize } from "../security/limits.js";
 import { redactHeaders, redactJson } from "../security/redact.js";
@@ -46,7 +47,8 @@ function listenUrl(host: string, port: number): string {
 export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath: string): BridgeApp {
   const store = new SessionStore(join(config.dataDir, "sessions"), config.persistSessions, config.maxSessions, logger);
   const runtime = createRuntime(config, logger, canaryPath);
-  const control = new ControlBroker(runtime, store, Math.min(config.toolWaitMs, config.requestTimeoutMs));
+  // Approvals wait on a person, so they get their own limit rather than the turn's idle limit.
+  const control = new ControlBroker(runtime, store, config.approvalTimeoutMs);
   runtime.setControl?.(control);
   const records: RedactedRequestRecord[] = [];
   let authFailureCount = 0;
@@ -252,26 +254,66 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
       : undefined;
     let completed = false;
     let cancellationRequested = false;
+    let timedOut = false;
+    let timeoutSettled: Promise<void> | undefined;
     let rejectInterrupted!: (error: BridgeError) => void;
     const interrupted = new Promise<never>((_resolve, reject) => { rejectInterrupted = reject; });
     const cancelOwnedRequest = (reason: string, error: BridgeError): void => {
       if (completed || cancellationRequested || activeRequests.get(sessionId) !== owner) return;
       cancellationRequested = true;
+      watchdog.dispose();
       store.update(sessionId, { cancelRequested: true });
-      store.setState(sessionId, reason === "request-timeout" ? "FAILED" : "CANCELLED");
+      store.setState(sessionId, "CANCELLED");
       rejectInterrupted(error);
       void runtime.cancel(sessionId, reason).catch(() => {
         logger.error("runtime_cancel_failed", { sessionId, reason });
+      });
+    };
+    // A timed-out turn is interrupted first. If it winds down in time its native
+    // checkpoint stays resumable (IDLE); otherwise the process is killed (FAILED).
+    const settleExpiredTurn = async (): Promise<void> => {
+      control.cancelApprovals(sessionId);
+      let resumable = false;
+      if (runtime.interrupt) {
+        try { resumable = await runtime.interrupt(sessionId, "request-timeout"); }
+        catch { logger.warn("runtime_interrupt_failed", { sessionId }); }
+      }
+      if (resumable) {
+        store.update(sessionId, { cancelRequested: false, notes: [...store.require(sessionId).notes, "request-timeout-interrupted"] });
+        store.setState(sessionId, "IDLE");
+        return;
+      }
+      store.setState(sessionId, "FAILED");
+      await runtime.cancel(sessionId, "request-timeout").catch(() => {
+        logger.error("runtime_cancel_failed", { sessionId, reason: "request-timeout" });
+      });
+    };
+    const expireOwnedRequest = (kind: TurnTimeout): void => {
+      if (completed || cancellationRequested || activeRequests.get(sessionId) !== owner) return;
+      cancellationRequested = true;
+      timedOut = true;
+      // Fence the late completion of this turn before anything else happens.
+      store.update(sessionId, { cancelRequested: true });
+      rejectInterrupted(new BridgeError(504, "request_timeout", kind === "idle"
+        ? `request timed out: no progress for ${duration(config.requestTimeoutMs)}; the SDK turn was interrupted`
+        : `request exceeded the turn limit of ${duration(config.turnMaxMs)} (BRIDGE_TURN_MAX_MS); the SDK turn was interrupted`));
+      timeoutSettled = settleExpiredTurn().catch((error: unknown) => {
+        logger.error("request_timeout_settle_failed", { sessionId, error: error instanceof Error ? error.message : String(error) });
       });
     };
     const onDisconnect = (): void => {
       if (!res.writableFinished) cancelOwnedRequest("client-disconnect", new BridgeError(499, "cancelled", "client disconnected"));
     };
     res.once("close", onDisconnect);
-    const timer = setTimeout(() => {
-      cancelOwnedRequest("request-timeout", new BridgeError(504, "request_timeout", "request timed out; SDK execution was cancelled"));
-    }, config.requestTimeoutMs);
-    timer.unref();
+    // Idle limit: any SDK message, delta or tool event restarts it, and a pending
+    // approval pauses it. The absolute cap applies however much progress is made.
+    const watchdog = new TurnWatchdog({ idleMs: config.requestTimeoutMs, maxMs: config.turnMaxMs, onTimeout: expireOwnedRequest });
+    const sink: StreamSink = {
+      textDelta: (text) => { watchdog.touch(); if (writer && !completed && !cancellationRequested) writer.textDelta(text); },
+      toolTrace: (name, detail) => { watchdog.touch(); if (writer && !completed && !cancellationRequested) writer.toolTrace(name, detail); },
+      activity: () => watchdog.touch(),
+      approvalsPending: (count) => watchdog.setPaused(count > 0),
+    };
     try {
       store.update(sessionId, {
         hostEnded: undefined,
@@ -302,12 +344,7 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
 
       const turn: RuntimeTurn = await Promise.race([
         interrupted,
-        runtime.handle({ request, role, session, headers }, writer
-          ? {
-              textDelta: (text) => { if (!completed && !cancellationRequested) writer.textDelta(text); },
-              toolTrace: (name, detail) => { if (!completed && !cancellationRequested) writer.toolTrace(name, detail); },
-            }
-          : undefined),
+        runtime.handle({ request, role, session, headers }, sink),
       ]);
       if (cancellationRequested || store.get(sessionId)?.cancelRequested) {
         throw new BridgeError(499, "cancelled", "session cancelled");
@@ -346,14 +383,19 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
           // Restore only our pending request, never a later host lifecycle event.
           store.update(sessionId, { ...previous, hostEnded: previous.hostEnded });
         }
-      } else if (current?.state !== "CANCELLED" && !(error instanceof BridgeError && error.code === "host_session_ended")) {
+      } else if (!timedOut && current?.state !== "CANCELLED" && !(error instanceof BridgeError && error.code === "host_session_ended")) {
         store.setState(sessionId, "FAILED");
       }
+      // Answer now; the slot below may still be held while a timed-out turn stops.
       if (writer) writer.fail(error);
-      else throw error;
+      else writeError(res, error);
     } finally {
-      clearTimeout(timer);
+      watchdog.dispose();
+      writer?.dispose();
       res.off("close", onDisconnect);
+      // Keep the slot until a timed-out turn is interrupted or killed, so a retry
+      // never meets a half-stopped native session.
+      if (timeoutSettled) await timeoutSettled;
       if (activeRequests.get(sessionId) === owner) activeRequests.delete(sessionId);
     }
   }
@@ -482,6 +524,10 @@ async function readJson(req: IncomingMessage, max: number): Promise<unknown> {
   if (size === 0) return {};
   try { return JSON.parse(Buffer.concat(chunks).toString("utf8")); }
   catch { throw new BridgeError(400, "invalid_request_error", "Request body must contain valid JSON."); }
+}
+
+function duration(ms: number): string {
+  return ms < 1000 ? `${ms} ms` : `${Math.round(ms / 1000)} s`;
 }
 
 function json(res: ServerResponse, status: number, body: unknown): void {
