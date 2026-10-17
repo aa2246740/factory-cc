@@ -126,6 +126,8 @@ interface LiveSdk {
   current?: RuntimeRequest;
   usage: UsageLedger;
   streamed: string;
+  /** A new text block started since the last delta: separate it from the text before it. */
+  textBreak?: boolean;
   blocks: ContentBlock[];
   pending: Map<string, DroidCall>;
   candidates: Map<string, DroidCall>;
@@ -550,7 +552,10 @@ export class SdkRuntime implements BridgeRuntime {
       const fresh = !live.resultFingerprints.has(result.tool_use_id);
       live.resultFingerprints.set(result.tool_use_id, resultFingerprint(result));
       live.pending.delete(result.tool_use_id);
-      const delivered = fresh && !attached && continuation.length
+      // validateResults already proved a repeat has the same fingerprint. What the
+      // mailbox kept may carry host continuation text, so do not compare against it.
+      if (!fresh) return "duplicate" as const;
+      const delivered = !attached && continuation.length
         ? { ...result, content: [...asBlocks(result.content), ...continuation] }
         : result;
       if (delivered !== result) attached = true;
@@ -1011,8 +1016,16 @@ export class SdkRuntime implements BridgeRuntime {
         if (message.type === "system" && message.subtype === "task_notification" && typeof message.task_id === "string") live.backgroundTasks.delete(message.task_id);
         if (message.type === "stream_event") {
           if (message.parent_tool_use_id) continue;
+          // Separate text blocks (before and after a tool call, say) would otherwise
+          // run together in the one text stream. Deltas of one block stay joined.
+          if (startsTextBlock(message) && live.streamed) live.textBreak = true;
           const text = streamTextDelta(message);
-          if (text) { live.streamed += text; live.sink?.textDelta(text); }
+          if (text) {
+            const chunk = live.textBreak ? `\n\n${text}` : text;
+            live.textBreak = false;
+            live.streamed += chunk;
+            live.sink?.textDelta(chunk);
+          }
           continue;
         }
         if (message.type === "user") this.retireNativeToolResults(live, message);
@@ -1105,6 +1118,7 @@ export class SdkRuntime implements BridgeRuntime {
     };
     live.blocks = [];
     live.streamed = "";
+    live.textBreak = false;
     return turn;
   }
 
@@ -1259,7 +1273,11 @@ function extractToolUses(message: Record<string, unknown>): DroidCall[] {
 function extractText(message: Record<string, unknown>): string {
   if (typeof message.result === "string") return message.result;
   const content = (message.message as { content?: ContentBlock[] } | undefined)?.content ?? [];
-  return content.filter((block) => block.type === "text").map((block) => (block as { text?: string }).text ?? "").join("");
+  return content.filter((block) => block.type === "text").map((block) => (block as { text?: string }).text ?? "").join("\n\n");
+}
+function startsTextBlock(message: Record<string, unknown>): boolean {
+  const event = message.event as { type?: string; content_block?: { type?: string } } | undefined;
+  return event?.type === "content_block_start" && event.content_block?.type === "text";
 }
 function streamTextDelta(message: Record<string, unknown>): string {
   const event = message.event as { type?: string; delta?: { type?: string; text?: string } } | undefined;

@@ -171,7 +171,8 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
     }
     if (req.method === "POST" && (path === "/v1/messages/count_tokens" || path === "/v1/messages/count_tokens/")) {
       requireClientToken(req.headers, config.clientToken);
-      json(res, 501, apiError(501, "not_supported_error", "token counting is estimated-only; refusing to fake exact counts").error);
+      // 404 rather than 5xx: this is permanent, so clients must not retry it.
+      json(res, 404, { type: "error", error: { type: "not_found_error", message: "token counting is not supported: only estimates are possible and this bridge refuses to fake exact counts" } });
       return;
     }
     if (req.method === "GET" && (path === "/v1/models" || path === "/v1/models/")) {

@@ -129,14 +129,23 @@ describe("Messages protocol", () => {
     expect((res.json.content as Array<{ text?: string }>)[0]?.text).toContain("text probe ok");
   });
 
-  it("returns 501 for token counting instead of a fake exact count", async () => {
+  it("answers token counting with a 404 in the standard error envelope, so clients do not retry", async () => {
     const { app, token } = await startTestBridge();
     apps.push(app);
-    const res = await fetch(`${app.url}/v1/messages/count_tokens`, {
-      method: "POST",
-      headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
-      body: JSON.stringify({ model: "relay-probe", messages: [{ role: "user", content: "hi" }] }),
-    });
-    expect(res.status).toBe(501);
+    for (const path of ["/v1/messages/count_tokens", "/v1/messages/count_tokens/"]) {
+      const res = await fetch(`${app.url}${path}`, {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+        body: JSON.stringify({ model: "relay-probe", messages: [{ role: "user", content: "hi" }] }),
+      });
+      expect(res.status).toBe(404);
+      expect(await res.json()).toEqual({
+        type: "error",
+        error: { type: "not_found_error", message: expect.stringContaining("not supported") },
+      });
+    }
+    const unauthenticated = await fetch(`${app.url}/v1/messages/count_tokens`, { method: "POST", body: "{}" });
+    expect(unauthenticated.status).toBe(401);
+    expect(await unauthenticated.json()).toMatchObject({ type: "error", error: { type: expect.any(String) } });
   });
 });

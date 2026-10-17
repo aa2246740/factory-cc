@@ -776,6 +776,71 @@ describe("official SDK streaming-input lifecycle (injected offline SDK)", () => 
     }
   });
 
+  describe("text blocks within one turn", () => {
+    const start = (index: number, block: Record<string, unknown>) => ({ type: "stream_event", event: { type: "content_block_start", index, content_block: block } });
+    const delta = (index: number, text: string) => ({ type: "stream_event", event: { type: "content_block_delta", index, delta: { type: "text_delta", text } } });
+
+    it("are separated by a blank line, while the deltas of one block stay joined", async () => {
+      const sdk = new FakeSdk(async function* () {
+        yield start(0, { type: "text", text: "" });
+        yield delta(0, "Let me ");
+        yield delta(0, "check.");
+        yield start(1, { type: "tool_use", id: "native-read", name: "Read", input: {} });
+        yield start(2, { type: "text", text: "" });
+        yield delta(2, "Found it.");
+        // A block that never carries text must not leave a stray separator.
+        yield start(3, { type: "text", text: "" });
+        yield start(4, { type: "text", text: "" });
+        yield delta(4, "All done.");
+        yield success("Let me check.\n\nFound it.\n\nAll done.");
+      });
+      const { runtime } = create(sdk);
+      const textDelta = vi.fn();
+      const turn = await runtime.handle(request(session(), "go"), { textDelta, toolTrace: vi.fn() });
+      expect(textDelta.mock.calls.map(([text]) => text)).toEqual(["Let me ", "check.", "\n\nFound it.", "\n\nAll done."]);
+      expect(turn.response.content).toEqual([{ type: "text", text: "Let me check.\n\nFound it.\n\nAll done." }]);
+    });
+
+    it("start the next turn clean, without a leading separator", async () => {
+      const sdk = new FakeSdk(async function* (_input, index) {
+        yield start(0, { type: "text", text: "" });
+        yield delta(0, `turn ${index}`);
+        yield success(`turn ${index}`);
+      });
+      const { runtime } = create(sdk);
+      const s = session();
+      await runtime.handle(request(s, "first"));
+      const second = await runtime.handle(request(s, "second"));
+      expect(second.response.content).toEqual([{ type: "text", text: "turn 1" }]);
+    });
+
+    it("are separated when the SDK reports a finished message without partial events", async () => {
+      const sdk = new FakeSdk(async function* () {
+        yield { type: "assistant", message: { content: [{ type: "text", text: "Before." }, { type: "tool_use", id: "native-read", name: "Read", input: {} }, { type: "text", text: "After." }] } };
+        yield success("");
+      });
+      const { runtime } = create(sdk);
+      const turn = await runtime.handle(request(session(), "go"));
+      expect(turn.response.content).toEqual([{ type: "text", text: "Before.\n\nAfter." }]);
+    });
+  });
+
+  it("treats a retried tool result as a duplicate even though host continuation text rode along the first time", async () => {
+    let handlerResult: unknown;
+    const sdk = new FakeSdk(async function* (_input, _index, fake) {
+      yield { type: "assistant", message: { content: [{ type: "tool_use", id: "continued-tool", name: "mcp__droid__TaskOutput", input: {} }] } };
+      handlerResult = await fake.handlers.get("TaskOutput")!({}, { toolUseID: "continued-tool" });
+      yield success("done");
+    });
+    const { runtime } = create(sdk);
+    const s = session();
+    await runtime.handle(request(s, "go", { tools: [tool] }));
+    await runtime.handle(request(s, [{ type: "tool_result", tool_use_id: "continued-tool", content: "result" }, { type: "text", text: "Extra context from Droid" }]));
+    expect(JSON.stringify(handlerResult)).toContain("Extra context from Droid");
+    expect(await runtime.deliverResults("session-a", [{ tool_use_id: "continued-tool", content: "result" }])).toEqual(["duplicate"]);
+    await expect(runtime.deliverResults("session-a", [{ tool_use_id: "continued-tool", content: "different" }])).rejects.toMatchObject({ code: "conflicting_tool_result" });
+  });
+
   it("reports every SDK message to the HTTP layer as progress", async () => {
     const sdk = new FakeSdk(async function* () {
       yield { type: "stream_event", event: { type: "content_block_delta", delta: { type: "text_delta", text: "Hel" } } };
