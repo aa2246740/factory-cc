@@ -129,13 +129,21 @@ interface RunDroidOptions {
   terminationGraceMs?: number;
 }
 
+/** The group is gone or nothing in it can be signalled. macOS reports EPERM, not
+ * ESRCH, for a group of our own (same user) whose members are all zombies that
+ * have not been reaped yet, which is the state right after a SIGKILL of the tree. */
+function groupGone(error: unknown): boolean {
+  const code = (error as NodeJS.ErrnoException).code;
+  return code === "ESRCH" || (code === "EPERM" && process.platform === "darwin");
+}
+
 function processGroupSignal(child: ChildProcess, signal: NodeJS.Signals): void {
   if (!child.pid) return;
   try {
     if (process.platform === "win32") child.kill(signal);
     else process.kill(-child.pid, signal);
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
+    if (!groupGone(error)) throw error;
   }
 }
 
@@ -144,7 +152,7 @@ function groupExists(child: ChildProcess): boolean {
   try {
     process.kill(process.platform === "win32" ? child.pid : -child.pid, 0);
     return true;
-  } catch (error) { return (error as NodeJS.ErrnoException).code !== "ESRCH"; }
+  } catch (error) { return !groupGone(error); }
 }
 
 async function finishOwnedProcessGroup(child: ChildProcess, graceMs: number): Promise<void> {
