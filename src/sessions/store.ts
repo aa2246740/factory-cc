@@ -84,9 +84,10 @@ export class SessionStore {
   }
 
   /**
-   * The native process that parked this session on a Droid tool is gone, so no
-   * result can ever be delivered. Keep its identity but release its slot, and make
-   * sure it is never matched, resumed or replayed. Other states are left alone.
+   * Give up a session parked on a Droid tool: its native process is gone (a bridge
+   * restart) or has just been stopped (reclaimed for its slot), so no result can
+   * ever be delivered. Keep its identity but release its slot, and make sure it is
+   * never matched, resumed or replayed. Other states are left alone.
    */
   interrupt(id: string, note: string): SessionRecord {
     const record = this.require(id);

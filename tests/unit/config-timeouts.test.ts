@@ -29,7 +29,7 @@ describe("timeout settings", () => {
     expect(load({ requestTimeoutMs: 1, approvalTimeoutMs: 2, turnMaxMs: 3 })).toMatchObject({ requestTimeoutMs: 1, approvalTimeoutMs: 2, turnMaxMs: 3 });
   });
 
-  it("expires an abandoned Droid tool wait after 30 minutes unless configured", () => {
+  it("lets a parked session be reclaimed after 30 idle minutes unless configured", () => {
     expect(load().toolWaitTimeoutMs).toBe(30 * 60 * 1000);
     vi.stubEnv("BRIDGE_TOOL_WAIT_TIMEOUT_MS", "90000");
     expect(load().toolWaitTimeoutMs).toBe(90_000);

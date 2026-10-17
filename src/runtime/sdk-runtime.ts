@@ -15,7 +15,7 @@ import { hostAllowsAnyTools, nativeToolAllowed } from "./native-tool-policy.js";
 import { buildDynamicUserContent, buildHostContext, buildInitialUserContent, buildPresetSystemPrompt, describePromptLayout } from "./system-prompt.js";
 import { UsageLedger } from "./usage.js";
 import { INTERRUPT_GRACE_MS, TurnWatchdog } from "./turn-watchdog.js";
-import type { BridgeRuntime, RuntimeApprovalRequest, RuntimeControl, RuntimeEvent, RuntimeHostCall, RuntimeHostCompletion, RuntimeHostEnd, RuntimeLifecycle, RuntimePermissionDecision, RuntimeRequest, RuntimeTurn, StreamSink } from "./types.js";
+import type { BridgeRuntime, RuntimeApprovalRequest, RuntimeControl, RuntimeEvent, RuntimeHostCall, RuntimeHostCompletion, RuntimeHostEnd, RuntimePermissionDecision, RuntimeRequest, RuntimeTurn, StreamSink } from "./types.js";
 import { classifyAuth, maskEmail, type AuthClassification, type AuthObservation } from "../upstream/auth-env.js";
 import { publicSelection, sdkEnv, selectionFromConfig, type UpstreamSelection } from "../upstream/providers.js";
 import { resolveRequestModel } from "../models.js";
@@ -105,7 +105,6 @@ interface NativePermissionContext {
   suppressAlwaysAllowRule?: boolean;
 }
 interface LiveSdk {
-  sessionId?: string;
   mailbox: ToolMailbox;
   inputs: InputQueue;
   events: RuntimeEvent[];
@@ -151,7 +150,6 @@ interface LiveSdk {
   accountSnapshot?: AuthObservation;
   lastTouched: number;
   backgroundTasks: Set<string>;
-  toolWaitTimer?: ReturnType<typeof setTimeout>;
   /** Backstop deadline of the HTTP request currently waiting for this session's turn. */
   watchdog?: TurnWatchdog;
   /** Set while interrupt() waits for the aborted turn to end. */
@@ -177,7 +175,6 @@ export class SdkRuntime implements BridgeRuntime {
   private readonly lives = new Map<string, LiveSdk>();
   private readonly usageFile: string;
   private control?: RuntimeControl;
-  private lifecycle?: RuntimeLifecycle;
   private authVerification?: AuthVerification;
 
   constructor(private readonly config: BridgeConfig, private readonly logger: Logger, sdk?: SdkHandle) {
@@ -195,7 +192,7 @@ export class SdkRuntime implements BridgeRuntime {
       activeNativeTurns: [...this.lives.values()].filter((live) => !live.terminal && live.active).length,
       pendingHostCalls: [...this.lives.values()].reduce((total, live) => total + (live.terminal ? 0 : live.pending.size), 0),
       pendingApprovals: [...this.lives.values()].reduce((total, live) => total + live.approvals.size, 0),
-      fatalErrors: [...this.lives.entries()].flatMap(([sessionId, live]) => live.terminal && !["cancelled", "host_session_ended", "tool_wait_expired"].includes(live.terminal.code)
+      fatalErrors: [...this.lives.entries()].flatMap(([sessionId, live]) => live.terminal && !["cancelled", "host_session_ended"].includes(live.terminal.code)
         ? [{ sessionId, code: live.terminal.code, message: live.terminal.message }] : []),
       overridesAnthropicEnv: this.config.authMode === "byok",
       authVerification: this.authVerification ?? null,
@@ -216,10 +213,6 @@ export class SdkRuntime implements BridgeRuntime {
       for (const approval of live.approvals) approval.abort();
     }
     this.control = control;
-  }
-
-  setLifecycle(lifecycle: RuntimeLifecycle | undefined): void {
-    this.lifecycle = lifecycle;
   }
 
   pendingHostCalls(sessionId: string): RuntimeHostCall[] {
@@ -316,13 +309,11 @@ export class SdkRuntime implements BridgeRuntime {
       live = this.createLive(input.session.sdkSessionId);
       this.lives.set(id, live);
     }
-    live.sessionId = id;
     if (live.terminal) throw live.terminal;
     if (live.hostEnding) throw new BridgeError(409, "host_session_ending", live.hostEnding);
     if (live.busy) throw new BridgeError(409, "session_busy", "This session already has an active HTTP request");
     // Acquire before the first await: concurrent initial turns cannot start two queries.
     live.busy = true;
-    this.refreshToolWait(live);
     live.lastTouched = Date.now();
     live.sink = sink;
     // An approval left pending by an earlier request still pauses this one's idle limit.
@@ -406,7 +397,6 @@ export class SdkRuntime implements BridgeRuntime {
       live.busy = false;
       live.sink = undefined;
       live.lastTouched = Date.now();
-      this.refreshToolWait(live);
     }
   }
 
@@ -548,7 +538,7 @@ export class SdkRuntime implements BridgeRuntime {
 
   private submitResults(live: LiveSdk, results: DroidResult[], continuation: ContentBlock[] = []): Array<"accepted" | "duplicate"> {
     let attached = false;
-    const outcomes = results.map((result) => {
+    return results.map((result) => {
       const fresh = !live.resultFingerprints.has(result.tool_use_id);
       live.resultFingerprints.set(result.tool_use_id, resultFingerprint(result));
       live.pending.delete(result.tool_use_id);
@@ -561,35 +551,6 @@ export class SdkRuntime implements BridgeRuntime {
       if (delivered !== result) attached = true;
       return live.mailbox.submitResult(delivered);
     });
-    // A delivered result is activity for the remaining parked tools.
-    this.refreshToolWait(live);
-    return outcomes;
-  }
-
-  /**
-   * A session parked on Droid tools holds a bridge slot and a CLI process while
-   * nobody is attached to it. Expire it when Droid stays away: the timer runs
-   * only between HTTP requests and restarts whenever results arrive.
-   */
-  private refreshToolWait(live: LiveSdk): void {
-    if (live.toolWaitTimer) clearTimeout(live.toolWaitTimer);
-    live.toolWaitTimer = undefined;
-    if (live.terminal || live.busy || live.pending.size === 0) return;
-    live.toolWaitTimer = setTimeout(() => {
-      live.toolWaitTimer = undefined;
-      if (live.terminal || live.busy || live.pending.size === 0) return;
-      live.events.push({ at: now(), type: "tool_wait_expired", data: { unresolvedToolIds: [...live.pending.keys()] } });
-      this.stop(live, new BridgeError(504, "tool_wait_expired", `No Droid tool result arrived within ${this.config.toolWaitTimeoutMs} ms; the native session was released and its tool will not be replayed`));
-      this.reportToolWaitExpired(live);
-    }, this.config.toolWaitTimeoutMs);
-    live.toolWaitTimer.unref();
-  }
-
-  private reportToolWaitExpired(live: LiveSdk): void {
-    this.logger.info("tool_wait_expired", { sessionId: live.sessionId, sdkSessionId: live.sdkSessionId });
-    if (!live.sessionId) return;
-    try { this.lifecycle?.toolWaitExpired(live.sessionId); }
-    catch (error) { this.logger.warn("tool_wait_report_failed", { sessionId: live.sessionId, error: error instanceof Error ? error.message : String(error) }); }
   }
 
   private async updateCatalog(live: LiveSdk, input: RuntimeRequest): Promise<void> {
@@ -678,7 +639,6 @@ export class SdkRuntime implements BridgeRuntime {
           if (!live.catalog?.has(original)) throw new BridgeError(409, "tool_not_advertised", `Droid no longer advertises ${original}`);
           live.mailbox.registerCall({ callId: call.id, originalName: original, mcpName: mcpName ?? names.toMcp(original), input: call.input });
           live.pending.set(call.id, call);
-          this.refreshToolWait(live);
           let consumed!: () => void;
           live.hostResultConsumptions.set(call.id, { promise: new Promise<void>((resolve) => { consumed = resolve; }), resolve: () => consumed() });
           const waiting = live.mailbox.wait(call.id, this.config.toolWaitMs);
@@ -689,12 +649,7 @@ export class SdkRuntime implements BridgeRuntime {
           live.hostResultConsumptions.delete(call.id);
           return response;
         } catch (error) {
-          if (live.queryEpoch === epoch) {
-            const first = !live.terminal;
-            this.stop(live, asBridgeError(error));
-            // The mailbox gave up on this tool: same outcome as the idle expiry.
-            if (first && error instanceof BridgeError && error.code === "tool_wait_timeout") this.reportToolWaitExpired(live);
-          }
+          if (live.queryEpoch === epoch) this.stop(live, asBridgeError(error));
           throw error;
         }
       }, names);
@@ -1167,8 +1122,6 @@ export class SdkRuntime implements BridgeRuntime {
     if (live.terminal) return;
     live.terminal = error;
     live.active = false;
-    if (live.toolWaitTimer) clearTimeout(live.toolWaitTimer);
-    live.toolWaitTimer = undefined;
     live.inputs.close();
     for (const approval of live.approvals) approval.abort();
     live.approvals.clear();

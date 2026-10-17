@@ -25,7 +25,7 @@ export interface BridgeConfig {
   maxSessions: number;
   maxTurns: number;
   toolWaitMs: number;
-  /** Idle expiry for a session parked on a Droid tool result. */
+  /** How long a session parked on a Droid tool must be idle before it may be reclaimed once session slots run out. */
   toolWaitTimeoutMs: number;
   /** Idle limit for one native turn. Any SDK message, delta or tool event restarts it; approvals pause it. */
   requestTimeoutMs: number;

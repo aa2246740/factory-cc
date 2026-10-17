@@ -8,6 +8,7 @@ import { parseMessagesRequest } from "../protocol/validate.js";
 import { apiError } from "../protocol/messages.js";
 import { explicitSessionId, historyMessageHashes, historyPrefixHash, resolveSession, roleFromHeaders, sessionContextHash } from "../sessions/correlate.js";
 import { isEnded } from "../sessions/state.js";
+import { MISSION_SPAWN_TOOLS } from "../runtime/mission-tools.js";
 import { SessionStore } from "../sessions/store.js";
 import { createRuntime } from "../runtime/factory.js";
 import type { RuntimeTurn, StreamSink } from "../runtime/types.js";
@@ -60,18 +61,54 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
   const activeRequests = new Map<string, symbol>();
   let closing = false;
   let closePromise: Promise<void> | undefined;
-  runtime.setLifecycle?.({
-    toolWaitExpired: (sessionId) => {
-      // A request in flight sees the ended native session itself and fails it.
-      if (activeRequests.has(sessionId)) return;
-      try {
-        control.cancelApprovals(sessionId);
-        store.interrupt(sessionId, "tool-wait-expired");
-      } catch (error) {
-        logger.warn("tool_wait_interrupt_failed", { sessionId, error: error instanceof Error ? error.message : String(error) });
-      }
-    },
-  });
+
+  /**
+   * Run a step that takes a session slot. At the limit, free one slot first by
+   * retiring a parked session whose Droid has evidently left, instead of
+   * refusing. The store throws before it changes anything, so retrying is safe.
+   */
+  function withSlot<T>(admit: () => T): T {
+    try {
+      return admit();
+    } catch (error) {
+      if (!(error instanceof BridgeError) || error.code !== "session_limit" || !reclaimParkedSession()) throw error;
+      return admit();
+    }
+  }
+
+  /**
+   * Nothing is stopped while slots are free: a parked session may just be waiting
+   * for a long tool or for Mission workers. Only when a slot is needed is the
+   * least recently active session that qualifies given up. It qualifies if it is
+   * parked on Droid tools with no request attached; its last store update (when it
+   * parked, or when it last received a result) is at least toolWaitTimeoutMs old;
+   * it is not bound to a live Factory host, whose own end event releases it; and
+   * it is not waiting on a Mission spawn tool, whose workers can run for hours.
+   */
+  function reclaimParkedSession(): boolean {
+    const now = Date.now();
+    let oldest: { sessionId: string; idleMs: number } | undefined;
+    for (const session of store.list()) {
+      const sessionId = session.bridgeSessionId;
+      if (session.state !== "WAITING_DROID_TOOL" || activeRequests.has(sessionId)) continue;
+      const idleMs = now - Date.parse(session.updatedAt);
+      if (!(idleMs >= config.toolWaitTimeoutMs) || control.hasLiveHost(sessionId)) continue;
+      // A runtime that cannot say what the session waits on gets the benefit of the doubt.
+      const calls = runtime.pendingHostCalls?.(sessionId);
+      if (!calls || calls.some((call) => (MISSION_SPAWN_TOOLS as readonly string[]).includes(call.toolName))) continue;
+      if (!oldest || idleMs > oldest.idleMs) oldest = { sessionId, idleMs };
+    }
+    if (!oldest) return false;
+    const { sessionId, idleMs } = oldest;
+    control.cancelApprovals(sessionId);
+    // Marked interrupted, so its late tool_result gets the clear 409 and is never replayed.
+    store.interrupt(sessionId, "session-reclaimed");
+    void runtime.cancel(sessionId, "session-reclaimed").catch(() => {
+      logger.error("runtime_cancel_failed", { sessionId, reason: "session-reclaimed" });
+    });
+    logger.info("session_reclaimed", { sessionId, idleMs });
+    return true;
+  }
 
   const server = createServer(async (req, res) => {
     try {
@@ -224,7 +261,7 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
       cwd, hostSessionId: control.hostSessionId(prepared.binding), allowModelSwitch: config.models !== undefined,
     });
     const session = resolved.match
-      ?? store.create({
+      ?? withSlot(() => store.create({
         role,
         model: request.model,
         droidSessionId: explicitSessionId(headers, request),
@@ -232,7 +269,7 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
         contextHash,
         requestMessageHashes: historyMessageHashes(request.messages),
         toolNames: (request.tools ?? []).map((t) => t.name),
-      });
+      }));
 
     const sessionId = session.bridgeSessionId;
     if (activeRequests.has(sessionId)) {
@@ -248,7 +285,7 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
       // The state write can be refused (session limit); the binding cannot be
       // undone. So write the state first and bind last, and if only the bind is
       // refused give the session back exactly as it was.
-      store.setState(sessionId, session.state === "WAITING_DROID_TOOL" ? "RESUMING" : "GENERATING");
+      withSlot(() => store.setState(sessionId, session.state === "WAITING_DROID_TOOL" ? "RESUMING" : "GENERATING"));
       try {
         control.bind(prepared.binding, sessionId);
       } catch (error) {

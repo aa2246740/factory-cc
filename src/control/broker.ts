@@ -152,11 +152,20 @@ export class ControlBroker implements RuntimeControl {
 
   hostSessionId(token: string | undefined): string | undefined { return token ? this.tokens.get(token)?.sessionId : undefined; }
 
-  factoryPermissionMode(bridgeSessionId: string): string | undefined {
+  /** The live Factory host this native session is bound to, if any. */
+  private liveHost(bridgeSessionId: string): HostBinding | undefined {
     const session = this.store.get(bridgeSessionId);
     if (!session?.factorySessionId || !session.factoryCwd) return undefined;
     const host = this.hosts.get(`${session.factoryCwd}\0${session.factorySessionId}`);
-    if (!host || host.ended || !host.bridgeSessions.has(bridgeSessionId)) return undefined;
+    return host && !host.ended && host.bridgeSessions.has(bridgeSessionId) ? host : undefined;
+  }
+
+  /** A bound host's own SessionEnd or launch end releases the session, so it is never reclaimed for its slot. */
+  hasLiveHost(bridgeSessionId: string): boolean { return this.liveHost(bridgeSessionId) !== undefined; }
+
+  factoryPermissionMode(bridgeSessionId: string): string | undefined {
+    const host = this.liveHost(bridgeSessionId);
+    if (!host) return undefined;
     return host.specRestricted ? "spec" : host.permissionMode;
   }
 
