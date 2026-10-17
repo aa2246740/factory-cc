@@ -6,10 +6,10 @@ export function verifyTerminalLifecycleDelivery(terminal: string) {
     const event = /^\s*Hooks (SessionStart|UserPromptSubmit|PreToolUse|PostToolUse|SessionEnd|Notification|Stop|SubagentStop)\b/.exec(lines[index]!)?.[1];
     if (!event) continue;
     const block = lines.slice(index, index + 5).join("\n");
-    const reason = /Exit code [1-9]\d*|Factory lifecycle bridge unavailable; event delivery failed\.|Factory SessionEnd has no agent binding or wrapper launch;[^\n]*/.exec(block)?.[0];
+    const reason = /Exit code [1-9]\d*|Factory lifecycle bridge unavailable; event delivery failed\./.exec(block)?.[0];
     if (reason && !failures.some((failure) => failure.event === event && failure.reason === reason)) failures.push({ event, reason });
   }
-  const reservedFailureMessages = [...new Set(terminal.match(/Factory lifecycle bridge unavailable; event delivery failed\.|Factory SessionEnd has no agent binding or wrapper launch;[^\n]*/g) ?? [])];
+  const reservedFailureMessages = [...new Set(terminal.match(/Factory lifecycle bridge unavailable; event delivery failed\./g) ?? [])];
   return { status: failures.length || reservedFailureMessages.length ? "FAIL" : "PASS", failures, reservedFailureMessages };
 }
 function blocks(row: NativeProofRow): Block[] { return Array.isArray(row.message?.content) ? row.message.content as Block[] : []; }

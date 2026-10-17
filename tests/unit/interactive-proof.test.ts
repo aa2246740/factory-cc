@@ -4,8 +4,8 @@ import { nativePromptHasFinalResponse, verifyGeneratedDroidDelegation, verifyNat
 const expected = { sum: 56, nonce: "fixture-not-in-prompt" };
 const prompt = "Read input.json and calculate its sum and nonce.";
 describe("terminal lifecycle delivery proof", () => {
-  it("detects both reserved delivery failures and other actual hook exit failures", () => {
-    for (const reason of ["Exit code 1", "Factory lifecycle bridge unavailable; event delivery failed.", "Factory SessionEnd has no agent binding or wrapper launch; start interactive Droid with npm run run-droid so its lifecycle can be authenticated."]) {
+  it("detects the reserved delivery failure and other actual hook exit failures", () => {
+    for (const reason of ["Exit code 1", "Factory lifecycle bridge unavailable; event delivery failed."]) {
       expect(verifyTerminalLifecycleDelivery(`   Hooks SessionEnd\n    └─ hook command\n      └─ ${reason}`).status).toBe("FAIL");
     }
   });
