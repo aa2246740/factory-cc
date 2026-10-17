@@ -60,6 +60,12 @@ export interface RuntimeControl {
   factoryPermissionMode?(bridgeSessionId: string): string | undefined;
 }
 
+/** Endings the runtime decides on its own, which the HTTP layer must mirror in its session store. */
+export interface RuntimeLifecycle {
+  /** No Droid tool result arrived in time. The native session is gone and its tool will not be replayed. */
+  toolWaitExpired(sessionId: string): void;
+}
+
 export interface RuntimeHostCall {
   toolUseId: string;
   toolName: string;
@@ -88,6 +94,7 @@ export interface BridgeRuntime {
     results: Array<{ tool_use_id: string; content: string | ContentBlock[]; is_error?: boolean }>,
   ): Promise<Array<"accepted" | "duplicate">>;
   setControl?(control: RuntimeControl | undefined): void;
+  setLifecycle?(lifecycle: RuntimeLifecycle | undefined): void;
   pendingHostCalls?(sessionId: string): RuntimeHostCall[];
   completeHostTool?(sessionId: string, completion: RuntimeHostCompletion): Promise<"accepted" | "duplicate">;
   endHostSession?(sessionId: string, reason: string): Promise<RuntimeHostEnd>;

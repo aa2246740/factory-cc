@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as runtimeFactory from "../../src/runtime/factory.js";
 import { assistantMessage } from "../../src/protocol/messages.js";
 import { BridgeError } from "../../src/types.js";
-import type { BridgeRuntime, RuntimeTurn } from "../../src/runtime/types.js";
+import type { BridgeRuntime, RuntimeLifecycle, RuntimeTurn } from "../../src/runtime/types.js";
 import type { BridgeApp } from "../../src/http/app.js";
 import { postMessages, startTestBridge } from "../helpers/server.js";
 
@@ -15,6 +15,12 @@ const toolResult = { type: "tool_result", tool_use_id: "toolu_pending", content:
 const retry = { model, max_tokens: 64, messages: [first, toolUse, { role: "user", content: [toolResult] }] };
 const merged = { model, max_tokens: 64, messages: [first, toolUse, { role: "user", content: [toolResult, { type: "text", text: "never mind, summarize instead" }] }] };
 const consecutive = { model, max_tokens: 64, messages: [first, toolUse, { role: "user", content: [toolResult] }, { role: "user", content: "never mind, summarize instead" }] };
+
+function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => { resolve = done; });
+  return { promise, resolve };
+}
 
 function toolTurn(): RuntimeTurn {
   return {
@@ -117,6 +123,43 @@ describe("a conversation survives the end of the session that owned its tool cal
     expect(delivered.status).toBe(200);
     expect(delivered.session).toBe(session.bridgeSessionId);
     expect(app.store.require(session.bridgeSessionId)).toMatchObject({ state: "IDLE", pendingToolIds: [] });
+  });
+
+  it("frees the slot of a session whose wait for a Droid tool result expired", async () => {
+    let lifecycle: RuntimeLifecycle | undefined;
+    runtime.setLifecycle = vi.fn((value) => { lifecycle = value; });
+    vi.mocked(runtime.handle).mockResolvedValueOnce(toolTurn());
+    const { app, token } = await startTestBridge({ maxSessions: 1 });
+    apps.push(app);
+    const parked = await postMessages(app.url, token, { model, max_tokens: 64, messages: [first] });
+    const another = { model, max_tokens: 64, messages: [{ role: "user", content: "a different conversation" }] };
+    expect((await postMessages(app.url, token, another)).status).toBe(429);
+
+    lifecycle!.toolWaitExpired(parked.session!);
+    expect(app.store.require(parked.session!)).toMatchObject({
+      state: "IDLE", hostEnded: "interrupted", pendingToolIds: [], endedToolIds: ["toolu_pending"], notes: ["tool-wait-expired"],
+    });
+    expect((await postMessages(app.url, token, another)).status).toBe(200);
+    // Droid coming back later gets the clear answer, and the tool is not replayed.
+    expect((await postMessages(app.url, token, retry)).status).toBe(409);
+    expect(runtime.deliverResults).not.toHaveBeenCalled();
+    expect(vi.mocked(runtime.handle)).toHaveBeenCalledTimes(2);
+  });
+
+  it("leaves a request that is still running to fail its own session when the tool wait expires", async () => {
+    let lifecycle: RuntimeLifecycle | undefined;
+    runtime.setLifecycle = vi.fn((value) => { lifecycle = value; });
+    const release = deferred<RuntimeTurn>();
+    vi.mocked(runtime.handle).mockReturnValueOnce(release.promise);
+    const { app, token } = await startTestBridge();
+    apps.push(app);
+    const running = postMessages(app.url, token, { model, max_tokens: 64, messages: [first] });
+    await vi.waitFor(() => expect(app.store.list()).toHaveLength(1));
+    const [active] = app.store.list();
+    lifecycle!.toolWaitExpired(active!.bridgeSessionId);
+    expect(app.store.require(active!.bridgeSessionId).hostEnded).toBeUndefined();
+    release.resolve(textTurn());
+    expect((await running).status).toBe(200);
   });
 
   it("does not leave a failed turn holding its tool IDs", async () => {

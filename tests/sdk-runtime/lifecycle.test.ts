@@ -317,6 +317,58 @@ describe("official SDK streaming-input lifecycle (injected offline SDK)", () => 
     expect(sdk.inputs).toHaveLength(1);
   });
 
+  it("expires a session parked on a Droid tool, tells the app once, and never replays the tool", async () => {
+    let handlerError: unknown;
+    const sdk = new FakeSdk(async function* (_input, _index, fake) {
+      yield { type: "assistant", message: { content: [{ type: "tool_use", id: "parked-tool", name: "mcp__droid__TaskOutput", input: {} }] } };
+      try { await fake.handlers.get("TaskOutput")!({}, { toolUseID: "parked-tool" }); } catch (error) { handlerError = error; }
+      yield success("must not run");
+    });
+    const { runtime } = create(sdk, { toolWaitTimeoutMs: 40, toolWaitMs: 5_000 });
+    const expired = vi.fn();
+    runtime.setLifecycle({ toolWaitExpired: expired });
+    const s = session();
+    const first = await runtime.handle(request(s, "run tool", { tools: [tool] }));
+    expect(first.pendingToolIds).toEqual(["parked-tool"]);
+    expect(expired).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(expired).toHaveBeenCalledExactlyOnceWith("session-a"));
+    expect(runtime.pendingHostCalls("session-a")).toEqual([]);
+    expect(sdk.close).toHaveBeenCalledTimes(1);
+    expect(runtime.describe()).toMatchObject({ pendingHostCalls: 0, activeNativeSessions: 0, fatalErrors: [] });
+    await vi.waitFor(() => expect(handlerError).toMatchObject({ code: "cancelled" }));
+    const result: ContentBlock[] = [{ type: "tool_result", tool_use_id: "parked-tool", content: "late result" }];
+    await expect(runtime.handle(request(s, result))).rejects.toMatchObject({ status: 504, code: "tool_wait_expired" });
+    expect(sdk.inputs).toHaveLength(1);
+  });
+
+  it("measures the tool wait from the last activity, never while a request is attached", async () => {
+    vi.useFakeTimers();
+    try {
+      const sdk = new FakeSdk(async function* (_input, _index, fake) {
+        for (const id of ["first-tool", "second-tool"]) {
+          yield { type: "assistant", message: { content: [{ type: "tool_use", id, name: "mcp__droid__TaskOutput", input: { id } }] } };
+        }
+        await Promise.all(["first-tool", "second-tool"].map((id) => fake.handlers.get("TaskOutput")!({ id }, { toolUseID: id })));
+        yield success("both tools completed");
+      });
+      const { runtime } = create(sdk, { toolWaitTimeoutMs: 100, toolWaitMs: 60_000, requestTimeoutMs: 60_000 });
+      const expired = vi.fn();
+      runtime.setLifecycle({ toolWaitExpired: expired });
+      const s = session();
+      await runtime.handle(request(s, "parallel", { tools: [tool] }));
+      await vi.advanceTimersByTimeAsync(70);
+      // Delivering the first result is activity: the second tool gets a fresh window.
+      const second = await runtime.handle(request(s, [{ type: "tool_result", tool_use_id: "first-tool", content: "first result" }]));
+      expect(second.pendingToolIds).toEqual(["second-tool"]);
+      await vi.advanceTimersByTimeAsync(70);
+      expect(expired).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(40);
+      expect(expired).toHaveBeenCalledExactlyOnceWith("session-a");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("allows sequential native handlers from one assistant batch without waiting for later handlers", async () => {
     const sdk = new FakeSdk(async function* (_input, _index, fake) {
       yield { type: "assistant", message: { content: ["a", "b"].map((id) => ({ type: "tool_use", id, name: "mcp__droid__TaskOutput", input: { id } })) } };

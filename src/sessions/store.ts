@@ -83,6 +83,19 @@ export class SessionStore {
     return record;
   }
 
+  /**
+   * The native process that parked this session on a Droid tool is gone, so no
+   * result can ever be delivered. Keep its identity but release its slot, and make
+   * sure it is never matched, resumed or replayed. Other states are left alone.
+   */
+  interrupt(id: string, note: string): SessionRecord {
+    const record = this.require(id);
+    if (record.state !== "WAITING_DROID_TOOL") return record;
+    interruptWaiting(record, note);
+    this.flush(record);
+    return record;
+  }
+
   require(id: string): SessionRecord {
     const record = this.sessions.get(id);
     if (!record) throw new BridgeError(404, "session_not_found", id);
@@ -149,12 +162,14 @@ export class SessionStore {
     }
     // There is no process left to finish an interrupted generation. Keep its
     // identity and SDK checkpoint, but never silently replay unknown side effects.
-    // WAITING_DROID_TOOL remains occupied so a lost waiter cannot be evicted or
-    // matched as a fresh conversation after a restart.
+    // A session parked on a Droid tool can no longer complete either: the SDK
+    // callback that would receive the result died with the old process.
     for (const record of this.sessions.values()) {
       if (record.state === "NEW" || record.state === "GENERATING" || record.state === "RESUMING") {
         transition(record, "FAILED");
         record.notes.push("bridge-restarted-during-generation");
+      } else if (record.state === "WAITING_DROID_TOOL") {
+        interruptWaiting(record, "bridge-restarted-while-waiting-for-tool");
       } else {
         // Records written before ended sessions released their tool IDs.
         retirePendingTools(record);
@@ -179,6 +194,12 @@ function atomicWrite(path: string, data: string): void {
   } finally {
     rmSync(temporary, { force: true });
   }
+}
+
+function interruptWaiting(record: SessionRecord, note: string): void {
+  record.hostEnded = "interrupted";
+  record.notes.push(note);
+  transition(record, "IDLE");
 }
 
 function isActive(state: SessionState): boolean {

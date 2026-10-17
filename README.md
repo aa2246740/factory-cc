@@ -115,7 +115,7 @@ npm run configure-hooks -- --hooks "$PROJECT/.factory/hooks.json" --config "$PWD
 
 `configure-hooks` 读取 `BRIDGE_HOOK_TOKEN`，它必须和正在运行的 Bridge 一致，用法和 `BRIDGE_ADMIN_TOKEN` 相同。这个令牌只接受 `POST /internal/host-events`；其他 `/internal/*` 只接受管理员令牌。Bridge 与 wrapper 需共享同一组 `BRIDGE_ADMIN_TOKEN` / `BRIDGE_CLIENT_TOKEN` / `BRIDGE_HOOK_TOKEN`，并把 `BRIDGE_SDK_CWD` 指向目标项目。wrapper 保留 `HOME`，通过 `FACTORY_HOME_OVERRIDE` 隔离 Factory 数据；退出或取消时只清理本次启动拥有的会话。交互启动请使用 wrapper：Factory UI 的退出 hook 无法继承 Agent 进程里的会话绑定，需要本次启动的身份才能准确结束对应会话。进程被强制杀死、来不及发送结束事件时，应使用控制页取消遗留会话。
 
-默认单次原生响应期限为 10 分钟（`BRIDGE_REQUEST_TIMEOUT_MS`）；外部工具往返等待为 8 小时（`BRIDGE_TOOL_WAIT_MS`），适用于长 Mission。它们都是明确的时间上限，超时会取消工作；官方结束事件会提前释放会话，无需等计时器。
+默认单次原生响应期限为 10 分钟（`BRIDGE_REQUEST_TIMEOUT_MS`）。会话停在外部工具往返上、Droid 一直没有回传结果时，空闲 30 分钟后过期（`BRIDGE_TOOL_WAIT_TIMEOUT_MS`；`BRIDGE_TOOL_WAIT_MS` 仍是单个工具 8 小时的绝对上限）。长时间不返回的 Mission 工具需要调大前者。过期、被取消或 Bridge 重启后，该会话标记为中断并释放名额，其工具调用不会重放；Droid 之后再回传同一个结果得到 409，新的文本消息则新建会话，并把此前历史作为参考导入。官方结束事件会提前释放会话，无需等计时器。
 
 在目标项目安装自定义 Agent 生成入口：
 

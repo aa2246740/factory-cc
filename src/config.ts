@@ -22,6 +22,8 @@ export interface BridgeConfig {
   maxSessions: number;
   maxTurns: number;
   toolWaitMs: number;
+  /** Idle expiry for a session parked on a Droid tool result. */
+  toolWaitTimeoutMs: number;
   requestTimeoutMs: number;
   claudeExecutable?: string;
   sdkCwd: string;
@@ -111,6 +113,7 @@ export function loadConfig(overrides: Partial<BridgeConfig> = {}): BridgeConfig 
     maxSessions: overrides.maxSessions ?? intEnv("BRIDGE_MAX_SESSIONS", 16),
     maxTurns: overrides.maxTurns ?? intEnv("BRIDGE_MAX_TURNS", 64),
     toolWaitMs: overrides.toolWaitMs ?? intEnv("BRIDGE_TOOL_WAIT_MS", 8 * 60 * 60 * 1000),
+    toolWaitTimeoutMs: overrides.toolWaitTimeoutMs ?? intEnv("BRIDGE_TOOL_WAIT_TIMEOUT_MS", 30 * 60 * 1000),
     requestTimeoutMs: overrides.requestTimeoutMs ?? intEnv("BRIDGE_REQUEST_TIMEOUT_MS", 10 * 60 * 1000),
     claudeExecutable: overrides.claudeExecutable ?? env("BRIDGE_CLAUDE_EXECUTABLE"),
     sdkCwd: canonicalWorkspacePath(overrides.sdkCwd ?? env("BRIDGE_SDK_CWD", resolve(dataDir, "sandbox"))!),

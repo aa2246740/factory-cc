@@ -58,6 +58,18 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
   const activeRequests = new Map<string, symbol>();
   let closing = false;
   let closePromise: Promise<void> | undefined;
+  runtime.setLifecycle?.({
+    toolWaitExpired: (sessionId) => {
+      // A request in flight sees the ended native session itself and fails it.
+      if (activeRequests.has(sessionId)) return;
+      try {
+        control.cancelApprovals(sessionId);
+        store.interrupt(sessionId, "tool-wait-expired");
+      } catch (error) {
+        logger.warn("tool_wait_interrupt_failed", { sessionId, error: error instanceof Error ? error.message : String(error) });
+      }
+    },
+  });
 
   const server = createServer(async (req, res) => {
     try {

@@ -90,7 +90,7 @@ describe("session capacity and durable identity", () => {
       .toMatchObject({ bridgeSessionId: record.bridgeSessionId, sdkSessionId: "sdk-a" });
   });
 
-  it("fails interrupted generations after restart and retains pending tool ownership", () => {
+  it("fails interrupted generations after restart and interrupts sessions parked on a tool that can no longer answer", () => {
     const dir = temporaryDir();
     const store = new SessionStore(dir, true, 2);
     const interrupted = store.create(input);
@@ -102,9 +102,45 @@ describe("session capacity and durable identity", () => {
     store.setState(waiting.bridgeSessionId, "WAITING_DROID_TOOL");
     const loaded = new SessionStore(dir, true, 2);
     expect(loaded.require(interrupted.bridgeSessionId)).toMatchObject({ state: "FAILED", sdkSessionId: "sdk-interrupted", notes: ["bridge-restarted-during-generation"] });
-    expect(loaded.require(waiting.bridgeSessionId)).toMatchObject({ state: "WAITING_DROID_TOOL", sdkSessionId: "sdk-waiting", pendingToolIds: ["tool-a"] });
-    expect(() => loaded.create(input)).not.toThrow();
-    expect(() => loaded.create(input)).toThrowError(expect.objectContaining({ status: 429 }));
+    expect(loaded.require(waiting.bridgeSessionId)).toMatchObject({
+      state: "IDLE", hostEnded: "interrupted", sdkSessionId: "sdk-waiting", pendingToolIds: [], endedToolIds: ["tool-a"],
+      notes: ["bridge-restarted-while-waiting-for-tool"],
+    });
+    expect(loaded.list().filter((record) => ["NEW", "GENERATING", "WAITING_DROID_TOOL", "RESUMING"].includes(record.state))).toEqual([]);
+    // Both slots are free again, and the interruption survives yet another restart.
+    expect(() => { loaded.create(input); loaded.create(input); }).not.toThrow();
+    expect(new SessionStore(dir, true, 2).require(waiting.bridgeSessionId)).toMatchObject({ state: "IDLE", hostEnded: "interrupted", pendingToolIds: [] });
+  });
+
+  it("frees every slot held by abandoned sessions after a restart, so new conversations are not refused", () => {
+    const dir = temporaryDir();
+    const store = new SessionStore(dir, true, 3);
+    const abandoned = [1, 2, 3].map((n) => {
+      const record = store.create(input);
+      store.setState(record.bridgeSessionId, "GENERATING");
+      store.update(record.bridgeSessionId, { pendingToolIds: [`tool-${n}`] });
+      store.setState(record.bridgeSessionId, "WAITING_DROID_TOOL");
+      return record.bridgeSessionId;
+    });
+    expect(() => store.create(input)).toThrowError(expect.objectContaining({ status: 429, code: "session_limit" }));
+    const restarted = new SessionStore(dir, true, 3);
+    expect(() => restarted.create(input)).not.toThrow();
+    expect(restarted.list().filter((record) => abandoned.includes(record.bridgeSessionId)).map((record) => record.hostEnded)).toEqual(["interrupted", "interrupted", "interrupted"]);
+  });
+
+  it("interrupts only a session that is parked on a tool, releasing its slot and tool IDs", () => {
+    const store = new SessionStore(temporaryDir(), false, 1);
+    const record = store.create(input);
+    store.setState(record.bridgeSessionId, "GENERATING");
+    expect(store.interrupt(record.bridgeSessionId, "ignored")).toMatchObject({ state: "GENERATING", notes: [] });
+    store.update(record.bridgeSessionId, { pendingToolIds: ["tool-a"] });
+    store.setState(record.bridgeSessionId, "WAITING_DROID_TOOL");
+    expect(() => store.create(input)).toThrowError(expect.objectContaining({ status: 429 }));
+    expect(store.interrupt(record.bridgeSessionId, "tool-wait-expired")).toMatchObject({
+      state: "IDLE", hostEnded: "interrupted", pendingToolIds: [], endedToolIds: ["tool-a"], notes: ["tool-wait-expired"],
+    });
+    expect(() => store.create(input)).not.toThrow();
+    expect(() => store.interrupt("missing-session", "x")).toThrowError(expect.objectContaining({ status: 404 }));
   });
 
   it.each([
