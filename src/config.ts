@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { chmodSync, mkdirSync } from "node:fs";
+import { isIPv6 } from "node:net";
 import { resolve } from "node:path";
 import type { BridgeMode } from "./types.js";
 import { parseAuthMode, type AuthMode } from "./upstream/auth-env.js";
@@ -15,6 +16,8 @@ export interface BridgeConfig {
   hookToken: string;
   /** Operator opted in to a non-loopback bind. Never true for subscription. */
   allowRemote: boolean;
+  /** Names or IPs remote clients use to reach the bridge. Honored only with allowRemote. */
+  allowedHosts: string[];
   dataDir: string;
   logDir: string;
   sandboxDir: string;
@@ -65,6 +68,28 @@ export function isLoopbackHost(host: string): boolean {
   return parts.every((part) => /^\d{1,3}$/.test(part) && Number(part) <= 255);
 }
 
+/** `0.0.0.0` or `::`: listens everywhere, so the address says nothing about what clients will call it. */
+export function isWildcardHost(host: string): boolean {
+  const bare = host.trim().replace(/^\[|\]$/g, "").toLowerCase();
+  return bare === "0.0.0.0" || bare === "::" || bare === "0:0:0:0:0:0:0:0";
+}
+
+/** Bare host names and IPs only, lowercased; IPv6 comes back bracketed as it appears in a Host header. */
+export function parseAllowedHosts(raw: string | string[] | undefined): string[] {
+  const entries = Array.isArray(raw) ? raw : (raw ?? "").split(",");
+  const names = new Set<string>();
+  for (const entry of entries) {
+    const bare = entry.trim().replace(/^\[|\]$/g, "").toLowerCase();
+    if (!bare) continue;
+    const ipv6 = isIPv6(bare);
+    if (!ipv6 && !/^[a-z0-9._-]+$/.test(bare)) {
+      throw new Error(`BRIDGE_ALLOWED_HOSTS entries must be bare host names or IP addresses without a port or scheme; got "${entry.trim()}".`);
+    }
+    names.add(ipv6 ? `[${bare}]` : bare);
+  }
+  return [...names];
+}
+
 function ensurePrivateDir(path: string): void {
   mkdirSync(path, { recursive: true, mode: 0o700 });
   // mkdir mode is filtered by umask. chmod makes the directory actually 0700.
@@ -86,12 +111,18 @@ export function loadConfig(overrides: Partial<BridgeConfig> = {}): BridgeConfig 
   const authMode = parseAuthMode(overrides.authMode ?? env("BRIDGE_AUTH", "byok"));
   const host = overrides.host ?? env("BRIDGE_HOST", "127.0.0.1")!;
   const allowRemote = overrides.allowRemote ?? env("BRIDGE_ALLOW_REMOTE") === "1";
+  const allowedHosts = parseAllowedHosts(overrides.allowedHosts ?? env("BRIDGE_ALLOWED_HOSTS"));
   if (!isLoopbackHost(host)) {
     if (authMode === "subscription") {
       throw new Error("exposing a Claude subscription to other machines/people is not permitted");
     }
     if (!allowRemote) {
       throw new Error(`Refusing to listen on ${host} without BRIDGE_ALLOW_REMOTE=1.`);
+    }
+    // Remote clients send the LAN IP or name they dialed, never the wildcard
+    // address, so without their names every request would fail the Host check.
+    if (isWildcardHost(host) && allowedHosts.length === 0) {
+      throw new Error(`BRIDGE_HOST=${host} listens on every interface, so the Host header remote clients send is not known. Set BRIDGE_ALLOWED_HOSTS to the comma-separated names or IPs they will use, for example 192.168.1.20,devbox.local.`);
     }
   }
   const clientToken = overrides.clientToken ?? env("BRIDGE_CLIENT_TOKEN", randomBytes(24).toString("hex"))!;
@@ -113,6 +144,7 @@ export function loadConfig(overrides: Partial<BridgeConfig> = {}): BridgeConfig 
     adminToken,
     hookToken,
     allowRemote,
+    allowedHosts,
     dataDir,
     logDir,
     sandboxDir: resolve(dataDir, "sandbox"),

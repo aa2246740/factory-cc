@@ -415,7 +415,11 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
   function assertRequestTarget(req: IncomingMessage): void {
     const port = boundPort();
     const allowedHosts = new Set([`127.0.0.1:${port}`, `localhost:${port}`, `[::1]:${port}`]);
-    if (config.allowRemote) allowedHosts.add(`${formatListenHost(config.host)}:${port}`);
+    if (config.allowRemote) {
+      allowedHosts.add(`${formatListenHost(config.host)}:${port}`);
+      // The names remote clients dial. A wildcard bind cannot know them itself.
+      for (const name of config.allowedHosts) allowedHosts.add(`${name}:${port}`);
+    }
     const requestHost = header(req.headers, "host");
     if (!requestHost || ![...allowedHosts].some((item) => item.toLowerCase() === requestHost.toLowerCase())) {
       throw new BridgeError(403, "permission_error", "Host is not allowed for this bridge.");
@@ -427,7 +431,10 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
       `http://localhost:${port}`,
       `http://[::1]:${port}`,
     ]);
-    if (config.allowRemote) allowedOrigins.add(listenUrl(config.host, port));
+    if (config.allowRemote) {
+      allowedOrigins.add(listenUrl(config.host, port));
+      for (const name of config.allowedHosts) allowedOrigins.add(`http://${name}:${port}`);
+    }
     if (![...allowedOrigins].some((item) => item.toLowerCase() === origin.toLowerCase())) {
       throw new BridgeError(403, "permission_error", "Origin is not allowed for this bridge.");
     }

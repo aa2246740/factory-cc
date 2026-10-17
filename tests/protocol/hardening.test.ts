@@ -62,6 +62,38 @@ describe("loopback request checks, token separation and bounded records", () => 
     expect(await foreignOrigin.json()).toEqual({ type: "error", error: { type: "permission_error", message: "Origin is not allowed for this bridge." } });
   });
 
+  it("accepts the configured remote host names on the bound port, ignoring case, but only with remote access on", async () => {
+    const { app } = await startTestBridge({ allowRemote: true, allowedHosts: ["192.168.1.20", "Devbox.Local", "[fe80::1]"] });
+    apps.push(app);
+    const port = Number(new URL(app.url).port);
+    for (const host of ["192.168.1.20", "devbox.local", "DEVBOX.LOCAL", "[fe80::1]", "[FE80::1]"]) {
+      expect((await raw(`${app.url}/healthz`, { host: `${host}:${port}` })).status, host).toBe(200);
+    }
+    for (const host of [`192.168.1.20:${port + 1}`, "192.168.1.20", `192.168.1.21:${port}`, `evil.example:${port}`, `devbox.local.evil.example:${port}`]) {
+      const refused = await raw(`${app.url}/healthz`, { host });
+      expect(refused.status, host).toBe(403);
+      expect(JSON.parse(refused.body).error.message).toBe("Host is not allowed for this bridge.");
+    }
+    // Matching Origins follow the same names and port; scheme and port still have to match.
+    const host = `192.168.1.20:${port}`;
+    for (const origin of [`http://192.168.1.20:${port}`, `http://DEVBOX.local:${port}`, `http://[fe80::1]:${port}`]) {
+      expect(await raw(`${app.url}/healthz`, { host, origin }), origin).toMatchObject({ status: 200 });
+    }
+    for (const origin of [`http://192.168.1.20:${port + 1}`, `https://192.168.1.20:${port}`, "http://evil.example", `http://192.168.1.21:${port}`]) {
+      const refused = await raw(`${app.url}/healthz`, { host, origin });
+      expect(refused.status, origin).toBe(403);
+      expect(JSON.parse(refused.body).error.message).toBe("Origin is not allowed for this bridge.");
+    }
+    // The loopback names keep working next to them.
+    expect((await raw(`${app.url}/healthz`, { host: `127.0.0.1:${port}` })).status).toBe(200);
+
+    const local = await startTestBridge({ allowedHosts: ["192.168.1.20"] });
+    apps.push(local.app);
+    const localPort = new URL(local.app.url).port;
+    expect((await raw(`${local.app.url}/healthz`, { host: `192.168.1.20:${localPort}` })).status).toBe(403);
+    expect((await raw(`${local.app.url}/healthz`, { host: `127.0.0.1:${localPort}` })).status).toBe(200);
+  });
+
   it("accepts the admin token only from the admin header or bearer, and limits the hook token to host events", async () => {
     const { app, config } = await startTestBridge();
     apps.push(app);

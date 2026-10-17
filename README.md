@@ -61,7 +61,7 @@ npm run configure-droid -- --settings "$PWD/tmp/relay-local/settings.json" --bas
 BRIDGE_MODE=mock BRIDGE_MODELS=glm-5.2 npm start
 ```
 
-脚本将 token 的**真实字面值**写入 JSON，不使用 `${BRIDGE_CLIENT_TOKEN}` 占位符。配置和备份权限为 `0600`，缺少 token 时拒绝修改。`BRIDGE_CLIENT_TOKEN`、`BRIDGE_ADMIN_TOKEN`、`BRIDGE_HOOK_TOKEN` 必须互不相同，否则启动直接失败。默认只监听回环地址（`127.0.0.1`、`localhost`、`::1` 或任意 `127.x.x.x`）。非 `subscription` 模式若要监听其他地址，必须另外设置 `BRIDGE_ALLOW_REMOTE=1`；这会把本进程的凭证提供给其他客户端，操作者自己负责服务条款。`subscription` 不允许暴露给其他机器或他人。`GET /healthz` 只返回 `{ "ok": true, "mode" }`；运行细节在带管理员令牌的 `GET /internal/runtime`。`POST /v1/messages` 接收 JSON 或 SSE 请求。未设置管理员令牌或 hook 令牌时，`sdk` 模式会把生成值写到数据目录的 `admin-token` 和 `hook-token`（权限 `0600`），启动日志只打印路径。
+脚本将 token 的**真实字面值**写入 JSON，不使用 `${BRIDGE_CLIENT_TOKEN}` 占位符。配置和备份权限为 `0600`，缺少 token 时拒绝修改。`BRIDGE_CLIENT_TOKEN`、`BRIDGE_ADMIN_TOKEN`、`BRIDGE_HOOK_TOKEN` 必须互不相同，否则启动直接失败。默认只监听回环地址（`127.0.0.1`、`localhost`、`::1` 或任意 `127.x.x.x`）。非 `subscription` 模式若要监听其他地址，必须另外设置 `BRIDGE_ALLOW_REMOTE=1`；这会把本进程的凭证提供给其他客户端，操作者自己负责服务条款。监听 `0.0.0.0` 或 `::` 时还必须用 `BRIDGE_ALLOWED_HOSTS`（逗号分隔的主机名或 IP，不含端口）列出客户端实际使用的名字，Host 与 Origin 校验才会放行它们，未设置则启动失败；该变量只在 `BRIDGE_ALLOW_REMOTE=1` 时生效。`subscription` 不允许暴露给其他机器或他人。`GET /healthz` 只返回 `{ "ok": true, "mode" }`；运行细节在带管理员令牌的 `GET /internal/runtime`。`POST /v1/messages` 接收 JSON 或 SSE 请求。未设置管理员令牌或 hook 令牌时，`sdk` 模式会把生成值写到数据目录的 `admin-token` 和 `hook-token`（权限 `0600`），启动日志只打印路径。
 
 另一个终端也先进入本仓库，加载同一份私有令牌文件，再使用该配置；`tmp/` 已被 Git 忽略。不要重新生成令牌或提交该文件：
 
