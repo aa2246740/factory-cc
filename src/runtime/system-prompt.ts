@@ -136,6 +136,14 @@ export function buildInitialUserContent(input: RuntimeRequest, cwd?: string): Co
       }
     }
   }
+  // The current message can carry results of tools that were never delivered
+  // (an interrupted tool call); keep them as reference rather than dropping them.
+  const latest = latestIndex >= 0 ? input.request.messages[latestIndex]! : undefined;
+  for (const block of latest ? asBlocks(latest.content) : []) {
+    if (block.type !== "tool_result") continue;
+    blocks.push({ type: "text", text: `Historical tool result ${block.tool_use_id}:` });
+    blocks.push(...userBlocks((block.content as string | ContentBlock[] | undefined) ?? ""));
+  }
   blocks.push({ type: "text", text: "Current user message:" });
   blocks.push(...buildDynamicUserContent(input, cwd));
   return blocks;

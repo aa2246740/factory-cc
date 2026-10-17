@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { sessionId } from "../relay/ids.js";
 import type { RoleTag, SessionState } from "../types.js";
 import { BridgeError } from "../types.js";
-import { type SessionRecord, transition } from "./state.js";
+import { type SessionRecord, retirePendingTools, transition } from "./state.js";
 
 export class SessionStore {
   private readonly sessions = new Map<string, SessionRecord>();
@@ -73,6 +73,8 @@ export class SessionStore {
     const record = this.require(id);
     if (patch.state && !isActive(record.state) && isActive(patch.state)) this.requireCapacity();
     Object.assign(record, patch, { updatedAt: new Date().toISOString() });
+    // A host ending (hostEnded) ends the session just as a terminal state does.
+    retirePendingTools(record);
     this.sessions.set(id, record);
     this.flush(record);
     return record;
@@ -125,6 +127,9 @@ export class SessionStore {
         transition(record, "FAILED");
         record.notes.push("bridge-restarted-during-generation");
         this.flush(record);
+      } else {
+        // Records written before ended sessions released their tool IDs.
+        retirePendingTools(record);
       }
     }
   }

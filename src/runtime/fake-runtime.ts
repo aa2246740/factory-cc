@@ -1,4 +1,4 @@
-import { collectToolResults, lastUserText, textFromBlocks } from "../protocol/content.js";
+import { collectLatestToolResults, lastUserText, textFromBlocks } from "../protocol/content.js";
 import { assistantMessage, estimatedUsage } from "../protocol/messages.js";
 import { createToolNameMap } from "../protocol/tool-names.js";
 import { maybeForceMissionSpawn } from "./mission-tools.js";
@@ -27,7 +27,7 @@ export class FakeRuntime implements BridgeRuntime {
     const query = this.query(input.session.bridgeSessionId);
     if (query.cancelled) throw new BridgeError(409, "session_cancelled", input.session.bridgeSessionId);
 
-    const results = collectToolResults(input.request.messages);
+    const results = collectLatestToolResults(input.request.messages);
     if (results.length > 0) {
       for (const result of results) {
         if (!query.mailbox.hasCall(result.tool_use_id)) {

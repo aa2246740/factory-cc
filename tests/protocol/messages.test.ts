@@ -111,6 +111,24 @@ describe("Messages protocol", () => {
     expect(JSON.stringify(res.json)).toContain("DeployProd");
   });
 
+  it("treats tool results from earlier turns as history, not as answers to a new request", async () => {
+    const { app, token } = await startTestBridge();
+    apps.push(app);
+    const res = await postMessages(app.url, token, {
+      model: "relay-probe",
+      max_tokens: 64,
+      messages: [
+        { role: "user", content: "inspect the project" },
+        { role: "assistant", content: [{ type: "tool_use", id: "toolu_earlier", name: "Read", input: {} }] },
+        { role: "user", content: [{ type: "tool_result", tool_use_id: "toolu_earlier", content: "interrupted" }] },
+        { role: "assistant", content: "Stopped as requested." },
+        { role: "user", content: "RELAY_TEXT_PROBE" },
+      ],
+    });
+    expect(res.status).toBe(200);
+    expect((res.json.content as Array<{ text?: string }>)[0]?.text).toContain("text probe ok");
+  });
+
   it("returns 501 for token counting instead of a fake exact count", async () => {
     const { app, token } = await startTestBridge();
     apps.push(app);

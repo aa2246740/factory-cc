@@ -683,6 +683,26 @@ describe("official SDK streaming-input lifecycle (injected offline SDK)", () => 
     expect(sdk.calls).toHaveLength(0);
   });
 
+  it("imports an undelivered tool result as history when it arrives with a new user message", async () => {
+    const sdk = new FakeSdk(async function* () { yield success("fresh start"); });
+    const { runtime } = create(sdk);
+    const stale: ContentBlock = { type: "tool_result", tool_use_id: "abandoned-tool", content: "interrupted by the user" };
+    const messages = (last: ContentBlock[]) => [
+      user("old task"),
+      { role: "assistant" as const, content: [{ type: "tool_use", id: "abandoned-tool", name: "mcp__droid__TaskOutput", input: {} } as ContentBlock] },
+      user(last),
+    ];
+    const turn = await runtime.handle(request(session(), "unused", { messages: messages([stale, { type: "text", text: "new question" }]) }));
+    expect(turn.response.content).toEqual([{ type: "text", text: "fresh start" }]);
+    const imported = JSON.stringify(sdk.inputs[0]);
+    expect(imported).toContain("Historical tool result abandoned-tool:");
+    expect(imported).toContain("interrupted by the user");
+    expect(imported).toContain("new question");
+    // Nothing but a bare tool result has no new turn to run and no callback to answer.
+    const bare = create(new FakeSdk(async function* () { yield success("must not run"); })).runtime;
+    await expect(bare.handle(request(session(), "unused", { messages: messages([stale]) }))).rejects.toMatchObject({ status: 409, code: "unknown_tool_use_id" });
+  });
+
   it("times out by aborting, interrupting and closing the underlying query", async () => {
     const sdk = new FakeSdk(async function* (_input, _index, fake) { await fake.untilClosed; yield success("late"); });
     const { runtime } = create(sdk, { requestTimeoutMs: 20 });

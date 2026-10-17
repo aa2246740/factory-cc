@@ -107,6 +107,31 @@ describe("session capacity and durable identity", () => {
     expect(() => loaded.create(input)).toThrowError(expect.objectContaining({ status: 429 }));
   });
 
+  it.each([
+    ["cancelled", (store: SessionStore, id: string) => store.setState(id, "CANCELLED")],
+    ["failed", (store: SessionStore, id: string) => store.setState(id, "FAILED")],
+    ["host-interrupted", (store: SessionStore, id: string) => store.update(id, { hostEnded: "interrupted" })],
+    ["host-terminal", (store: SessionStore, id: string) => store.update(id, { hostEnded: "terminal" })],
+  ])("releases the pending tool IDs of a session that ends (%s) but remembers them for retries", (_label, end) => {
+    const store = new SessionStore(temporaryDir(), false, 2);
+    const record = store.create(input);
+    store.setState(record.bridgeSessionId, "GENERATING");
+    store.update(record.bridgeSessionId, { pendingToolIds: ["tool-a", "tool-b"] });
+    store.setState(record.bridgeSessionId, "WAITING_DROID_TOOL");
+    expect(store.require(record.bridgeSessionId).pendingToolIds).toEqual(["tool-a", "tool-b"]);
+    end(store, record.bridgeSessionId);
+    expect(store.require(record.bridgeSessionId)).toMatchObject({ pendingToolIds: [], endedToolIds: ["tool-a", "tool-b"] });
+  });
+
+  it("does not let an ended session reclaim tool IDs when a late turn result is stored", () => {
+    const store = new SessionStore(temporaryDir(), false, 2);
+    const record = store.create(input);
+    store.setState(record.bridgeSessionId, "GENERATING");
+    store.update(record.bridgeSessionId, { hostEnded: "interrupted" });
+    store.update(record.bridgeSessionId, { pendingToolIds: ["late-tool"] });
+    expect(store.require(record.bridgeSessionId)).toMatchObject({ pendingToolIds: [], endedToolIds: ["late-tool"] });
+  });
+
   it("persists completed and interrupted host endings without reviving their native transcript", () => {
     const dir = temporaryDir();
     const store = new SessionStore(dir, true, 2);

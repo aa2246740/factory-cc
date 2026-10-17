@@ -3,7 +3,7 @@ import { header } from "../security/auth.js";
 import { asBlocks, collectToolResults } from "../protocol/content.js";
 import type { ContentBlock, Message, MessagesRequest, RoleTag } from "../types.js";
 import { BridgeError } from "../types.js";
-import type { SessionRecord } from "./state.js";
+import { isEnded, type SessionRecord } from "./state.js";
 import { canonicalWorkspacePath } from "../workspace.js";
 
 type Headers = Record<string, string | string[] | undefined>;
@@ -73,7 +73,7 @@ export function resolveSession(
   const assertSelectedContext = (session: SessionRecord, authenticatedThinkingChange = false): void => {
     if (!authenticatedThinkingChange) assertContext(session, compatibleContextHash(session), headers, request);
     if (!switchingModel(session)) return;
-    if (session.state === "FAILED" || session.state === "CANCELLED" || session.hostEnded === "terminal" || session.hostEnded === "interrupted") {
+    if (isEnded(session)) {
       throw new BridgeError(409, "session_unavailable", "This session has ended; start a new session.");
     }
     if (session.state !== "IDLE" || session.pendingToolIds.length > 0 || session.cancelRequested) {
@@ -81,7 +81,23 @@ export function resolveSession(
     }
   };
   const results = collectToolResults(request.messages);
-  const owners = sessions.filter((session) => results.some((result) => session.pendingToolIds.includes(result.tool_use_id)));
+  // Factory keeps old tool_results in its history. An ended session can no
+  // longer consume one, so it must not own the conversation they appear in.
+  const owners = sessions.filter((session) => !isEnded(session)
+    && results.some((result) => session.pendingToolIds.includes(result.tool_use_id)));
+  if (owners.length === 0) {
+    // Only a request that does nothing but return the abandoned tool's result is
+    // a retry. Any new user content makes it a new turn over imported history.
+    const latest = request.messages.at(-1);
+    const latestBlocks = latest?.role === "user" ? asBlocks(latest.content) : [];
+    if (latestBlocks.length > 0 && latestBlocks.every((block) => block.type === "tool_result")) {
+      const retried = collectToolResults([latest!]);
+      const held = (session: SessionRecord): string[] => [...(session.endedToolIds ?? []), ...session.pendingToolIds];
+      if (sessions.some((session) => isEnded(session) && retried.some((result) => held(session).includes(result.tool_use_id)))) {
+        throw new BridgeError(409, "session_unavailable", "This tool result belongs to a session that was cancelled, timed out or interrupted. Its tool call will not be replayed; send a new message to continue in a new session.");
+      }
+    }
+  }
   const incoming = historyMessageHashes(request.messages);
   const workspace = options.cwd ? canonicalWorkspacePath(options.cwd) : undefined;
   // Factory changes its request-side thinking default when a model is selected.
@@ -153,7 +169,7 @@ export function resolveSession(
 
   const candidates = sessions.filter((session) => {
     if (!inHostScope(session)) return false;
-    if (session.state === "CANCELLED" || session.state === "FAILED" || session.hostEnded === "terminal" || session.hostEnded === "interrupted") return false;
+    if (isEnded(session)) return false;
     if (!historyContextMatches(session)) return false;
     return hasCompleteHistory(session);
   });
@@ -173,8 +189,7 @@ export function resolveSession(
         // Identify a genuine model-switch continuation before rejecting busy
         // state; filtering it out would silently fork the native conversation.
         && (switchingModel(session) || (session.state === "IDLE" && !session.cancelRequested && session.pendingToolIds.length === 0))
-        && session.state !== "FAILED" && session.state !== "CANCELLED"
-        && session.hostEnded !== "terminal" && session.hostEnded !== "interrupted";
+        && !isEnded(session);
     });
   if (authenticatedTail.length > 1) throw ambiguous("multiple authenticated Factory transcripts match the retained turn; supply X-Bridge-Session");
   if (authenticatedTail[0]) {

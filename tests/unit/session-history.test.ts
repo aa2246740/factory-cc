@@ -220,6 +220,40 @@ describe("conversation continuity and isolation", () => {
     expect(resolve([session({ state: "FAILED" }), session({ bridgeSessionId: "bridge-b", state: "CANCELLED" })]).match).toBeUndefined();
   });
 
+  describe("ended sessions and the tool results Factory keeps in its history", () => {
+    const toolUse: Message = { role: "assistant", content: [{ type: "tool_use", id: "tool-a", name: "Read", input: {} }] };
+    const toolResult = { type: "tool_result" as const, tool_use_id: "tool-a", content: "interrupted" };
+    const request = (...tail: Message[]): MessagesRequest => ({ ...initial, messages: [initial.messages[0]!, toolUse, ...tail] });
+    const retry = request({ role: "user", content: [toolResult] });
+    const merged = request({ role: "user", content: [toolResult, { type: "text", text: "Do something else instead." }] });
+    const consecutive = request({ role: "user", content: [toolResult] }, { role: "user", content: "Do something else instead." });
+    const endings: Array<Partial<SessionRecord>> = [{ state: "CANCELLED" }, { state: "FAILED" }, { hostEnded: "terminal" }, { hostEnded: "interrupted" }];
+
+    it.each(endings)("answers a retried tool result of an ended session with a clear 409: %j", (patch) => {
+      for (const held of [{ endedToolIds: ["tool-a"] }, { pendingToolIds: ["tool-a"] }]) {
+        expect(() => resolve([session({ ...patch, ...held })], retry))
+          .toThrowError(expect.objectContaining({ status: 409, code: "session_unavailable", message: expect.stringMatching(/will not be replayed.*new session/) }));
+      }
+    });
+
+    it.each(endings)("treats a new message after an ended tool wait as a new conversation: %j", (patch) => {
+      const record = session({ ...patch, pendingToolIds: ["tool-a"], endedToolIds: ["tool-a"] });
+      for (const next of [merged, consecutive]) expect(resolve([record], next)).toEqual({ reason: "new-session" });
+    });
+
+    it("lets a live session keep ownership of its own pending tool while an ended one is ignored", () => {
+      const live = session({ bridgeSessionId: "bridge-live", state: "WAITING_DROID_TOOL", pendingToolIds: ["tool-a"] });
+      const dead = session({ bridgeSessionId: "bridge-dead", state: "CANCELLED", endedToolIds: ["tool-a"] });
+      expect(resolve([dead, live], retry)).toMatchObject({ match: live, reason: "tool-use-id" });
+      expect(resolve([dead, live], merged)).toMatchObject({ match: live, reason: "tool-use-id" });
+    });
+
+    it("does not mistake an unknown tool result for a retry of an ended session", () => {
+      const ended = session({ state: "CANCELLED", endedToolIds: ["other-tool"] });
+      expect(resolve([ended], retry)).toEqual({ reason: "new-session" });
+    });
+  });
+
   describe("optional model switching", () => {
     const nextModel = { ...continuation, model: "other-model" };
     const resolveSwitch = (records: SessionRecord[], request = nextModel, extraHeaders = {}) =>

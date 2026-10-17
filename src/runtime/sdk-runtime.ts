@@ -305,7 +305,11 @@ export class SdkRuntime implements BridgeRuntime {
     let waiting: Promise<RuntimeTurn> | undefined;
     try {
       if (requestKey === live.lastRequestKey && live.lastReply) return live.lastReply;
-      const results = latestToolResults(input, live.active || live.pending.size > 0);
+      let results = latestToolResults(input, live.active || live.pending.size > 0);
+      // A conversation imported from history has no native callbacks to answer.
+      // Its tool results are earlier history when the same message carries a new
+      // user turn; the cold import below presents them as reference.
+      if (results.length && !live.sdkSessionId && !live.sentUserTurns && hasNewUserContent(input)) results = [];
       if (!results.length && live.active) {
         throw new BridgeError(409, "session_busy", "Complete the current SDK turn and its Droid tools before sending a new user turn");
       }
@@ -1076,6 +1080,11 @@ function latestToolResults(input: RuntimeRequest, includeTrailingUserMessages = 
     tool_use_id: String(result.tool_use_id ?? ""), content: result.content ?? "", is_error: Boolean(result.is_error),
     };
   });
+}
+
+function hasNewUserContent(input: RuntimeRequest): boolean {
+  const latest = input.request.messages.at(-1);
+  return latest?.role === "user" && asBlocks(latest.content).some((block) => block.type !== "tool_result");
 }
 
 function canonicalJson(value: unknown): string {

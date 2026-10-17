@@ -7,6 +7,7 @@ import type { Logger } from "../logging.js";
 import { parseMessagesRequest } from "../protocol/validate.js";
 import { apiError } from "../protocol/messages.js";
 import { explicitSessionId, historyMessageHashes, historyPrefixHash, resolveSession, roleFromHeaders, sessionContextHash } from "../sessions/correlate.js";
+import { isEnded } from "../sessions/state.js";
 import { SessionStore } from "../sessions/store.js";
 import { createRuntime } from "../runtime/factory.js";
 import type { RuntimeTurn } from "../runtime/types.js";
@@ -221,7 +222,7 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
     if (activeRequests.has(sessionId)) {
       throw new BridgeError(409, "session_busy", "another request is already running for this session");
     }
-    if (session.state === "CANCELLED" || session.state === "FAILED" || session.hostEnded === "terminal" || session.hostEnded === "interrupted") {
+    if (isEnded(session)) {
       throw new BridgeError(409, "session_unavailable", "this session has ended; start a new session");
     }
     const owner = Symbol(sessionId);
