@@ -20,7 +20,8 @@ const help = `Usage: npm run configure-droid -- [options]
   --auth byok|subscription|anthropic-api|cloud|inherit
                        subscription and anthropic-api default to sonnet,opus,haiku; the others need explicit model IDs
   --manifest <path>   Private script manifest
-  --revert            Restore original settings and remove managed-model metadata
+  --revert            Restore original settings (or, if you edited them since, remove only the
+                       bridge's models and selections) and delete the backup and metadata
 BRIDGE_CLIENT_TOKEN is required. BRIDGE_UPSTREAM_MODEL can supply the BYOK default.
 Existing user custom models and valid Mission model choices are preserved.`;
 
@@ -56,14 +57,22 @@ function signature(model: CustomModel): string {
   return createHash("sha256").update(JSON.stringify(fields)).digest("hex");
 }
 
-function managedModels(path: string): ManagedModel[] {
-  if (!existsSync(path)) return [];
+function sha256(text: string): string { return createHash("sha256").update(text).digest("hex"); }
+
+interface ManagedMetadata { models: ManagedModel[]; settingsHash?: string }
+
+/** `settingsHash` is the digest of the settings text this script last wrote; absent in older metadata. */
+function readMetadata(path: string): ManagedMetadata {
+  if (!existsSync(path)) return { models: [] };
   try {
-    const value = JSON.parse(readFileSync(path, "utf8")) as { version?: unknown; models?: unknown };
-    if (value.version !== 1 || !Array.isArray(value.models) || !value.models.every((entry) => entry && typeof entry === "object" && typeof entry.id === "string" && /^[a-f0-9]{64}$/.test(entry.signature))) throw new Error();
-    return value.models as ManagedModel[];
+    const value = JSON.parse(readFileSync(path, "utf8")) as { version?: unknown; models?: unknown; settingsHash?: unknown };
+    if (value.version !== 1 || !Array.isArray(value.models) || !value.models.every((entry) => entry && typeof entry === "object" && typeof entry.id === "string" && /^[a-f0-9]{64}$/.test(entry.signature))
+      || (value.settingsHash !== undefined && !(typeof value.settingsHash === "string" && /^[a-f0-9]{64}$/.test(value.settingsHash)))) throw new Error();
+    return { models: value.models as ManagedModel[], settingsHash: value.settingsHash as string | undefined };
   } catch { throw new Error("Invalid managed-model metadata; settings were not changed."); }
 }
+
+function managedModels(path: string): ManagedModel[] { return readMetadata(path).models; }
 
 function isLegacy(model: CustomModel): boolean {
   const legacy = legacyRoles.get(model.model);
@@ -72,6 +81,10 @@ function isLegacy(model: CustomModel): boolean {
   try { controlBaseUrl(model.baseUrl); } catch { return false; }
   const headers = model.extraHeaders;
   return !!headers && typeof headers === "object" && !Array.isArray(headers) && (headers as Record<string, unknown>)["X-Bridge-Role"] === legacy[1];
+}
+
+function ownedModels(existing: CustomModel[], previous: ManagedModel[]): Set<CustomModel> {
+  return new Set(existing.filter((item) => isLegacy(item) || previous.some((entry) => entry.id === item.model && entry.signature === signature(item))));
 }
 
 /** Factory numbers duplicate display names, not positions in customModels. */
@@ -84,6 +97,62 @@ function selectionIds(models: CustomModel[]): string[] {
   });
 }
 
+/** Settings the user edited after the last configure: drop only what the bridge added or selected. */
+function removeBridgeEntries(settingsPath: string, metadata: ManagedMetadata): boolean {
+  let current: Record<string, unknown> & { customModels?: unknown };
+  try {
+    current = JSON.parse(readFileSync(settingsPath, "utf8")) as typeof current;
+    if (!current || Array.isArray(current) || typeof current !== "object") throw new Error();
+  } catch { throw new Error("Invalid Droid settings JSON; settings were not changed."); }
+  const existing = Array.isArray(current.customModels) ? (current.customModels as unknown[]).filter((item): item is CustomModel =>
+    !!item && typeof item === "object" && !Array.isArray(item) && typeof (item as CustomModel).model === "string") : [];
+  const owned = ownedModels(existing, metadata.models);
+  if (Array.isArray(current.customModels)) current.customModels = (current.customModels as unknown[]).filter((item) => !owned.has(item as CustomModel));
+  // Selections that pointed at a removed model are dropped; surviving ones follow their model's renumbered ID.
+  const kept = existing.filter((item) => !owned.has(item)), oldIds = selectionIds(existing), newIds = selectionIds(kept);
+  const removed = new Set<string>(), renumbered = new Map<string, string>();
+  existing.forEach((item, index) => {
+    if (owned.has(item)) { removed.add(oldIds[index]!); if (typeof item.id === "string") removed.add(item.id); }
+    else renumbered.set(oldIds[index]!, newIds[kept.indexOf(item)]!);
+  });
+  const retarget = (container: Record<string, unknown>, keys: string[]): void => {
+    for (const key of keys) {
+      const value = container[key];
+      if (typeof value !== "string") continue;
+      if (removed.has(value) && !renumbered.has(value)) delete container[key];
+      else if (renumbered.has(value)) container[key] = renumbered.get(value)!;
+    }
+  };
+  const plain = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
+  retarget(current, ["model", "specModeModel", "missionOrchestratorModel"]);
+  if (plain(current.sessionDefaultSettings)) retarget(current.sessionDefaultSettings, ["model", "specModeModel"]);
+  if (plain(current.missionModelSettings)) retarget(current.missionModelSettings, ["workerModel", "validationWorkerModel"]);
+  writePrivateFile(settingsPath, `${JSON.stringify(current, null, 2)}\n`);
+  return owned.size > 0;
+}
+
+function revertDroid(settingsPath: string, backup: string, absentMarker: string, metadataPath: string): Record<string, unknown> {
+  const absent = existsSync(absentMarker);
+  if (!absent && !existsSync(backup)) throw new Error("No backup to revert.");
+  const metadata = readMetadata(metadataPath);
+  const currentText = existsSync(settingsPath) ? readFileSync(settingsPath, "utf8") : undefined;
+  let outcome: string, notice: string | undefined;
+  if (currentText === undefined) {
+    outcome = "unchanged";
+    notice = "The settings file no longer exists, so it was not recreated; the backup and metadata were removed.";
+  } else if (metadata.settingsHash !== undefined && metadata.settingsHash === sha256(currentText)) {
+    if (absent) rmSync(settingsPath, { force: true }); else writePrivateFile(settingsPath, readFileSync(backup, "utf8"));
+    outcome = absent ? "deleted" : "restored";
+  } else {
+    removeBridgeEntries(settingsPath, metadata);
+    outcome = "removed-bridge-entries";
+    notice = "The settings file changed after the last configure (or its fingerprint is unknown), so the backup was not restored. Only the bridge's models and model selections were removed; your other settings were kept.";
+  }
+  // A fresh configure must take a fresh backup rather than reuse this one.
+  for (const path of [backup, absentMarker, metadataPath]) rmSync(path, { force: true });
+  return { reverted: true, settingsPath, outcome, ...(notice ? { notice } : {}) };
+}
+
 export function configureDroid(argv: string[], env: NodeJS.ProcessEnv = process.env, catalog?: BridgeModel[]): Record<string, unknown> {
   const args = parseArgs(argv);
   if (args.help === "1") return { help };
@@ -91,10 +160,7 @@ export function configureDroid(argv: string[], env: NodeJS.ProcessEnv = process.
   const backup = `${settingsPath}.relay-bridge.bak`, absentMarker = `${backup}.absent`;
   const metadataPath = `${settingsPath}.relay-bridge.models.json`;
   if (args.revert === "1") {
-    if (existsSync(absentMarker)) rmSync(settingsPath, { force: true });
-    else { if (!existsSync(backup)) throw new Error("No backup to revert."); writePrivateFile(settingsPath, readFileSync(backup, "utf8")); }
-    rmSync(metadataPath, { force: true });
-    return { reverted: true, settingsPath };
+    return revertDroid(settingsPath, backup, absentMarker, metadataPath);
   }
   const token = env.BRIDGE_CLIENT_TOKEN;
   if (!token?.trim()) throw new Error("BRIDGE_CLIENT_TOKEN is required; settings were not changed.");
@@ -123,7 +189,7 @@ export function configureDroid(argv: string[], env: NodeJS.ProcessEnv = process.
     } catch { throw new Error("Invalid Droid settings JSON; settings were not changed."); }
   }
   const previous = managedModels(metadataPath), existing = current.customModels ?? [];
-  const owned = new Set(existing.filter((item) => isLegacy(item) || previous.some((entry) => entry.id === item.model && entry.signature === signature(item))));
+  const owned = ownedModels(existing, previous);
   const kept = existing.filter((item) => !owned.has(item));
   const incoming: CustomModel[] = configured.map((model) => ({ model: model.id, displayName: model.displayName, baseUrl, apiKey: token,
     provider: "anthropic", authMode: "bearer", maxOutputTokens: 4096 }));
@@ -166,8 +232,9 @@ export function configureDroid(argv: string[], env: NodeJS.ProcessEnv = process.
   }
   if (existsSync(backup)) chmodSync(backup, 0o600);
   if (existsSync(absentMarker)) chmodSync(absentMarker, 0o600);
-  writePrivateFile(settingsPath, `${JSON.stringify(current, null, 2)}\n`);
-  writePrivateFile(metadataPath, `${JSON.stringify({ version: 1, models: incoming.map((model) => ({ id: model.model, signature: signature(model) })) }, null, 2)}\n`);
+  const settingsText = `${JSON.stringify(current, null, 2)}\n`;
+  writePrivateFile(settingsPath, settingsText);
+  writePrivateFile(metadataPath, `${JSON.stringify({ version: 1, settingsHash: sha256(settingsText), models: incoming.map((model) => ({ id: model.model, signature: signature(model) })) }, null, 2)}\n`);
   const manifestPath = args.manifest ?? join(process.cwd(), "tmp/bridge-data/manifest.env");
   mkdirSync(dirname(manifestPath), { recursive: true });
   writePrivateFile(manifestPath, [
