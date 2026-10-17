@@ -245,8 +245,19 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
     const previous = structuredClone(session);
     activeRequests.set(sessionId, owner);
     try {
-      control.bind(prepared.binding, sessionId);
+      // The state write can be refused (session limit); the binding cannot be
+      // undone. So write the state first and bind last, and if only the bind is
+      // refused give the session back exactly as it was.
       store.setState(sessionId, session.state === "WAITING_DROID_TOOL" ? "RESUMING" : "GENERATING");
+      try {
+        control.bind(prepared.binding, sessionId);
+      } catch (error) {
+        // A session this request just created has no history worth keeping, and a
+        // lingering NEW one would hold a slot forever.
+        if (resolved.match) store.update(sessionId, { state: previous.state });
+        else store.setState(sessionId, "FAILED");
+        throw error;
+      }
     } catch (error) {
       activeRequests.delete(sessionId);
       throw error;

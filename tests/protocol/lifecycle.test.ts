@@ -5,6 +5,7 @@ import { request as httpRequest } from "node:http";
 import * as runtimeFactory from "../../src/runtime/factory.js";
 import { assistantMessage } from "../../src/protocol/messages.js";
 import { BridgeError } from "../../src/types.js";
+import { ControlBroker } from "../../src/control/broker.js";
 import type { BridgeRuntime, RuntimeTurn, StreamSink } from "../../src/runtime/types.js";
 import type { BridgeApp } from "../../src/http/app.js";
 import { postMessages, startTestBridge } from "../helpers/server.js";
@@ -231,6 +232,66 @@ describe("HTTP execution lifecycle", () => {
     const accepted = await postMessages(app.url, token, { ...body, messages: [{ role: "user", content: `${marker} fresh` }] }, { "x-bridge-session": "fresh-bind" });
     expect(accepted.status).toBe(200);
     expect(bound()).toBe(1);
+  });
+
+  it("leaves the Factory binding untouched when the session limit refuses the state write", async () => {
+    const pending = deferred<RuntimeTurn>();
+    const started = deferred<void>();
+    const { app, token, config } = await startTestBridge({ maxSessions: 1 });
+    apps.push(app);
+    const cwd = process.env.BRIDGE_SDK_CWD || config.sdkCwd;
+    const startedHost = await fetch(`${app.url}/internal/host-events`, {
+      method: "POST",
+      headers: { authorization: "Bearer admin-token", "content-type": "application/json" },
+      body: JSON.stringify({ eventId: "bind-order", event: { hook_event_name: "SessionStart", session_id: "factory-order", cwd, source: "startup" } }),
+    });
+    const marker = ((await startedHost.json()) as { additionalContext: string }).additionalContext;
+    const bound = () => (app.runtimeStatus().control as { boundNativeSessions: number }).boundNativeSessions;
+
+    // One idle session, and another that occupies the only active slot.
+    const idle = await postMessages(app.url, token, body, { "x-bridge-session": "idle-a" });
+    expect(idle.status).toBe(200);
+    vi.mocked(runtime.handle).mockImplementationOnce(async () => { started.resolve(); return pending.promise; });
+    const holder = postMessages(app.url, token, body, { "x-bridge-session": "holder" });
+    await started.promise;
+
+    const resume = { ...body, messages: [{ role: "user", content: `${marker} resume the idle one` }] };
+    const refused = await postMessages(app.url, token, resume, { "x-bridge-session": idle.session! });
+    expect(refused.status).toBe(429);
+    expect(refused.json.error).toMatchObject({ type: "session_limit" });
+    expect(bound()).toBe(0);
+    expect(app.store.require(idle.session!).state).toBe("IDLE");
+    expect(app.store.require(idle.session!).factorySessionId).toBeUndefined();
+    expect(app.store.require(idle.session!).factoryCwd).toBeUndefined();
+
+    pending.resolve(result());
+    expect((await holder).status).toBe(200);
+    const accepted = await postMessages(app.url, token, resume, { "x-bridge-session": idle.session! });
+    expect(accepted.status).toBe(200);
+    expect(bound()).toBe(1);
+    expect(app.store.require(idle.session!)).toMatchObject({ factorySessionId: "factory-order" });
+  });
+
+  it("gives a session back as it was, and frees a new one, when only the host bind is refused", async () => {
+    const { app, token } = await startTestBridge({ maxSessions: 1 });
+    apps.push(app);
+    const idle = await postMessages(app.url, token, body, { "x-bridge-session": "idle-a" });
+    const refuse = vi.spyOn(ControlBroker.prototype, "bind").mockImplementation(() => {
+      throw new BridgeError(409, "conflicting_host_binding", "This native session belongs to another live Factory session.");
+    });
+    const resumed = await postMessages(app.url, token, body, { "x-bridge-session": idle.session! });
+    expect(resumed.status).toBe(409);
+    expect(resumed.json.error).toMatchObject({ type: "conflicting_host_binding" });
+    expect(app.store.require(idle.session!)).toMatchObject({ state: "IDLE", cancelRequested: false });
+
+    const fresh = await postMessages(app.url, token, body, { "x-bridge-session": "fresh-one" });
+    expect(fresh.status).toBe(409);
+    expect(app.store.list().find((session) => session.droidSessionId === "fresh-one")).toMatchObject({ state: "FAILED" });
+    expect(runtime.handle).toHaveBeenCalledTimes(1);
+
+    refuse.mockRestore();
+    // Neither refused request kept a slot: the limit of one still admits a conversation.
+    expect((await postMessages(app.url, token, body, { "x-bridge-session": "another" })).status).toBe(200);
   });
 
   it("does not cancel the next turn when the previous stream finishes", async () => {
