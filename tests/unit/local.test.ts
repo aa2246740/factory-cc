@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { BridgeConfig } from "../../src/config.js";
@@ -13,7 +14,8 @@ vi.mock("../../src/http/app.js", async (original) => {
     const app = actual.createBridgeApp(...args); observed.apps.push({ app, config: args[0] }); return app;
   } };
 });
-import { localStateDirectory, parseLocalArgs, runLocal } from "../../scripts/local.js";
+import { installFactoryHooks } from "../../src/control/factory-hooks.js";
+import { launcherLockOwnerAlive, localStateDirectory, parseLauncherLock, parseLocalArgs, processStartTime, runLocal } from "../../scripts/local.js";
 
 const owned: string[] = [];
 const providerKey = "offline-local-provider-key-never-write-or-pass-to-droid";
@@ -167,6 +169,101 @@ describe("one-command isolated local launch", () => {
     expect(process.listenerCount("SIGTERM")).toBe(signalHandlers.terminate);
     expect(Object.values(process.env)).not.toContain(providerKey);
     expect(await runLocal(f.argv, f.env)).toBe(0);
+  });
+
+  it("handles SIGHUP like SIGTERM: cancels Droid, removes hooks, tokens and lock, and restores handlers", async () => {
+    const f = fixture();
+    const before = { hangup: process.listenerCount("SIGHUP"), terminate: process.listenerCount("SIGTERM") };
+    let entered!: () => void;
+    const running = new Promise<void>((resolve) => { entered = resolve; });
+    observed.runDroid.mockImplementationOnce(async (_argv: string[], options: { signal: AbortSignal }) => {
+      entered();
+      return new Promise<number>((resolve) => options.signal.addEventListener("abort", () => resolve(130), { once: true }));
+    });
+    const active = runLocal(f.argv, f.env); await running;
+    expect(process.listenerCount("SIGHUP")).toBe(before.hangup + 1);
+    process.emit("SIGHUP");
+    expect(await active).toBe(130);
+    expect(observed.apps[0]!.app.server.listening).toBe(false);
+    expect(JSON.parse(readFileSync(join(f.project, ".factory/hooks.json"), "utf8"))).toEqual({});
+    for (const name of ["factory-hooks.json", "admin-token", "launcher.lock"]) expect(existsSync(join(f.state, name)), name).toBe(false);
+    expect(process.listenerCount("SIGHUP")).toBe(before.hangup);
+    expect(process.listenerCount("SIGTERM")).toBe(before.terminate);
+  });
+
+  describe("launcher lock recovery", () => {
+    /** Leftovers of a launcher that died without cleanup: lock, installed hooks, hook config and admin token. */
+    function leftovers(f: ReturnType<typeof fixture>, lock: string) {
+      const hooksPath = join(f.project, ".factory/hooks.json"), hookConfig = join(f.state, "factory-hooks.json"), admin = join(f.state, "admin-token");
+      const userHook = { hooks: [{ type: "command", command: "user-existing-hook" }] };
+      mkdirSync(join(f.project, ".factory")); mkdirSync(f.state, { recursive: true, mode: 0o700 });
+      writeFileSync(hooksPath, JSON.stringify({ Stop: [userHook] }));
+      installFactoryHooks({ hooksPath, configPath: hookConfig, url: "http://127.0.0.1:9", hookToken: "stale-hook-token", command: "stale-bridge-hook" });
+      writeFileSync(admin, "stale-admin-token\n", { mode: 0o600 });
+      writeFileSync(join(f.state, "launcher.lock"), lock, { mode: 0o600 });
+      return { hooksPath, hookConfig, admin, userHook, lockPath: join(f.state, "launcher.lock") };
+    }
+    const deadPid = () => spawnSync(process.execPath, ["-e", ""]).pid!;
+
+    it("recovers from a dead PID by removing the previous run's hooks, tokens and lock, then launches", async () => {
+      const f = fixture(); const pid = deadPid();
+      const old = leftovers(f, `${JSON.stringify({ pid, startedAt: "Thu Jan  1 00:00:00 1970" })}\n`);
+      const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+      observed.runDroid.mockImplementationOnce(async () => {
+        const hooks = readFileSync(old.hooksPath, "utf8");
+        expect(hooks).not.toContain("stale-bridge-hook"); expect(hooks).toContain("user-existing-hook");
+        expect(readFileSync(old.admin, "utf8")).not.toContain("stale-admin-token");
+        expect(readFileSync(old.hookConfig, "utf8")).not.toContain("stale-hook-token");
+        expect(parseLauncherLock(readFileSync(old.lockPath, "utf8"))?.pid).toBe(process.pid);
+        return 0;
+      });
+      expect(await runLocal(f.argv, f.env)).toBe(0);
+      expect(observed.runDroid).toHaveBeenCalledTimes(1);
+      expect(stderr.mock.calls.map((call) => String(call[0])).join("")).toContain(`PID ${pid}`);
+      expect(JSON.parse(readFileSync(old.hooksPath, "utf8"))).toEqual({ Stop: [old.userHook] });
+      for (const path of [old.hookConfig, old.admin, old.lockPath]) expect(existsSync(path), path).toBe(false);
+    });
+
+    it("recovers a legacy bare-PID lock whose process is gone", async () => {
+      const f = fixture(); const old = leftovers(f, `${deadPid()}\n`);
+      vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+      expect(await runLocal(f.argv, f.env)).toBe(0);
+      expect(JSON.parse(readFileSync(old.hooksPath, "utf8"))).toEqual({ Stop: [old.userHook] });
+    });
+
+    it("refuses a live PID without touching its hooks, tokens or lock", async () => {
+      const f = fixture(); const lock = `${JSON.stringify({ pid: process.ppid, startedAt: processStartTime(process.ppid) })}\n`;
+      const old = leftovers(f, lock); const hooks = readFileSync(old.hooksPath, "utf8");
+      await expect(runLocal(f.argv, f.env)).rejects.toThrow(/already has a local launcher lock/);
+      expect(observed.runDroid).not.toHaveBeenCalled(); expect(observed.apps).toHaveLength(0);
+      expect(readFileSync(old.lockPath, "utf8")).toBe(lock); expect(readFileSync(old.hooksPath, "utf8")).toBe(hooks);
+      expect(readFileSync(old.admin, "utf8")).toBe("stale-admin-token\n"); expect(existsSync(old.hookConfig)).toBe(true);
+    });
+
+    it("refuses an unreadable lock instead of guessing", async () => {
+      const f = fixture(); const old = leftovers(f, "not a lock record");
+      await expect(runLocal(f.argv, f.env)).rejects.toThrow(/already has a local launcher lock/);
+      expect(existsSync(old.lockPath)).toBe(true); expect(existsSync(old.admin)).toBe(true);
+    });
+
+    it("treats a live PID whose start time changed as PID reuse", async () => {
+      if (processStartTime(process.pid) === undefined) return; // ps unavailable: reuse cannot be detected
+      const f = fixture(); const old = leftovers(f, `${JSON.stringify({ pid: process.pid, startedAt: "Thu Jan  1 00:00:00 1970" })}\n`);
+      vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+      expect(await runLocal(f.argv, f.env)).toBe(0);
+      expect(existsSync(old.admin)).toBe(false); expect(existsSync(old.lockPath)).toBe(false);
+    });
+
+    it("classifies lock records", () => {
+      expect(parseLauncherLock("123\n")).toEqual({ pid: 123 });
+      expect(parseLauncherLock('{"pid":7,"startedAt":"x"}')).toEqual({ pid: 7, startedAt: "x" });
+      for (const bad of ["", "0", "-4", "abc", '{"pid":"7"}', '{"pid":1.5}', '{"pid":7,"startedAt":3}']) expect(parseLauncherLock(bad), bad).toBeUndefined();
+      expect(launcherLockOwnerAlive({ pid: deadPid() })).toBe(false);
+      expect(launcherLockOwnerAlive({ pid: process.pid })).toBe(true);
+      expect(launcherLockOwnerAlive({ pid: process.pid, startedAt: "a" }, () => "a")).toBe(true);
+      expect(launcherLockOwnerAlive({ pid: process.pid, startedAt: "a" }, () => "b")).toBe(false);
+      expect(launcherLockOwnerAlive({ pid: process.pid, startedAt: "a" }, () => undefined)).toBe(true);
+    });
   });
 
   it("help, invalid options and missing explicit BYOK credentials do not create state or launch a process", async () => {

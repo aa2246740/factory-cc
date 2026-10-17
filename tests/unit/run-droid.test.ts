@@ -151,6 +151,23 @@ describe("Droid launch wrapper", () => {
     expect(requests.map((entry) => entry.path)).toEqual(["/internal/launches", "/internal/launches/owned-launch/cancel"]);
   });
 
+  it.skipIf(process.platform === "win32")("treats a real SIGHUP like SIGTERM: stops Droid, exits 143, and cancels without an end receipt", async () => {
+    const directory = temporaryDirectory();
+    const { env, requests } = await control();
+    const script = join(directory, "droid.mjs");
+    const ready = join(directory, "ready");
+    writeFileSync(script, `import {writeFileSync} from 'node:fs'; process.on('SIGHUP',()=>{}); process.on('SIGTERM',()=>process.exit(0)); writeFileSync(process.argv[2],String(process.pid)); setInterval(()=>{},1000);`);
+    const child = spawn(process.execPath, ["--import", "tsx", resolve("scripts/run-droid.ts"), "--home", directory, "--", script, ready], { env, stdio: "ignore" });
+    children.push(child);
+    const exit = new Promise<number | null>((done) => child.once("exit", (code) => done(code)));
+    await waitUntil(() => existsSync(ready));
+    const droidPid = Number(readFileSync(ready, "utf8"));
+    child.kill("SIGHUP");
+    expect(await exit).toBe(143);
+    await waitUntil(() => !processRunning(droidPid));
+    expect(requests.map((entry) => entry.path)).toEqual(["/internal/launches", "/internal/launches/owned-launch/cancel"]);
+  }, 10_000);
+
   it.skipIf(process.platform === "win32")("forwards a real SIGINT, exits130, and never sends an ordinary end receipt", async () => {
     const directory = temporaryDirectory();
     const { env, requests } = await control();

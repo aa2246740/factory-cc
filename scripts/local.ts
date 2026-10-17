@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { chmodSync, closeSync, constants, existsSync, fstatSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -124,6 +125,62 @@ function privateWrite(path: string, contents: string): void {
   finally { rmSync(temporary, { force: true }); }
 }
 
+export interface LauncherLock { pid: number; startedAt?: string }
+
+/** Accepts the current JSON record and the older bare "<pid>" lock. */
+export function parseLauncherLock(text: string): LauncherLock | undefined {
+  const trimmed = text.trim();
+  if (/^\d+$/.test(trimmed)) { const pid = Number(trimmed); return Number.isSafeInteger(pid) && pid > 0 ? { pid } : undefined; }
+  try {
+    const value = JSON.parse(trimmed) as Record<string, unknown>;
+    if (!value || typeof value !== "object" || !Number.isSafeInteger(value.pid) || (value.pid as number) < 1
+      || (value.startedAt !== undefined && typeof value.startedAt !== "string")) return undefined;
+    return { pid: value.pid as number, ...(value.startedAt === undefined ? {} : { startedAt: value.startedAt }) };
+  } catch { return undefined; }
+}
+
+/** Process start time as reported by ps (1 s resolution); undefined where ps is unavailable. */
+export function processStartTime(pid: number): string | undefined {
+  if (process.platform === "win32") return undefined;
+  try {
+    return execFileSync("ps", ["-o", "lstart=", "-p", String(pid)], { encoding: "utf8", env: { LC_ALL: "C", PATH: process.env.PATH ?? "" }, stdio: ["ignore", "pipe", "ignore"], timeout: 2_000 }).trim() || undefined;
+  } catch { return undefined; }
+}
+
+/** A recorded start time that no longer matches means the PID was reused by an unrelated process.
+ * A bare-PID lock (older launcher) or a missing ps cannot rule reuse out, so the owner is assumed alive. */
+export function launcherLockOwnerAlive(lock: LauncherLock, startTime: (pid: number) => string | undefined = processStartTime): boolean {
+  try { process.kill(lock.pid, 0); } catch (error) { return (error as NodeJS.ErrnoException).code !== "ESRCH"; }
+  if (lock.startedAt === undefined) return true;
+  const current = startTime(lock.pid);
+  return current === undefined || current === lock.startedAt;
+}
+
+/** True when the lock is gone afterwards: absent, or left by a dead launcher whose leftovers `cleanup` removed. */
+function clearStaleLock(lockPath: string, cleanup: (lock: LauncherLock) => void): boolean {
+  let before: ReturnType<typeof lstatSync>, lock: LauncherLock | undefined;
+  try {
+    before = lstatSync(lockPath);
+    if (!before.isFile()) return false;
+    lock = parseLauncherLock(readFileSync(lockPath, "utf8"));
+  } catch (error) { return (error as NodeJS.ErrnoException).code === "ENOENT"; }
+  if (!lock || launcherLockOwnerAlive(lock)) return false;
+  cleanup(lock);
+  try {
+    const now = lstatSync(lockPath);
+    if (now.dev !== before.dev || now.ino !== before.ino) return false; // replaced by a new launcher meanwhile
+    rmSync(lockPath);
+  } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+  return true;
+}
+
+function removeInstalledHooks(project: string, hooksPath: string, hookConfig: string): void {
+  directory(join(project, ".factory")); regularFile(hooksPath); regularFile(hookConfig);
+  removeFactoryHooks({ hooksPath, configPath: hookConfig });
+}
+
+function removeAdminToken(adminPath: string): void { regularFile(adminPath); rmSync(adminPath, { force: true }); }
+
 function preferences(path: string): { baseUrl?: string; model?: string; models?: string[] } {
   regularFile(path);
   if (!existsSync(path)) return {};
@@ -174,7 +231,8 @@ export async function runLocal(argv: string[], env: NodeJS.ProcessEnv = process.
   const abort = new AbortController();
   let interrupted = false;
   const interrupt = () => { interrupted = true; abort.abort(); };
-  process.on("SIGINT", interrupt); process.on("SIGTERM", interrupt);
+  // Closing the terminal sends SIGHUP; treat it like SIGTERM so hooks, token files and the lock are removed.
+  process.on("SIGINT", interrupt); process.on("SIGTERM", interrupt); process.on("SIGHUP", interrupt);
   let key = "", app: BridgeApp | undefined, releaseLock: (() => void) | undefined;
   const runtimeKey = `RELAY_LOCAL_PROVIDER_KEY_${randomBytes(8).toString("hex").toUpperCase()}`;
   const previous = new Map<string, string | undefined>();
@@ -211,12 +269,22 @@ export async function runLocal(argv: string[], env: NodeJS.ProcessEnv = process.
     if (abort.signal.aborted) return 130;
     directory(join(repository, "tmp/local"), true, true); directory(state, true, true);
     const lockPath = join(state, "launcher.lock");
+    const openLock = () => openSync(lockPath, constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY | constants.O_NOFOLLOW, 0o600);
     let lock: number;
-    try { lock = openSync(lockPath, constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY | constants.O_NOFOLLOW, 0o600); }
-    catch { throw new Error(`This project already has a local launcher lock: ${lockPath}. Close the existing launcher first. If it was killed, check the PID recorded in this file; delete the lock only after confirming that process no longer exists.`); }
+    try { lock = openLock(); }
+    catch (error) {
+      // A launcher that was killed (or lost its terminal before cleanup) leaves its lock, hooks and tokens behind.
+      const recovered = (error as NodeJS.ErrnoException).code === "EEXIST" && clearStaleLock(lockPath, (stale) => {
+        removeInstalledHooks(project, hooksPath, hookConfig); removeAdminToken(adminPath);
+        process.stderr.write(`Recovered from a previous launcher (PID ${stale.pid}) that exited without cleanup: removed its hooks, token files and lock.\n`);
+      });
+      try { if (!recovered) throw error; lock = openLock(); }
+      catch { throw new Error(`This project already has a local launcher lock: ${lockPath}. Close the existing launcher first. The lock is cleared automatically only when the PID recorded in it is no longer running; if it is unreadable, confirm the owner is gone and delete it.`); }
+    }
     const identity = fstatSync(lock);
     releaseLock = () => { try { const current = lstatSync(lockPath); if (current.dev === identity.dev && current.ino === identity.ino) rmSync(lockPath); } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; } };
-    try { writeFileSync(lock, `${process.pid}\n`); } finally { closeSync(lock); }
+    // The start time lets a later launcher tell this process from an unrelated one that reuses the PID.
+    try { writeFileSync(lock, `${JSON.stringify({ pid: process.pid, startedAt: processStartTime(process.pid) })}\n`); } finally { closeSync(lock); }
     directory(join(home, ".factory"), true, true);
     directory(join(state, "bridge-data"), true, true);
     for (const path of [settingsPath, `${settingsPath}.relay-bridge.bak`, `${settingsPath}.relay-bridge.bak.absent`, `${settingsPath}.relay-bridge.models.json`, hooksPath, hookConfig, adminPath, join(state, "manifest.env")]) regularFile(path);
@@ -252,12 +320,12 @@ export async function runLocal(argv: string[], env: NodeJS.ProcessEnv = process.
       const timer = setTimeout(() => app!.server.closeAllConnections(), 5_000);
       try { await app.close(); } catch (error) { failures.push(error); } finally { clearTimeout(timer); }
     }
-    if (hookAttempted) { try { directory(join(project, ".factory")); regularFile(hooksPath); regularFile(hookConfig); removeFactoryHooks({ hooksPath, configPath: hookConfig }); } catch (error) { failures.push(error); } }
-    if (adminWritten) { try { regularFile(adminPath); rmSync(adminPath, { force: true }); } catch (error) { failures.push(error); } }
+    if (hookAttempted) { try { removeInstalledHooks(project, hooksPath, hookConfig); } catch (error) { failures.push(error); } }
+    if (adminWritten) { try { removeAdminToken(adminPath); } catch (error) { failures.push(error); } }
     for (const [name, value] of previous) { if (value === undefined) delete process.env[name]; else process.env[name] = value; }
     key = "";
     try { releaseLock?.(); } catch (error) { failures.push(error); }
-    process.off("SIGINT", interrupt); process.off("SIGTERM", interrupt);
+    process.off("SIGINT", interrupt); process.off("SIGTERM", interrupt); process.off("SIGHUP", interrupt);
     if (failures.length) throw new Error("Local cleanup failed; check the project's local state and hooks before restarting.");
   }
 }

@@ -213,10 +213,13 @@ export async function runDroid(argv: string[], options: RunDroidOptions = {}): P
   };
   const onInterrupt = (): void => stop("SIGINT");
   const onTerminate = (): void => stop("SIGTERM");
+  // Closing the terminal sends SIGHUP; Droid runs in its own process group and would otherwise outlive us.
+  const onHangup = (): void => stop("SIGTERM");
   const onAbort = (): void => stop("SIGTERM");
   if (options.handleProcessSignals !== false) {
     process.on("SIGINT", onInterrupt);
     process.on("SIGTERM", onTerminate);
+    process.on("SIGHUP", onHangup);
   }
   options.signal?.addEventListener("abort", onAbort, { once: true });
 
@@ -280,6 +283,7 @@ export async function runDroid(argv: string[], options: RunDroidOptions = {}): P
     if (options.handleProcessSignals !== false) {
       process.off("SIGINT", onInterrupt);
       process.off("SIGTERM", onTerminate);
+      process.off("SIGHUP", onHangup);
     }
     options.signal?.removeEventListener("abort", onAbort);
     if (parsed.out) {
