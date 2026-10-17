@@ -44,7 +44,7 @@ function listenUrl(host: string, port: number): string {
 }
 
 export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath: string): BridgeApp {
-  const store = new SessionStore(join(config.dataDir, "sessions"), config.persistSessions, config.maxSessions);
+  const store = new SessionStore(join(config.dataDir, "sessions"), config.persistSessions, config.maxSessions, logger);
   const runtime = createRuntime(config, logger, canaryPath);
   const control = new ControlBroker(runtime, store, Math.min(config.toolWaitMs, config.requestTimeoutMs));
   runtime.setControl?.(control);
