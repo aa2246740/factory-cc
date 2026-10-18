@@ -22,7 +22,11 @@ npm run desktop -- install
 - `~/Library/Application Support/factory-cc/`，权限 `0700`；其中 `client-token`、`admin-token`、`hook-token`、`installation.json`、`models.env`、`stdout.log`、`stderr.log` 为私有文件，token 权限 `0600`；`bridge-data/` 保存会话和运行日志。
 - `~/.factory/settings.json`，以及首次备份 `settings.json.relay-bridge.bak` 或原文件不存在时的 `settings.json.relay-bridge.bak.absent`，还有所有权元数据 `settings.json.relay-bridge.models.json`。模型条目的 `apiKey` 是 Bridge 的本地 client token（文件权限 0600），只能访问这台机器 127.0.0.1 上的 Bridge，不是模型供应商的密钥。这里不用 `apiKeyHelper`：Droid 会从 Mission worker 和 validator 加载的运行时设置中删除可执行的凭证命令（日志 `Stripped executable custom-model credential commands`），用 helper 时它们会全部 401。Mission 启动时会把这些条目连同 token 快照到该 Mission 目录的 `runtime-custom-models.json`（0600）。
 
-不安装用户级或项目 hooks。每个会话从首条 user 消息前置的 Droid `User system info` system-reminder 读取首次 `% pwd` 输出，解析真实项目目录；缺失、无效、根目录或 Bridge 状态目录会返回 400，请先在 Droid 打开项目文件夹。后续用户粘贴的 `% pwd` 不会改目录。此来源限制依赖 Droid 的请求结构，不是对持有本地 token 的任意 API 客户端的身份认证。
+不安装用户级或项目 hooks。工作目录取自最新一段 Droid `User system info` system-reminder 里的 `% pwd`。Droid 通常把它放在首条 user 消息开头；对话中换模型时，会把新的一段放到新问题之前；压缩后，它跟在 Droid 的摘要后面。只看 user 消息开头连续的 system-reminder，不看用户正文里粘贴的内容和工具结果。缺失、无效、根目录或 Bridge 状态目录会返回 400，请先在 Droid 打开项目文件夹；同一会话换目录会返回 409。不允许任何工具的请求（例如 Droid 压缩时生成摘要的请求）不需要项目目录，在 Bridge 状态目录下的空目录 `auxiliary-cwd` 运行，那里所有工具都会被拒绝。此来源限制依赖 Droid 的请求结构，不是对持有本地 token 的任意 API 客户端的身份认证。
+
+Droid desktop 的请求不带对话 ID。两个对话的已完成记录完全相同时（同一项目、同一角色和 thinking 配置，开场和回复一字不差），由其中最早的空闲会话继续，优先当前所选模型；继续后两者自然分开。正在生成、挂着工具或已取消的会话不会被接管。对话中换模型、压缩或在 Droid 中续接旧对话后，前缀对不上，Bridge 会新开 Claude Code 会话并把之前的历史作为参考导入：内容记得，但之前的工具细节以文字形式出现，也用不上原会话的提示缓存。
+
+Mission：编排模型跟随当前对话所选的模型。worker 和 validator 用 Droid 的 Mission Models 设置（Worker model / Validator model），这是全局设置；Droid 在 Mission 启动时把它快照到该 Mission 目录的 `model-settings.json`。要让 worker、validator 也走 Claude Code，需要在那里选择 `Claude Code · …` 模型。
 
 桌面 profile 固定 `ask`，保留 Claude Code preset、隔离设置和 MCP。写文件、执行命令、子 Agent 和规划审批走 Droid 广告的 `mcp__droid__*` 工具，由 Droid 自己应用 autonomy 和 spec mode。原生 Read/Glob/Grep/LS 仍受已有工具策略限制；如果需要原生审批，会立即拒绝并提示改走 Droid，不等待控制页。
 
