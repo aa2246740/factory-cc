@@ -66,9 +66,13 @@ export function isReadOnlyBuiltin(name: string): boolean {
   return READ_ONLY_BUILTINS.has(bare);
 }
 
-export function selectDroidMcpTools(tools: ToolDefinition[] | undefined): ToolDefinition[] {
+/** Native read tools stay in Claude Code everywhere. The desktop profile disables native
+ * writes and shells, so Droid's own Create/Edit/Execute must be exposed for Droid to run. */
+const NATIVE_READS = new Set(["Read", "LS", "Grep", "Glob"]);
+
+export function selectDroidMcpTools(tools: ToolDefinition[] | undefined, desktopProfile = false): ToolDefinition[] {
   if (!tools?.length) return [];
-  return tools.filter((tool) => isDroidExclusive(tool.name));
+  return tools.filter((tool) => desktopProfile ? !NATIVE_READS.has(tool.name) : isDroidExclusive(tool.name));
 }
 
 export function isDroidMcpName(name: string): boolean {

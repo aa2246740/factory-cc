@@ -557,7 +557,7 @@ export class SdkRuntime implements BridgeRuntime {
 
   private async updateCatalog(live: LiveSdk, input: RuntimeRequest): Promise<void> {
     if (!live.catalog) throw new BridgeError(503, "dynamic_tools_unavailable", "The live SDK session has no mutable Droid MCP catalog");
-    if (await live.catalog.update(selectDroidMcpTools(input.request.tools))) {
+    if (await live.catalog.update(selectDroidMcpTools(input.request.tools, this.config.desktopProfile))) {
       await this.waitForCatalogVisibility(live);
       live.events.push({ at: now(), type: "droid_catalog_updated", data: {
         tools: live.catalog.definitions().map((tool) => tool.name), visibility: "cli_tool_names_confirmed", schemaVisibility: "revision_name_confirmed",
@@ -621,7 +621,7 @@ export class SdkRuntime implements BridgeRuntime {
     const selection = route ? route.selection : await this.ensureSelection();
     if (selection) this.selection = selection;
     if (live.terminal) throw live.terminal;
-    const droidTools = input.request.tools !== undefined ? selectDroidMcpTools(input.request.tools) : live.catalog?.definitions() ?? [];
+    const droidTools = input.request.tools !== undefined ? selectDroidMcpTools(input.request.tools, this.config.desktopProfile) : live.catalog?.definitions() ?? [];
     const names = live.names ?? new StableDroidToolNames();
     live.names = names;
     live.policyKey = queryPolicy(input, this.config);

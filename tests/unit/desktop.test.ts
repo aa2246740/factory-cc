@@ -15,7 +15,7 @@ function fixture() {
   writeFileSync(join(home, ".claude/settings.json"), JSON.stringify({ apiKeyHelper: `touch ${join(root, "HELPER-RAN")}`, env: { ANTHROPIC_DEFAULT_SONNET_MODEL: "fixture-sonnet" } }));
   const run = vi.fn<DesktopDependencies["run"]>(() => ({ status: 0 }));
   const deps: DesktopDependencies = { home, repo, node, path: "/fixture/bin:&/usr/bin", uid: 501, platform: "darwin", run,
-    assertPortFree: vi.fn(async () => {}), health: vi.fn(async () => true) };
+    assertPortFree: vi.fn(async () => {}), health: vi.fn(async () => true), sleep: vi.fn(async () => {}) };
   return { root, deps, paths: desktopPaths(home), run };
 }
 it("installs built Node service, private token files and helper models without executing helper", async () => {
@@ -233,4 +233,12 @@ it.each([
   const { deps, paths } = fixture();
   await expect(desktop(argv, deps)).rejects.toThrow();
   expect(existsSync(paths.state)).toBe(false);
+});
+it("restart retries bootstrap while launchd is still removing the old job", async () => {
+  const { deps, paths, run } = fixture(); await desktop(["install"], deps);
+  let refusals = 2;
+  run.mockImplementation((_command, args) => ({ status: args[0] === "bootstrap" && refusals-- > 0 ? 5 : 0 }));
+  await desktop(["restart"], deps);
+  expect(run.mock.calls.filter(([, args]) => args[0] === "bootstrap").slice(-3)).toEqual(Array(3).fill(["launchctl", ["bootstrap", "gui/501", paths.plist]]));
+  expect(deps.sleep).toHaveBeenCalledTimes(2);
 });

@@ -37,4 +37,10 @@ describe("droid tool split", () => {
     expect(isDroidExclusive("Skill")).toBe(true);
     expect(isDroidExclusive("Loop")).toBe(true);
   });
+
+  it("desktop profile routes Droid writes and shells over MCP but keeps native reads", () => {
+    const names = ["Read", "LS", "Grep", "Glob", "Create", "Edit", "Execute", "ApplyPatch", "Skill", "ToolSearch"];
+    const selected = selectDroidMcpTools(names.map((name) => ({ name, input_schema: { type: "object", properties: {} } })), true);
+    expect(selected.map(({ name }) => name)).toEqual(["Create", "Edit", "Execute", "ApplyPatch", "Skill", "ToolSearch"]);
+  });
 });

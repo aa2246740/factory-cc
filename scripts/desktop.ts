@@ -26,6 +26,7 @@ export interface DesktopDependencies {
   run: Runner;
   assertPortFree: (port: number) => Promise<void>;
   health: (port: number) => Promise<boolean>;
+  sleep?: (ms: number) => Promise<void>;
 }
 export function desktopPaths(home: string) {
   const state = join(home, "Library/Application Support/factory-cc");
@@ -81,6 +82,15 @@ function bootout(deps: DesktopDependencies) {
   const result = deps.run("launchctl", ["bootout", `gui/${deps.uid}/${LABEL}`]);
   // launchctl reports ESRCH (3) when the service is already absent.
   if (result.status !== 0 && result.status !== 3) throw new Error(`launchctl bootout failed (exit ${result.status}); installation was preserved.`);
+}
+async function bootstrap(deps: DesktopDependencies, plist: string) {
+  // bootout returns before launchd has removed the old job, and bootstrap fails until it is gone.
+  for (let attempt = 1; ; attempt++) {
+    const result = deps.run("launchctl", ["bootstrap", `gui/${deps.uid}`, plist]);
+    if (result.status === 0) return;
+    if (attempt >= 10) throw new Error(`launchctl bootstrap failed (exit ${result.status}).`);
+    await (deps.sleep ?? ((ms) => new Promise<void>((resolve) => setTimeout(resolve, ms))))(1000);
+  }
 }
 function syncModels(deps: DesktopDependencies, install: Installation) {
   const paths = desktopPaths(deps.home);
@@ -141,7 +151,7 @@ export async function desktop(argv: string[], deps: DesktopDependencies): Promis
     replacePrivateFile(paths.manifest, JSON.stringify(install, null, 2) + "\n");
     replacePrivateFile(paths.plist, desktopPlist(deps, install));
     bootout(deps);
-    checkedRun(deps, "launchctl", ["bootstrap", domain, paths.plist]);
+    await bootstrap(deps, paths.plist);
     return { restarted: true, changed: [paths.settings, `${paths.settings}.relay-bridge.models.json`, paths.models, paths.manifest, paths.plist], models: install.models ?? "follow Claude Code settings", caveat };
   }
   const port = parsed.port ?? 18787;
@@ -164,7 +174,7 @@ export async function desktop(argv: string[], deps: DesktopDependencies): Promis
     privateFile(paths.manifest, JSON.stringify(install, null, 2) + "\n");
     mkdirSync(dirname(paths.plist), { recursive: true });
     privateFile(paths.plist, desktopPlist(deps, install));
-    checkedRun(deps, "launchctl", ["bootstrap", domain, paths.plist]);
+    await bootstrap(deps, paths.plist);
     return { installed: true, port, changed: [paths.state, paths.data, paths.token, paths.admin, paths.hook,
       join(paths.state, "stdout.log"), join(paths.state, "stderr.log"), paths.manifest, paths.models, paths.settings,
       result.backup && existsSync(String(result.backup)) ? result.backup : `${paths.settings}.relay-bridge.bak.absent`, result.metadataPath, paths.plist],
