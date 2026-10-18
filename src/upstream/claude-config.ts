@@ -49,8 +49,11 @@ export function readClaudeConfig(source: NodeJS.ProcessEnv, bridgeListen = ""): 
   for (const name of claudeConfigEnvNames()) {
     const value = configured[name];
     if (value !== undefined && typeof value !== "string") throw new Error(`Claude Code settings env.${name} must be a string.`);
-    if (typeof value === "string" && source[name] !== undefined && source[name] !== value) throw new Error(`Claude Code shell/settings conflict: ${name}. Values are not shown.`);
-    const resolved = source[name] ?? value;
+    // Claude Code applies settings env over the shell, so proxy and CA names follow settings.
+    // Routing, model and credential names still refuse a mismatch instead of guessing.
+    const network = NETWORK_NAMES.includes(name);
+    if (!network && typeof value === "string" && source[name] !== undefined && source[name] !== value) throw new Error(`Claude Code shell/settings conflict: ${name}. Values are not shown.`);
+    const resolved = network ? value ?? source[name] : source[name] ?? value;
     if (typeof resolved === "string") env[name] = resolved;
   }
   for (const name of ["CLAUDE_CONFIG_DIR", "CLAUDE_CODE_OAUTH_TOKEN"]) if (source[name] !== undefined) env[name] = source[name]!;

@@ -60,6 +60,13 @@ describe("Claude Code settings auth resolution", () => {
     expect(readClaudeConfig({ ...f.env, ANTHROPIC_BASE_URL: "https://one.invalid" }).env.ANTHROPIC_BASE_URL).toBe("https://one.invalid");
   });
 
+  it("lets settings proxy and CA names win over the shell, as Claude Code does", () => {
+    const f = fixture({ env: { NO_PROXY: "127.0.0.1,localhost", https_proxy: "http://settings-proxy.invalid" } });
+    const config = readClaudeConfig({ ...f.env, NO_PROXY: "localhost", https_proxy: "http://shell-proxy.invalid", HTTP_PROXY: "http://shell-only.invalid" });
+    const env = buildChildEnv("claude-config", { ...f.env, NO_PROXY: "localhost", https_proxy: "http://shell-proxy.invalid", HTTP_PROXY: "http://shell-only.invalid" }, undefined, { claudeConfig: config });
+    expect(env).toMatchObject({ NO_PROXY: "127.0.0.1,localhost", https_proxy: "http://settings-proxy.invalid", HTTP_PROXY: "http://shell-only.invalid" });
+  });
+
   it("refuses overlapping shell and literal credential names without inspecting the stored token", () => {
     const f = fixture({ env: { ANTHROPIC_API_KEY: literal } });
     expect(() => readClaudeConfig({ ...f.env, ANTHROPIC_API_KEY: "other-offline-key" })).toThrow("credential conflict: ANTHROPIC_API_KEY");
@@ -125,6 +132,8 @@ describe("Claude Code settings auth resolution", () => {
   });
   it("resolves BRIDGE_AUTH=claude-config once for server startup and keeps the server default byok", () => {
     const f = fixture({ apiKeyHelper: "relative-helper --secret", env: { ANTHROPIC_MODEL: "exact-model" } });
+    // loadConfig reads process.env; clear names a developer's own Claude Code session may export.
+    for (const name of Object.keys(process.env)) if (name.startsWith("ANTHROPIC_") || name.startsWith("CLAUDE_CODE_")) vi.stubEnv(name, undefined);
     vi.stubEnv("BRIDGE_AUTH", "claude-config"); vi.stubEnv("CLAUDE_CONFIG_DIR", f.dir);
     const config = loadConfig({ dataDir: join(f.root, "data") });
     expect(config.authMode).toBe("claude-config");

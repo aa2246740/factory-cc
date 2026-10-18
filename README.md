@@ -15,7 +15,7 @@ npm ci
 npm run local -- /你的项目路径
 ```
 
-默认跟随你的 Claude Code（`--auth claude-config`）。如果你自己的 `claude` 已能正常使用，直接运行上面的命令。Bridge 只读 `$CLAUDE_CONFIG_DIR/settings.json`，未设置该变量时读 `~/.claude/settings.json`，带入认证 helper、上游地址、模型映射和允许的代理、CA 环境变量。shell 中同名路由配置与 settings 不一致时拒绝启动，错误只列变量名。云路由请使用手工 `BRIDGE_AUTH=cloud`。
+默认跟随你的 Claude Code（`--auth claude-config`）。如果你自己的 `claude` 已能正常使用，直接运行上面的命令。Bridge 只读 `$CLAUDE_CONFIG_DIR/settings.json`，未设置该变量时读 `~/.claude/settings.json`，带入认证 helper、上游地址、模型映射和允许的代理、CA 环境变量。shell 中同名的地址、模型或凭证配置与 settings 不一致时拒绝启动，错误只列变量名；代理和 CA 变量与 Claude Code 一样以 settings 为准。云路由请使用手工 `BRIDGE_AUTH=cloud`。
 
 用户 hooks、permissions、MCP servers、plugins、CLAUDE.md 和其它环境变量不会带入 Droid 会话。Bridge 保留自己的审批和 MCP 隔离。settings 中的 `ANTHROPIC_AUTH_TOKEN`、`ANTHROPIC_API_KEY` 字面量会被丢弃；有 `apiKeyHelper` 时由 Claude Code 原样运行 helper，否则启动时隐藏输入，或用 `--key-env NAME` 指定你自己的环境变量。密钥和 helper 命令不落盘、不显示在摘要中。为避免读取存储的 token 来比较，同一个凭证名同时出现在 shell 和 settings 时也会拒绝；清除 shell 中该名字后，用另一个专用变量配合 `--key-env`。
 
