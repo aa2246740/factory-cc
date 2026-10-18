@@ -33,7 +33,7 @@ npm run local -- /你的项目路径 --models glm-5.2,glm-4.7 --model glm-5.2
 
 Claude 接入使用 `sonnet`、`opus`、`haiku` 或有权限的具体版本 ID。`subscription` 和 `anthropic-api` 的默认显示名是 Claude Sonnet、Claude Opus、Claude Haiku。模型清单是明确配置的选项，不是自动枚举账号权益。`npm run local -- /你的项目路径 --auth subscription` 或 `--auth anthropic-api` 会跳过端点和密钥提问，默认这三个别名，并且不隔离 `CLAUDE_CONFIG_DIR`。如果环境里的 `BRIDGE_AUTH` 和 `--auth` 不一致，启动直接失败，不会悄悄退回 BYOK。BYOK 密钥以 `sk-ant-` 开头、而上游主机不是 `anthropic.com` 时也会拒绝。
 
-需要允许原生工具操作时，打开启动时显示的控制页；管理员令牌保存在同时显示的私有文件中。默认仍逐次审批。接口地址和模型可记住，上游 Key 不落盘；不会使用你的 Claude 订阅登录。
+需要允许原生工具操作时，打开启动时显示的控制页；管理员令牌保存在同时显示的私有文件中。默认仍逐次审批。接口地址和模型可记住，上游 Key 不落盘；默认 BYOK 模式不会使用你的 Claude 订阅登录。
 
 更多参数见 `npm run local -- --help`。首次不需要手工修改下面的环境变量或 settings。
 
@@ -46,6 +46,20 @@ Claude 接入使用 `sonnet`、`opus`、`haiku` 或有权限的具体版本 ID�
 ## 手工运行与诊断
 
 需要 Node.js 22+；真实模式还需要已安装的官方 `claude` 和 `droid`。
+
+使用你自己的 Claude 订阅：先自行打开官方 `claude` CLI，按提示登录自己的 Pro 或 Max 账号；不要把登录凭据交给 Bridge。然后在本仓库检查认证，不发送 prompt：
+
+```bash
+npm run doctor -- --auth subscription
+```
+
+预期输出同时包含 `"ok": true`、`"classification": { "kind": "subscription", ... }` 和 `"promptSent": false`。只有三项都符合才继续：
+
+```bash
+npm run local -- /path/to/project --auth subscription
+```
+
+如果报错列出 `ANTHROPIC_API_KEY`、`ANTHROPIC_BASE_URL`、`BRIDGE_UPSTREAM_*` 或云路由变量，说明当前 shell 残留了其他认证或端点配置。打开干净的 shell，或 `unset` 报错中的变量后重试。`classification.kind` 为 `unknown` 表示账号信息不足以确认订阅，首条 prompt 会被拒绝，不能只凭 `ok: true` 继续。未登录时，先回到官方 `claude` CLI 自行登录，再跑上述检查。真实订阅启动与对话尚未验证。
 
 先配置一个独立 Droid settings 文件，再启动零模型费用的协议模式：
 
