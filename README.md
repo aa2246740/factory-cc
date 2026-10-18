@@ -26,6 +26,8 @@ npm run desktop -- install
 
 桌面 profile 固定 `ask`，保留 Claude Code preset、隔离设置和 MCP。写文件、执行命令、子 Agent 和规划审批走 Droid 广告的 `mcp__droid__*` 工具，由 Droid 自己应用 autonomy 和 spec mode。原生 Read/Glob/Grep/LS 仍受已有工具策略限制；如果需要原生审批，会立即拒绝并提示改走 Droid，不等待控制页。
 
+默认菜单跟随 `~/.claude/settings.json` 的别名映射（opus、sonnet、haiku、fable 各自指向的模型）。只想在 Droid 里固定几个模型、又不改 Claude Code 自己的设置时，用 `--models` 写实际模型 ID，例如 `npm run desktop -- install --models claude-opus-5-5,claude-sonnet-5-5,claude-haiku-5-5`，菜单显示为 `Claude Code · Opus 5.5 (claude-opus-5-5)` 等。已安装的可用 `npm run desktop -- restart --models ...` 改，之后不带 `--models` 的 restart 沿用这份列表。模型 ID 原样交给 Claude Code，网关不提供该模型时第一条消息会报错。Claude Code 自己的后台小任务仍按其设置里的 haiku 映射。
+
 编辑 `~/.claude/settings.json` 后，重启 Bridge 以重新读取认证 helper 和模型映射、同步菜单；运行中的对话会中断。安装器不会把当前 shell 的凭证或其它环境变量复制给 launchd。
 
 ```bash

@@ -204,3 +204,33 @@ it.each(["restart", "status"])("%s explains how to install when the state or man
   await expect(desktop([action], deps)).rejects.toThrow(message);
   expect(run).not.toHaveBeenCalled(); expect(deps.health).not.toHaveBeenCalled();
 });
+it("pins explicit Droid models without touching Claude Code settings, and restart can change or keep them", async () => {
+  const { deps, paths, root } = fixture();
+  const claudeSettings = JSON.stringify({ apiKeyHelper: "never-run", env: { ANTHROPIC_DEFAULT_OPUS_MODEL: "claude-opus-4-6", ANTHROPIC_DEFAULT_FABLE_MODEL: "gpt-6.1-sol" } });
+  writeFileSync(join(deps.home, ".claude/settings.json"), claudeSettings);
+  const result = await desktop(["install", "--models", "claude-opus-5-5,claude-sonnet-5-5,claude-haiku-5-5"], deps);
+  const entries = () => JSON.parse(readFileSync(paths.settings, "utf8")).customModels.map((v: { model: string; displayName: string }) => [v.model, v.displayName]);
+  expect(entries()).toEqual([
+    ["claude-opus-5-5", "Claude Code · Opus 5.5 (claude-opus-5-5)"], ["claude-sonnet-5-5", "Claude Code · Sonnet 5.5 (claude-sonnet-5-5)"],
+    ["claude-haiku-5-5", "Claude Code · Haiku 5.5 (claude-haiku-5-5)"],
+  ]);
+  expect(readFileSync(paths.plist, "utf8")).toContain("<key>BRIDGE_MODELS</key><string>claude-opus-5-5,claude-sonnet-5-5,claude-haiku-5-5</string>");
+  expect(readFileSync(join(deps.home, ".claude/settings.json"), "utf8")).toBe(claudeSettings);
+  expect(JSON.stringify(result)).not.toContain("gpt-6.1-sol");
+  await desktop(["restart"], deps);
+  expect(entries().map(([model]: [string]) => model)).toEqual(["claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"]);
+  await desktop(["restart", "--models", "claude-sonnet-5-5,claude-opus-5-5"], deps);
+  expect(entries().map(([model]: [string]) => model)).toEqual(["claude-sonnet-5-5", "claude-opus-5-5"]);
+  expect(readFileSync(paths.plist, "utf8")).toContain("<string>claude-sonnet-5-5,claude-opus-5-5</string>");
+  expect(JSON.parse(readFileSync(paths.manifest, "utf8")).models).toEqual(["claude-sonnet-5-5", "claude-opus-5-5"]);
+  for (const path of [paths.manifest, paths.plist]) expect(statSync(path).mode & 0o777).toBe(0o600);
+  expect(existsSync(join(root, "HELPER-RAN"))).toBe(false);
+});
+it.each([
+  [["restart", "--port", "19876"]], [["install", "--models", ""]], [["install", "--models", "a,a"]],
+  [["install", "--models", "a", "--models", "b"]], [["status", "--models", "a"]], [["install", "--port"]],
+])("rejects invalid desktop options %j", async (argv) => {
+  const { deps, paths } = fixture();
+  await expect(desktop(argv, deps)).rejects.toThrow();
+  expect(existsSync(paths.state)).toBe(false);
+});

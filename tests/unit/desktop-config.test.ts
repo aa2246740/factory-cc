@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadConfig } from "../../src/config.js";
@@ -23,4 +23,13 @@ it("rejects ambiguous token/file credentials and empty files", () => {
   expect(() => loadConfig({ dataDir: join(root, "data"), authMode: "byok" })).toThrow("nonempty token");
   vi.stubEnv("BRIDGE_CLIENT_TOKEN", "fixture");
   expect(() => loadConfig({ dataDir: join(root, "data"), authMode: "byok" })).toThrow("cannot both be set");
+});
+it("serves the explicit BRIDGE_MODELS catalog in claude-config mode", () => {
+  const root = fixture(), home = join(root, "home");
+  mkdirSync(join(home, ".claude"), { recursive: true });
+  writeFileSync(join(home, ".claude/settings.json"), JSON.stringify({ apiKeyHelper: "never-run", env: { ANTHROPIC_DEFAULT_FABLE_MODEL: "gpt-6.1-sol" } }));
+  for (const name of ["HOME", "BRIDGE_MODELS"]) vi.stubEnv(name, name === "HOME" ? home : "claude-opus-5-5,claude-sonnet-5-5,claude-haiku-5-5");
+  for (const name of ["CLAUDE_CONFIG_DIR", "ANTHROPIC_BASE_URL", "ANTHROPIC_MODEL", "ANTHROPIC_DEFAULT_FABLE_MODEL"]) vi.stubEnv(name, undefined);
+  const config = loadConfig({ dataDir: join(root, "data"), authMode: "claude-config", desktopProfile: true });
+  expect(config.models?.map((model) => model.model)).toEqual(["claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"]);
 });
