@@ -2,7 +2,7 @@
 
 把 Factory Droid 的 BYOK 自定义模型接到**官方 Claude Agent SDK 和未修改的 Claude Code**。Claude Code 保留原生 system prompt、内置工具和会话；Droid 通过命名空间 MCP 执行自己的 skills、任务、插件工具与 Mission 生命周期操作。
 
-`sdk` 模式为每个会话保持一个持续的 streaming-input `query()`，后续只追加新输入；工具结果交回原 MCP callback。`BRIDGE_AUTH` 只能是 `byok`（默认）、`subscription`、`anthropic-api`、`cloud`、`inherit`。Bridge 按这个声明组装 Claude Code 的环境，对不上就拒绝启动，错误里只有变量名。`subscription`、`anthropic-api`、`cloud` 都还没有用真实账号验证过。第一次先跑 `npm run doctor -- --auth subscription`，这条检查不发送 prompt。
+`sdk` 模式为每个会话保持一个持续的 streaming-input `query()`，后续只追加新输入；工具结果交回原 MCP callback。`BRIDGE_AUTH` 只能是 `byok`（server 默认）、`claude-config`（local 默认）、`subscription`、`anthropic-api`、`cloud`、`inherit`。Bridge 按这个声明组装 Claude Code 的环境，对不上就拒绝启动，错误里只有变量名。`subscription`、`anthropic-api`、`cloud` 都还没有用真实账号验证过。第一次先跑 `npm run doctor -- --auth subscription`，这条检查不发送 prompt。
 
 这是借鉴 T3 的 SDK 集成方式，不是官方支持、授权或账号状态保证。GLM 等第三方兼容端点的结果不能代表 Claude 模型。见 [接入说明](docs/T3-ALIGNMENT.md) 和 [限制](docs/LIMITATIONS.md)。
 
@@ -15,7 +15,19 @@ npm ci
 npm run local -- /你的项目路径
 ```
 
-按提示选择 Anthropic 兼容接口地址、模型和输入自己的 API Key，随后自动打开 Droid。国际 Z.AI 默认地址是 `https://api.z.ai/api/anthropic`，默认模型 `glm-5.2`；中国区智谱使用 `https://open.bigmodel.cn/api/anthropic`。Key 必须属于所选服务。Key 输入不回显、不保存在配置文件里，下次启动重新输入。
+默认跟随你的 Claude Code（`--auth claude-config`）。如果你自己的 `claude` 已能正常使用，直接运行上面的命令。Bridge 只读 `$CLAUDE_CONFIG_DIR/settings.json`，未设置该变量时读 `~/.claude/settings.json`，带入认证 helper、上游地址、模型映射和允许的代理、CA 环境变量。shell 中同名路由配置与 settings 不一致时拒绝启动，错误只列变量名。云路由请使用手工 `BRIDGE_AUTH=cloud`。
+
+用户 hooks、permissions、MCP servers、plugins、CLAUDE.md 和其它环境变量不会带入 Droid 会话。Bridge 保留自己的审批和 MCP 隔离。settings 中的 `ANTHROPIC_AUTH_TOKEN`、`ANTHROPIC_API_KEY` 字面量会被丢弃；有 `apiKeyHelper` 时由 Claude Code 原样运行 helper，否则启动时隐藏输入，或用 `--key-env NAME` 指定你自己的环境变量。密钥和 helper 命令不落盘、不显示在摘要中。为避免读取存储的 token 来比较，同一个凭证名同时出现在 shell 和 settings 时也会拒绝；清除 shell 中该名字后，用另一个专用变量配合 `--key-env`。
+
+启动前会显示 settings 路径、目标主机、凭证来源、模型列表与默认模型，以及没有带入的配置名。Opus、Sonnet、Haiku、Fable 的映射显示真实 ID，请求仍用对应别名交给 Claude Code 解析。没有模型映射时使用 sonnet、opus、haiku。纯登录路径在首条 prompt 前必须确认订阅或 API 认证；未登录时先运行官方 `claude` 自行登录。
+
+要使用独立 GLM/BYOK 配置，请明确指定：
+
+```bash
+npm run local -- /你的项目路径 --auth byok
+```
+
+这个模式保留原来的地址、模型提问与 `provider.json` 偏好。国际 Z.AI 默认地址是 `https://api.z.ai/api/anthropic`，默认模型 `glm-5.2`；中国区智谱使用 `https://open.bigmodel.cn/api/anthropic`。Key 必须属于所选服务，输入不回显、不保存，下次启动重新输入。
 
 这一个命令会启动 Bridge，配置独立的 Droid 数据目录和真实模型列表，安装生命周期 hooks 和 `relay-droid` skill。以后继续运行 `npm run local -- /你的项目路径` 即可。退出 Droid 时会停止本次服务并移除自己的 hooks，保留项目原有 hooks。
 
@@ -26,14 +38,14 @@ npm run local -- /你的项目路径
 例如让同一个 BYOK 端点提供两个实际模型：
 
 ```bash
-npm run local -- /你的项目路径 --models glm-5.2,glm-4.7 --model glm-5.2
+npm run local -- /你的项目路径 --auth byok --models glm-5.2,glm-4.7 --model glm-5.2
 ```
 
 菜单显示 GLM-5.2、GLM-4.7，请求实际进入相应模型。模型清单会记住，下次无需重复输入。空闲时可在同一对话切换，使用官方 Claude SDK 的 `resume` 保留原生会话；有未完成工具、审批或后台任务时先完成当前工作。更换模型可能不能复用前一个模型的推理缓存，不保证跨模型缓存命中。
 
 Claude 接入使用 `sonnet`、`opus`、`haiku` 或有权限的具体版本 ID。`subscription` 和 `anthropic-api` 的默认显示名是 Claude Sonnet、Claude Opus、Claude Haiku。模型清单是明确配置的选项，不是自动枚举账号权益。`npm run local -- /你的项目路径 --auth subscription` 或 `--auth anthropic-api` 会跳过端点和密钥提问，默认这三个别名，并且不隔离 `CLAUDE_CONFIG_DIR`。如果环境里的 `BRIDGE_AUTH` 和 `--auth` 不一致，启动直接失败，不会悄悄退回 BYOK。BYOK 密钥以 `sk-ant-` 开头、而上游主机不是 `anthropic.com` 时也会拒绝。
 
-需要允许原生工具操作时，打开启动时显示的控制页；管理员令牌保存在同时显示的私有文件中。默认仍逐次审批。接口地址和模型可记住，上游 Key 不落盘；默认 BYOK 模式不会使用你的 Claude 订阅登录。
+需要允许原生工具操作时，打开启动时显示的控制页；管理员令牌保存在同时显示的私有文件中。默认仍逐次审批。接口地址和模型可记住，上游 Key 不落盘；显式 BYOK 模式不会使用你的 Claude 订阅登录。
 
 更多参数见 `npm run local -- --help`。首次不需要手工修改下面的环境变量或 settings。
 
@@ -46,6 +58,14 @@ Claude 接入使用 `sonnet`、`opus`、`haiku` 或有权限的具体版本 ID�
 ## 手工运行与诊断
 
 需要 Node.js 22+；真实模式还需要已安装的官方 `claude` 和 `droid`。
+
+检查默认跟随配置的路径，不发送 prompt：
+
+```bash
+npm run doctor -- --auth claude-config
+```
+
+它打印与 launcher 相同的脱敏摘要、`classification` 和 `promptSent: false`。doctor 不会提示输入密钥，settings 字面量需要先用 shell 凭证替代或改用 helper。这条命令会启动官方 SDK 并调用 `accountInfo()`，不属于纯静态检查。本功能只通过离线 fixture 测试，尚未验证真实登录、网关或 helper。
 
 使用你自己的 Claude 订阅：先自行打开官方 `claude` CLI，按提示登录自己的 Pro 或 Max 账号；不要把登录凭据交给 Bridge。然后在本仓库检查认证，不发送 prompt：
 
@@ -109,7 +129,7 @@ npm start
 
 BYOK 的 endpoint、model、key 变量必须全部明确配置；缺失或错误时直接失败，不探测其他环境密钥。除 `inherit` 外，Claude Code 子进程只拿到一份允许名单（`PATH`、`HOME`、代理、CA、locale 等），不再继承整个父进程环境。额外变量用 `BRIDGE_ENV_PASSTHROUGH=NAME1,NAME2`，但当前模式禁止的名字会直接报错。`subscription` 见到 `ANTHROPIC_API_KEY` 会建议改用 `anthropic-api`，见到 `CLAUDE_CODE_USE_*` 会建议改用 `cloud`。
 
-手工配置时，`subscription` 和 `anthropic-api` 用 `BRIDGE_MODELS=sonnet,opus,haiku`。`cloud` 和 `byok` 必须自己写模型。`configure-droid --auth` 接受全部五种模式。这些路径只做过离线测试，没有用真实订阅、官方 API 或云厂商账号验证。先跑 `npm run doctor -- --auth subscription`。
+手工配置时，`subscription` 和 `anthropic-api` 用 `BRIDGE_MODELS=sonnet,opus,haiku`。`cloud` 和 `byok` 必须自己写模型。`configure-droid --auth` 接受全部六种模式。这些路径只做过离线测试，没有用真实订阅、官方 API 或云厂商账号验证。先跑 `npm run doctor -- --auth subscription`。
 
 国际 Z.AI 对应 `https://api.z.ai/api/anthropic` 和 `ZAI_CODING_PLAN_KEY`；请同时更改端点和变量名，密钥必须属于对应服务。这里传给 `BRIDGE_UPSTREAM_TOKEN_ENV` 的是环境变量名，真实密钥留在该变量中。
 
