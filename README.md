@@ -20,7 +20,7 @@ npm run desktop -- install
 
 - `~/Library/LaunchAgents/ai.factory-cc.bridge.plist`，运行安装时的 Node 和当前仓库的 `dist/index.js`，保存当时的 `HOME`、`PATH`，不保存凭证或上游 helper 命令。
 - `~/Library/Application Support/factory-cc/`，权限 `0700`；其中 `client-token`、`admin-token`、`hook-token`、`installation.json`、`models.env`、`stdout.log`、`stderr.log` 为私有文件，token 权限 `0600`；`bridge-data/` 保存会话和运行日志。
-- `~/.factory/settings.json`，以及首次备份 `settings.json.relay-bridge.bak` 或原文件不存在时的 `settings.json.relay-bridge.bak.absent`，还有所有权元数据 `settings.json.relay-bridge.models.json`。模型用每项 `apiKeyHelper: /bin/cat '<绝对 token 路径>'` 和 `apiKeyHelperTtlMs: 300000` 读取本地 token，settings 不保存 token 字面量。字段见 [Factory BYOK 文档](https://docs.factory.com/model-independence/byok#dynamic-credentials-with-apikeyhelper)。
+- `~/.factory/settings.json`，以及首次备份 `settings.json.relay-bridge.bak` 或原文件不存在时的 `settings.json.relay-bridge.bak.absent`，还有所有权元数据 `settings.json.relay-bridge.models.json`。模型条目的 `apiKey` 是 Bridge 的本地 client token（文件权限 0600），只能访问这台机器 127.0.0.1 上的 Bridge，不是模型供应商的密钥。这里不用 `apiKeyHelper`：Droid 会从 Mission worker 和 validator 加载的运行时设置中删除可执行的凭证命令（日志 `Stripped executable custom-model credential commands`），用 helper 时它们会全部 401。Mission 启动时会把这些条目连同 token 快照到该 Mission 目录的 `runtime-custom-models.json`（0600）。
 
 不安装用户级或项目 hooks。每个会话从首条 user 消息前置的 Droid `User system info` system-reminder 读取首次 `% pwd` 输出，解析真实项目目录；缺失、无效、根目录或 Bridge 状态目录会返回 400，请先在 Droid 打开项目文件夹。后续用户粘贴的 `% pwd` 不会改目录。此来源限制依赖 Droid 的请求结构，不是对持有本地 token 的任意 API 客户端的身份认证。
 

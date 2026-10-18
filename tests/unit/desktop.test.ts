@@ -31,12 +31,14 @@ it("installs built Node service, private token files and helper models without e
   for (const path of [paths.token, paths.admin, paths.hook, paths.plist, paths.settings, paths.manifest, join(paths.state, "stdout.log")]) expect(statSync(path).mode & 0o777).toBe(0o600);
   const tokens = [paths.token, paths.admin, paths.hook].map((path) => readFileSync(path, "utf8").trim());
   expect(new Set(tokens).size).toBe(3);
-  for (const token of tokens) { expect(plist).not.toContain(token); expect(readFileSync(paths.settings, "utf8")).not.toContain(token); }
+  for (const token of tokens) expect(plist).not.toContain(token);
+  // Droid strips apiKeyHelper from the runtime settings Mission workers load, so
+  // the 0600 settings carry the loopback client token, never admin or hook authority.
   const settings = JSON.parse(readFileSync(paths.settings, "utf8"));
   expect(settings.customModels).toHaveLength(1);
-  expect(settings.customModels[0]).toMatchObject({ model: "sonnet", apiKeyHelperTtlMs: 300000, authMode: "bearer" });
-  expect(settings.customModels[0].apiKey).toBeUndefined(); expect(settings.customModels[0].apiKeyHelper).toContain("/bin/cat '");
-  expect(settings.customModels[0].apiKeyHelper).toContain("'\\''");
+  expect(settings.customModels[0]).toMatchObject({ model: "sonnet", apiKey: tokens[0], authMode: "bearer" });
+  expect(settings.customModels[0].apiKeyHelper).toBeUndefined();
+  for (const token of tokens.slice(1)) expect(readFileSync(paths.settings, "utf8")).not.toContain(token);
   expect(existsSync(join(root, "HELPER-RAN"))).toBe(false);
   expect(run).toHaveBeenLastCalledWith("launchctl", ["bootstrap", "gui/501", paths.plist]);
   expect(deps.assertPortFree).toHaveBeenCalledExactlyOnceWith(19876);

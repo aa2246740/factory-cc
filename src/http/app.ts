@@ -260,6 +260,8 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
     const contextHash = sessionContextHash(headers, request, cwd);
     const resolved = resolveSession(store.list(), headers, request, {
       cwd, hostSessionId: control.hostSessionId(prepared.binding), allowModelSwitch: config.models !== undefined,
+      // Droid desktop has no conversation ID header or hooks to disambiguate.
+      continueIdenticalTranscripts: config.desktopProfile,
     });
     const session = resolved.match
       ?? withSlot(() => store.create({

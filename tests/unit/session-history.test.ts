@@ -91,6 +91,37 @@ describe("conversation continuity and isolation", () => {
       .toThrowError(expect.objectContaining({ status: 409, code: "ambiguous_session" }));
   });
 
+  it("lets Droid desktop continue one of several identical idle transcripts, which then diverge", () => {
+    // Droid desktop sends no conversation ID: two chats with the same opening and
+    // reply are the same state, so the earliest idle one continues.
+    const desktop = (sessions: SessionRecord[], request = continuation) => resolveSession(sessions, headers, request, { cwd, continueIdenticalTranscripts: true });
+    const older = session({ createdAt: "2026-10-19T00:00:00.000Z" });
+    const newer = session({ bridgeSessionId: "bridge-b", droidSessionId: "droid-b", createdAt: "2026-10-19T00:01:00.000Z" });
+    expect(desktop([newer, older])).toMatchObject({ match: older, reason: "identical-history-prefix" });
+    // After the chosen one records its new turn, the other chat's next turn matches only the rest.
+    const advanced = { ...older, historyMessageHashes: historyMessageHashes([...continuation.messages, { role: "assistant", content: "Pine." }]) };
+    const otherChat: MessagesRequest = { ...initial, messages: [...completed, { role: "user", content: "Spell it backwards." }] };
+    expect(desktop([advanced, newer], otherChat).match).toBe(newer);
+    // Busy or cancelled transcripts are never taken over; with none idle it stays ambiguous.
+    expect(desktop([session({ createdAt: "1", state: "GENERATING" }), newer]).match).toBe(newer);
+    expect(desktop([older, session({ bridgeSessionId: "bridge-b", createdAt: "2", pendingToolIds: ["t"] })]).match).toBe(older);
+    expect(() => desktop([session({ state: "GENERATING" }), session({ bridgeSessionId: "bridge-b", cancelRequested: true })]))
+      .toThrowError(expect.objectContaining({ status: 409, code: "ambiguous_session" }));
+    // A longer matching transcript is the live conversation, not an abandoned shorter fork.
+    const opening: Message[] = [{ role: "user", content: "Start." }, { role: "assistant", content: "Started." }];
+    const longer = session({ bridgeSessionId: "bridge-long", createdAt: "9", historyMessageHashes: historyMessageHashes([...opening, ...completed]) });
+    const shorter = session({ bridgeSessionId: "bridge-short", createdAt: "0", historyMessageHashes: historyMessageHashes(opening) });
+    const deep: MessagesRequest = { ...initial, messages: [...opening, ...completed, { role: "user", content: "Next." }] };
+    expect(desktop([shorter, longer], deep).match).toBe(longer);
+    // With model switching allowed, the conversation already on the requested model wins.
+    const switching = (sessions: SessionRecord[]) => resolveSession(sessions, headers, continuation, { cwd, continueIdenticalTranscripts: true, allowModelSwitch: true });
+    const otherModel = session({ bridgeSessionId: "bridge-other", createdAt: "0", model: "other-model" });
+    expect(switching([otherModel, newer]).match).toBe(newer);
+    // Another project never becomes a candidate.
+    const elsewhere = session({ bridgeSessionId: "bridge-elsewhere", createdAt: "0", contextHash: sessionContextHash(headers, initial, "/tmp/project-b") });
+    expect(desktop([elsewhere, newer]).match).toBe(newer);
+  });
+
   it("gives an explicit ID priority over an otherwise ambiguous transcript", () => {
     expect(resolve([session(), session({ bridgeSessionId: "bridge-b", droidSessionId: "droid-b" })], continuation, { "x-bridge-session": "droid-b" }).match?.bridgeSessionId).toBe("bridge-b");
   });

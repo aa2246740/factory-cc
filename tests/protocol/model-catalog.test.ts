@@ -89,10 +89,12 @@ it("desktop rejects missing cwd before session creation and isolates different p
   const one = join(root, "one"), two = join(root, "two"); mkdirSync(one); mkdirSync(two);
   const { app, token } = await startTestBridge({ desktopProfile: true, dataDir: join(root, "state/bridge-data") });
   apps.push(app);
-  const missing = await postMessages(app.url, token, request("sonnet"), { "x-bridge-cwd": one });
+  // Droid's main requests advertise tools; only those need its project reminder.
+  const tools = [{ name: "Execute", input_schema: { type: "object" } }];
+  const missing = await postMessages(app.url, token, { ...request("sonnet"), tools }, { "x-bridge-cwd": one });
   expect(missing.status).toBe(400); expect(missing.json).toMatchObject({ error: { type: "invalid_project_directory", message: expect.stringContaining("Open a project folder in Droid") } });
   expect(app.store.list()).toHaveLength(0); expect(runtime.handle).not.toHaveBeenCalled();
-  const body = (cwd: string) => ({ model: "sonnet", max_tokens: 32, messages: [{ role: "user", content: [
+  const body = (cwd: string) => ({ model: "sonnet", max_tokens: 32, tools, messages: [{ role: "user", content: [
     { type: "text", text: `<system-reminder>\nUser system info (fixture)\n% pwd\n${cwd}\n</system-reminder>` },
     { type: "text", text: "hello" },
   ] }] });
@@ -102,4 +104,7 @@ it("desktop rejects missing cwd before session creation and isolates different p
   expect(switched.status).toBe(409); expect(switched.json).toMatchObject({ error: { type: "session_context_changed" } });
   const fresh = await postMessages(app.url, token, body(two), { "x-bridge-session": "another-project" });
   expect(fresh.status).toBe(200); expect(app.store.list()).toHaveLength(2);
+  // A tool-free request, such as Droid's compaction summary, needs no project.
+  const summary = await postMessages(app.url, token, { ...request("sonnet"), tools: [] }, { "x-bridge-session": "summary" });
+  expect(summary.status).toBe(200);
 });

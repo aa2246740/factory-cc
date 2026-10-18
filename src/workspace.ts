@@ -2,8 +2,9 @@ import type { BridgeConfig } from "./config.js";
 import { BridgeError, type MessagesRequest } from "./types.js";
 import { asBlocks } from "./protocol/content.js";
 import { header } from "./security/auth.js";
-import { realpathSync, statSync } from "node:fs";
-import { resolve, isAbsolute, relative, sep } from "node:path";
+import { mkdirSync, realpathSync, statSync } from "node:fs";
+import { join, resolve, isAbsolute, relative, sep } from "node:path";
+import { hostAllowsAnyTools } from "./runtime/native-tool-policy.js";
 
 /** Resolve aliases before a workspace is used as session or launch identity. */
 export function canonicalWorkspacePath(path: string): string {
@@ -20,19 +21,27 @@ export function canonicalWorkspacePath(path: string): string {
 }
 
 
-/** Only the host's leading environment reminder in the first user message owns cwd.
- * Stop at user content, and never search later messages or nested/pasted reminders.
+/** Droid opens a compacted conversation with this summary, then its environment reminder. */
+const COMPACTION_SUMMARY = "A previous instance of Droid has summarized the conversation thus far as follows:\n";
+
+/** The host's latest environment reminder owns cwd. Droid sends it leading the
+ * first user message; a model switch moves a fresh one before the new prompt,
+ * and compaction puts it after its leading summary. Only a user message's leading
+ * reminders count: stop at user content, and never read tool results or
+ * nested/pasted reminders.
  * This is structural host provenance, not authentication of arbitrary API clients.
  */
 export function droidWorkingDirectory(request: MessagesRequest): string | undefined {
-  const first = request.messages[0];
-  if (first?.role !== "user") return undefined;
-  for (const block of asBlocks(first.content)) {
-    if (block.type !== "text" || typeof block.text !== "string") break;
-    const text = block.text;
-    if (!text.startsWith("<system-reminder>\n") || !text.endsWith("</system-reminder>")) break;
-    if (!/^<system-reminder>\n\s*User system info [^\n]+\n/.test(text)) continue;
-    return /(?:^|\n)% pwd\n([^\n]*)\n/.exec(text)?.[1];
+  for (const message of [...request.messages].reverse()) {
+    if (message.role !== "user") continue;
+    for (const [index, block] of asBlocks(message.content).entries()) {
+      if (block.type !== "text" || typeof block.text !== "string") break;
+      const text = block.text;
+      if (index === 0 && text.startsWith(COMPACTION_SUMMARY)) continue;
+      if (!text.startsWith("<system-reminder>\n") || !text.endsWith("</system-reminder>")) break;
+      if (!/^<system-reminder>\n\s*User system info [^\n]+\n/.test(text)) continue;
+      return /(?:^|\n)% pwd\n([^\n]*)\n/.exec(text)?.[1];
+    }
   }
   return undefined;
 }
@@ -49,6 +58,13 @@ export function resolveRequestCwd(
   if (!config?.desktopProfile || source.BRIDGE_SDK_CWD) {
     const cwd = source.BRIDGE_SDK_CWD || header(headers, "x-bridge-cwd") || config?.sdkCwd;
     return cwd ? canonicalWorkspacePath(cwd) : undefined;
+  }
+  // A request that permits no tools cannot touch a workspace, and Droid's
+  // compaction summaries carry no environment reminder. Give them an empty one.
+  if (!hostAllowsAnyTools(request)) {
+    const auxiliary = join(config.dataDir, "auxiliary-cwd");
+    mkdirSync(auxiliary, { recursive: true, mode: 0o700 });
+    return realpathSync(auxiliary);
   }
   const invalid = () => new BridgeError(400, "invalid_project_directory", "Open a project folder in Droid. Its initial environment reminder must contain a valid project working directory; root and Bridge state directories are refused.");
   const raw = droidWorkingDirectory(request);

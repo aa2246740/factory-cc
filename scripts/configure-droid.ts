@@ -161,7 +161,7 @@ function revertDroid(settingsPath: string, backup: string, absentMarker: string,
   return { reverted: true, settingsPath, outcome, ...(notice ? { notice } : {}) };
 }
 
-export function configureDroid(argv: string[], env: NodeJS.ProcessEnv = process.env, catalog?: BridgeModel[], credential?: { apiKeyHelper: string; apiKeyHelperTtlMs: number }): Record<string, unknown> {
+export function configureDroid(argv: string[], env: NodeJS.ProcessEnv = process.env, catalog?: BridgeModel[]): Record<string, unknown> {
   const args = parseArgs(argv);
   if (args.help === "1") return { help };
   const settingsPath = args.settings ?? join(args.home ?? env.HOME ?? ".", ".factory/settings.json");
@@ -171,7 +171,7 @@ export function configureDroid(argv: string[], env: NodeJS.ProcessEnv = process.
     return revertDroid(settingsPath, backup, absentMarker, metadataPath);
   }
   const token = env.BRIDGE_CLIENT_TOKEN;
-  if (!credential && !token?.trim()) throw new Error("BRIDGE_CLIENT_TOKEN is required; settings were not changed.");
+  if (!token?.trim()) throw new Error("BRIDGE_CLIENT_TOKEN is required; settings were not changed.");
   const baseUrl = controlBaseUrl(args["base-url"] ?? "http://127.0.0.1:18787");
   const auth = (args.auth ?? env.BRIDGE_AUTH ?? "byok") as string;
   if (!(AUTH_MODES as readonly string[]).includes(auth)) throw new Error(`Authentication must be ${AUTH_MODES.join(" | ")}.`);
@@ -199,7 +199,7 @@ export function configureDroid(argv: string[], env: NodeJS.ProcessEnv = process.
   const previous = managedModels(metadataPath), existing = current.customModels ?? [];
   const owned = ownedModels(existing, previous);
   const kept = existing.filter((item) => !owned.has(item));
-  const incoming: CustomModel[] = configured.map((model) => ({ model: model.id, displayName: model.displayName, baseUrl, ...(credential ?? { apiKey: token }),
+  const incoming: CustomModel[] = configured.map((model) => ({ model: model.id, displayName: model.displayName, baseUrl, apiKey: token,
     provider: "anthropic", authMode: "bearer", maxOutputTokens: 4096 }));
   const combined = [...kept, ...incoming], oldIds = selectionIds(existing), newIds = selectionIds(combined);
   const defaultSelection = newIds[kept.length + configured.findIndex((model) => model.id === defaultId)]!;
@@ -266,7 +266,7 @@ export function configureDroid(argv: string[], env: NodeJS.ProcessEnv = process.
   ].join("\n") + "\n");
   return { settingsPath, backup, metadataPath, baseUrl, defaultModelId: defaultId, defaultSelectionId: defaultSelection,
     modelIds: configured.map((model) => model.id), models: configured.map((model) => ({ ...model, selectionId: canonicalForModel.get(model.id) })),
-    notes: ["The model menu contains actual models; Mission roles select from the same list.", "Legacy manifest role variables remain compatibility aliases for the default model.", credential ? "apiKeyHelper reads the private local token file; no literal token is stored in settings." : "apiKey contains the literal local BRIDGE_CLIENT_TOKEN; settings, backup and metadata permissions are 0600."] };
+    notes: ["The model menu contains actual models; Mission roles select from the same list.", "Legacy manifest role variables remain compatibility aliases for the default model.", "apiKey contains the literal local BRIDGE_CLIENT_TOKEN; settings, backup and metadata permissions are 0600."] };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {

@@ -99,9 +99,11 @@ function syncModels(deps: DesktopDependencies, install: Installation) {
   assertClaudeCredential(config);
   const models = install.models ? modelsFromIds(install.models, "claude-config").map(explicitLabel)
     : claudeConfigModels(config).models.map((model) => ({ ...model, displayName: `Claude Code · ${model.displayName.replace(/^Claude /, "")}` }));
+  // A literal key, not an apiKeyHelper: Droid strips executable credential
+  // commands from the runtime settings that Mission workers and validators load.
+  // The token only admits requests to this loopback Bridge.
   return configureDroid(["--settings", paths.settings, "--base-url", `http://127.0.0.1:${install.port}`, "--auth", "claude-config",
-    "--manifest", paths.models, "--preserve-selections"], { HOME: deps.home }, models,
-  { apiKeyHelper: `/bin/cat '${paths.token.replaceAll("'", "'\\''")}'`, apiKeyHelperTtlMs: 300000 });
+    "--manifest", paths.models, "--preserve-selections"], { HOME: deps.home, BRIDGE_CLIENT_TOKEN: readFileSync(paths.token, "utf8").trim() }, models);
 }
 /** claude-opus-5-5 -> "Claude Code · Opus 5.5 (claude-opus-5-5)"; other IDs are shown as given. */
 function explicitLabel(model: BridgeModel): BridgeModel {
