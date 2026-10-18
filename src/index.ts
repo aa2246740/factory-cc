@@ -96,7 +96,7 @@ async function main(): Promise<void> {
       logger.info("upstream", publicSelection(selected));
     } else {
       // Fail closed before listen. The same checks run again for each query.
-      preflightAuth(config.authMode, process.env, undefined, { bridgeListen });
+      preflightAuth(config.authMode, process.env, undefined, { bridgeListen, claudeConfig: config.claudeConfig });
       const record = { authMode: config.authMode, overridesAnthropicEnv: false };
       writeFileSync(join(config.dataDir, "upstream.json"), `${JSON.stringify(record, null, 2)}\n`);
       logger.info("upstream", record);

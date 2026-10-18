@@ -1,3 +1,4 @@
+import { assertClaudeCredential, readClaudeConfig, claudeConfigModels, type ClaudeConfig } from "./upstream/claude-config.js";
 import { randomBytes } from "node:crypto";
 import { chmodSync, mkdirSync } from "node:fs";
 import { isIPv6 } from "node:net";
@@ -39,6 +40,7 @@ export interface BridgeConfig {
   /** Write full request bodies to the request log. Off by default: only a hash, size and tool names. */
   logBodies: boolean;
   authMode: AuthMode;
+  claudeConfig?: ClaudeConfig;
   permissionMode: "bypass" | "ask";
   upstreamBaseUrl?: string;
   upstreamModel?: string;
@@ -97,6 +99,9 @@ function ensurePrivateDir(path: string): void {
 }
 
 export function loadConfig(overrides: Partial<BridgeConfig> = {}): BridgeConfig {
+  const authMode = parseAuthMode(overrides.authMode ?? env("BRIDGE_AUTH", "byok"));
+  const claudeConfig = authMode === "claude-config" ? overrides.claudeConfig ?? readClaudeConfig(process.env, `${overrides.host ?? env("BRIDGE_HOST", "127.0.0.1")}:${overrides.port ?? intEnv("BRIDGE_PORT", 18787)}`) : undefined;
+  if (claudeConfig) assertClaudeCredential(claudeConfig);
   const dataDir = resolve(overrides.dataDir ?? env("BRIDGE_DATA_DIR", resolve(process.cwd(), "tmp/bridge-data"))!);
   ensurePrivateDir(dataDir);
   const logDir = resolve(dataDir, "logs");
@@ -108,7 +113,6 @@ export function loadConfig(overrides: Partial<BridgeConfig> = {}): BridgeConfig 
   if (!["mock", "fake", "sdk"].includes(mode)) {
     throw new Error(`Invalid BRIDGE_MODE=${mode}. Use mock | fake | sdk.`);
   }
-  const authMode = parseAuthMode(overrides.authMode ?? env("BRIDGE_AUTH", "byok"));
   const host = overrides.host ?? env("BRIDGE_HOST", "127.0.0.1")!;
   const allowRemote = overrides.allowRemote ?? env("BRIDGE_ALLOW_REMOTE") === "1";
   const allowedHosts = parseAllowedHosts(overrides.allowedHosts ?? env("BRIDGE_ALLOWED_HOSTS"));
@@ -136,7 +140,7 @@ export function loadConfig(overrides: Partial<BridgeConfig> = {}): BridgeConfig 
     ? permissionRaw
     : "ask") as "bypass" | "ask";
 
-  return {
+  const config: BridgeConfig = {
     host,
     port: overrides.port ?? intEnv("BRIDGE_PORT", 18787),
     mode,
@@ -166,6 +170,8 @@ export function loadConfig(overrides: Partial<BridgeConfig> = {}): BridgeConfig 
     upstreamModel: overrides.upstreamModel ?? env("BRIDGE_UPSTREAM_MODEL"),
     upstreamTokenEnv: overrides.upstreamTokenEnv ?? env("BRIDGE_UPSTREAM_TOKEN_ENV"),
     models: overrides.models !== undefined ? validateModels(overrides.models)
-      : env("BRIDGE_MODELS") ? modelsFromIds(parseModelIds(env("BRIDGE_MODELS")!), authMode) : undefined,
+      : env("BRIDGE_MODELS") ? modelsFromIds(parseModelIds(env("BRIDGE_MODELS")!), authMode) : claudeConfig ? claudeConfigModels(claudeConfig).models : undefined,
   };
+  if (claudeConfig) Object.defineProperty(config, "claudeConfig", { value: claudeConfig });
+  return config;
 }

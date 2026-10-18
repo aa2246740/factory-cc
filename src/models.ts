@@ -18,7 +18,7 @@ export interface RequestModel {
   routeKey: string;
 }
 
-const names: Record<string, string> = { sonnet: "Claude Sonnet", opus: "Claude Opus", haiku: "Claude Haiku" };
+const names: Record<string, string> = { sonnet: "Claude Sonnet", opus: "Claude Opus", haiku: "Claude Haiku", fable: "Claude Fable" };
 const validId = (value: unknown): value is string => typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9._:/+-]{0,255}$/.test(value);
 
 export function parseModelIds(value: string): string[] {
@@ -30,7 +30,7 @@ export function parseModelIds(value: string): string[] {
 }
 
 export function modelsFromIds(ids: string[], authMode: AuthMode = "byok"): BridgeModel[] {
-  const friendly = authMode === "subscription" || authMode === "anthropic-api";
+  const friendly = authMode === "claude-config" || authMode === "subscription" || authMode === "anthropic-api";
   return validateModels(ids.map((id) => ({ id, model: id,
     displayName: friendly && names[id] ? names[id]! : /^glm-/i.test(id) ? id.toUpperCase() : id,
   })));

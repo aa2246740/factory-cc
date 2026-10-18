@@ -1,8 +1,9 @@
+import { readClaudeConfig, assertClaudeCredential, claudeConfigModels, claudeConfigSummary, claudeConfigNeedsLogin, CLAUDE_LOGIN_REQUIRED } from "../src/upstream/claude-config.js";
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { buildChildEnv, classifyAuth, maskEmail, parseAuthMode, preflightAuth, type AuthMode } from "../src/upstream/auth-env.js";
+import { buildChildEnv, classifyAuth, maskEmail, parseAuthMode, type AuthMode } from "../src/upstream/auth-env.js";
 import { execFileAsync, runCapture, writeJson } from "./lib.js";
 
 export interface DoctorSdkQuery {
@@ -28,7 +29,7 @@ function parseArgs(argv: string[]): { auth?: AuthMode; help: boolean } {
   for (let index = 0; index < argv.length; index++) {
     const flag = argv[index];
     if (flag === "--help" || flag === "-h") return { help: true };
-    if (flag !== "--auth") throw new Error("Unknown doctor option. Use --auth subscription or --auth anthropic-api.");
+    if (flag !== "--auth") throw new Error("Unknown doctor option. Use --auth claude-config, --auth subscription or --auth anthropic-api.");
     const value = argv[++index];
     if (!value || value.startsWith("--")) throw new Error("Missing value for --auth.");
     if (auth !== undefined) throw new Error("Duplicate option --auth.");
@@ -65,10 +66,10 @@ export async function runDoctor(
 ): Promise<number> {
   const args = parseArgs(argv);
   if (args.help) {
-    console.log("Usage: npm run doctor -- [--auth subscription|anthropic-api]\nThe auth check sends no prompt. It prints names and a masked email only.");
+    console.log("Usage: npm run doctor -- [--auth claude-config|subscription|anthropic-api]\nThe auth check sends no prompt. It prints names and a masked email only.");
     return 0;
   }
-  if (args.auth === "subscription" || args.auth === "anthropic-api") {
+  if (args.auth === "claude-config" || args.auth === "subscription" || args.auth === "anthropic-api") {
     return authDryRun(args.auth, env, deps.loadSdk ?? defaultLoadSdk);
   }
 
@@ -124,14 +125,25 @@ export async function runDoctor(
   return 0;
 }
 
-async function authDryRun(auth: "subscription" | "anthropic-api", env: NodeJS.ProcessEnv, loadSdk: () => Promise<DoctorSdk>): Promise<number> {
+async function authDryRun(auth: "claude-config" | "subscription" | "anthropic-api", env: NodeJS.ProcessEnv, loadSdk: () => Promise<DoctorSdk>): Promise<number> {
   let query: DoctorSdkQuery | undefined;
+  let sdkStarted = false;
+  let classification: ReturnType<typeof classifyAuth> | undefined;
   try {
-    preflightAuth(auth, env, undefined, { bridgeListen: `${env.BRIDGE_HOST ?? "127.0.0.1"}:${env.BRIDGE_PORT ?? "18787"}` });
+    const bridgeListen = `${env.BRIDGE_HOST ?? "127.0.0.1"}:${env.BRIDGE_PORT ?? "18787"}`;
+    const config = auth === "claude-config" ? readClaudeConfig(env, bridgeListen) : undefined;
+    if (config) {
+      assertClaudeCredential(config);
+      const catalog = claudeConfigModels(config);
+      console.log(claudeConfigSummary(config, catalog.models, catalog.defaultModel));
+    }
+    const childEnv = buildChildEnv(auth, env, undefined, { bridgeListen, claudeConfig: config });
+    sdkStarted = true;
     const sdk = await loadSdk();
     query = sdk.query({
       prompt: closedPrompt(),
-      options: { settingSources: [], strictMcpConfig: true, env: buildChildEnv(auth, env) },
+      options: { settingSources: [], strictMcpConfig: true, env: childEnv,
+        ...(config?.helper ? { settings: { apiKeyHelper: config.helper } } : auth === "anthropic-api" && env.BRIDGE_API_KEY_HELPER?.trim() ? { settings: { apiKeyHelper: env.BRIDGE_API_KEY_HELPER.trim() } } : {}) },
     });
     if (!query.accountInfo) throw new Error(`The SDK query does not expose accountInfo(); BRIDGE_AUTH=${auth} cannot be checked.`);
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -144,6 +156,8 @@ async function authDryRun(auth: "subscription" | "anthropic-api", env: NodeJS.Pr
       apiKeySource: stringField(info, "apiKeySource"),
       tokenSource: stringField(info, "tokenSource"),
     };
+    classification = classifyAuth(observed);
+    if (config && claudeConfigNeedsLogin(config) && classification.kind === "unknown") throw new Error(CLAUDE_LOGIN_REQUIRED);
     const report = {
       ok: true,
       auth,
@@ -151,13 +165,13 @@ async function authDryRun(auth: "subscription" | "anthropic-api", env: NodeJS.Pr
       subscriptionType: observed.subscriptionType ?? null,
       apiKeySource: observed.apiKeySource ?? null,
       tokenSource: observed.tokenSource ?? null,
-      classification: classifyAuth(observed),
+      classification,
       promptSent: false,
     };
     console.log(JSON.stringify(report, null, 2));
     return 0;
   } catch (error) {
-    console.error(JSON.stringify({ ok: false, auth, message: safeText(error) }));
+    console.error(JSON.stringify({ ok: false, auth, message: auth === "claude-config" && sdkStarted && !(error instanceof Error && error.message === CLAUDE_LOGIN_REQUIRED) ? "Claude Code auth check failed; no prompt sent." : safeText(error), ...(classification ? { classification } : {}), promptSent: false }));
     return 1;
   } finally {
     try { query?.close?.(); } catch { /* already closed */ }

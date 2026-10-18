@@ -16,7 +16,8 @@ import { buildDynamicUserContent, buildHostContext, buildInitialUserContent, bui
 import { UsageLedger } from "./usage.js";
 import { INTERRUPT_GRACE_MS, TurnWatchdog } from "./turn-watchdog.js";
 import type { BridgeRuntime, RuntimeApprovalRequest, RuntimeControl, RuntimeEvent, RuntimeHostCall, RuntimeHostCompletion, RuntimeHostEnd, RuntimePermissionDecision, RuntimeRequest, RuntimeTurn, StreamSink } from "./types.js";
-import { classifyAuth, maskEmail, type AuthClassification, type AuthObservation } from "../upstream/auth-env.js";
+import { redactClaudeConfigText, claudeConfigNeedsLogin, CLAUDE_LOGIN_REQUIRED } from "../upstream/claude-config.js";
+import { buildChildEnv, classifyAuth, maskEmail, type AuthClassification, type AuthObservation } from "../upstream/auth-env.js";
 import { publicSelection, sdkEnv, selectionFromConfig, type UpstreamSelection } from "../upstream/providers.js";
 import { resolveRequestModel } from "../models.js";
 
@@ -391,7 +392,7 @@ export class SdkRuntime implements BridgeRuntime {
       live.lastReply = reply;
       return reply;
     } catch (error) {
-      if (waiting) this.stop(live, asBridgeError(error));
+      if (waiting) this.stop(live, this.sdkError(error));
       throw error;
     } finally {
       live.busy = false;
@@ -649,14 +650,16 @@ export class SdkRuntime implements BridgeRuntime {
           live.hostResultConsumptions.delete(call.id);
           return response;
         } catch (error) {
-          if (live.queryEpoch === epoch) this.stop(live, asBridgeError(error));
+          if (live.queryEpoch === epoch) this.stop(live, this.sdkError(error));
           throw error;
         }
       }, names);
     live.catalog = catalog;
     await catalog.update(droidTools);
     if (live.terminal) throw live.terminal;
-    const env = sdkEnv(selection, `${this.config.host}:${this.config.port}`, this.config.authMode);
+    const env = this.config.authMode === "claude-config"
+      ? buildChildEnv("claude-config", process.env, undefined, { bridgeListen: `${this.config.host}:${this.config.port}`, claudeConfig: this.config.claudeConfig })
+      : sdkEnv(selection, `${this.config.host}:${this.config.port}`, this.config.authMode);
     // Project skills may run the local generator through native Bash. Bind its
     // client connection to this Bridge, not stale values in the parent shell.
     // These values stay in the process environment, never the model prompt.
@@ -697,6 +700,7 @@ export class SdkRuntime implements BridgeRuntime {
       options.settingSources = [];
       options.strictMcpConfig = true;
     }
+    if (this.config.authMode === "claude-config" && this.config.claudeConfig?.helper) options.settings = { apiKeyHelper: this.config.claudeConfig.helper };
     if (this.config.authMode === "anthropic-api") {
       const helper = process.env.BRIDGE_API_KEY_HELPER?.trim();
       if (helper) {
@@ -731,8 +735,8 @@ export class SdkRuntime implements BridgeRuntime {
       // Gate before this method returns, so handle() has not pushed a user message yet.
       await this.verifyDeclaredAuth(live);
     } catch (error) {
-      this.stop(live, asBridgeError(error));
-      throw asBridgeError(error);
+      this.stop(live, this.sdkError(error));
+      throw this.sdkError(error);
     }
   }
 
@@ -742,7 +746,7 @@ export class SdkRuntime implements BridgeRuntime {
       void this.observeInheritAuth(live);
       return;
     }
-    if (mode !== "subscription" && mode !== "anthropic-api") return;
+    if (mode !== "subscription" && mode !== "anthropic-api" && mode !== "claude-config") return;
     const query = live.query;
     if (!query?.accountInfo) {
       this.rejectAuth(live, mode, "unknown", `Declared BRIDGE_AUTH=${mode} but the SDK query does not expose accountInfo(). Refusing to send a prompt.`);
@@ -754,7 +758,7 @@ export class SdkRuntime implements BridgeRuntime {
       info = await withTimeout(query.accountInfo(), timeoutMs);
     } catch (error) {
       const detail = error instanceof Error ? error.message : "accountInfo failed";
-      const safe = /sk-ant-|Bearer /i.test(detail) ? "accountInfo failed or timed out" : detail;
+      const safe = mode === "claude-config" || /sk-ant-|Bearer /i.test(detail) ? "accountInfo failed or timed out" : detail;
       this.rejectAuth(live, mode, "unknown", `Declared BRIDGE_AUTH=${mode} but account verification did not succeed: ${safe}`);
       return;
     }
@@ -763,6 +767,10 @@ export class SdkRuntime implements BridgeRuntime {
     const email = maskEmail(stringField(info, "email"));
     const classification = classifyAuth(observed, live.initApiKeySource);
     this.rememberAuth(mode, classification, observed, email);
+    if (mode === "claude-config") {
+      if ((!this.config.claudeConfig || claudeConfigNeedsLogin(this.config.claudeConfig)) && classification.kind === "unknown") this.rejectAuth(live, mode, "unknown", CLAUDE_LOGIN_REQUIRED);
+      return;
+    }
     if (classification.kind !== mode) {
       const error = new BridgeError(401, "auth_mode_mismatch", mismatchMessage(mode, classification, observed));
       this.stop(live, error);
@@ -791,7 +799,8 @@ export class SdkRuntime implements BridgeRuntime {
     };
     this.authVerification = record;
     const gated = mode === "subscription" || mode === "anthropic-api";
-    this.logger.info("auth_verified", { ...record, ok: gated ? classification.kind === mode : true });
+    const ok = mode === "claude-config" ? Boolean(this.config.claudeConfig && !claudeConfigNeedsLogin(this.config.claudeConfig)) || classification.kind !== "unknown" : gated ? classification.kind === mode : true;
+    this.logger.info("auth_verified", { ...record, ok });
   }
 
   private rejectAuth(live: LiveSdk, mode: BridgeConfig["authMode"], kind: AuthClassification["kind"], message: string): never {
@@ -1048,7 +1057,7 @@ export class SdkRuntime implements BridgeRuntime {
         this.stop(live, new BridgeError(502, "sdk_stream_closed", "The Claude Code session ended unexpectedly; resume it in a new bridge process or start a new session"));
       }
     } catch (error) {
-      if (!live.terminal && live.queryEpoch === epoch) this.stop(live, asBridgeError(error));
+      if (!live.terminal && live.queryEpoch === epoch) this.stop(live, this.sdkError(error));
     }
   }
 
@@ -1118,8 +1127,15 @@ export class SdkRuntime implements BridgeRuntime {
     }
   }
 
+  private sdkError(error: unknown): BridgeError {
+    const converted = asBridgeError(error);
+    const message = redactClaudeConfigText(this.config.claudeConfig, converted.message);
+    return message === converted.message ? converted : new BridgeError(converted.status, converted.code, message);
+  }
+
   private stop(live: LiveSdk, error: BridgeError): void {
     if (live.terminal) return;
+    error = this.sdkError(error);
     live.terminal = error;
     live.active = false;
     live.inputs.close();

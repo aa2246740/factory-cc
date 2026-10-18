@@ -17,7 +17,7 @@ const help = `Usage: npm run configure-droid -- [options]
   --base-url <URL>     Local Bridge URL
   --models <IDs>      Comma-separated actual model IDs, e.g. glm-5.2,glm-4.7
   --model <ID>        Default model, selected from --models
-  --auth byok|subscription|anthropic-api|cloud|inherit
+  --auth claude-config|byok|subscription|anthropic-api|cloud|inherit
                        subscription and anthropic-api default to sonnet,opus,haiku; the others need explicit model IDs
   --manifest <path>   Private script manifest
   --revert            Restore original settings (or, if you edited them since, remove only the
@@ -171,7 +171,7 @@ export function configureDroid(argv: string[], env: NodeJS.ProcessEnv = process.
   const requestedIds = args.models ? parseModelIds(args.models) : undefined;
   const selectedId = args.model ?? (mode === "byok" ? env.BRIDGE_UPSTREAM_MODEL : undefined);
   if (selectedId && parseModelIds(selectedId).length !== 1) throw new Error("--model must select one model ID.");
-  const claudeDefaults = mode === "subscription" || mode === "anthropic-api";
+  const claudeDefaults = mode === "claude-config" || mode === "subscription" || mode === "anthropic-api";
   const ids = requestedIds ?? (selectedId ? [selectedId] : claudeDefaults ? ["sonnet", "opus", "haiku"] : []);
   if (!catalog && !ids.length) throw new Error("byok, cloud and inherit require explicit actual model IDs: pass --models, --model, or BRIDGE_UPSTREAM_MODEL.");
   const configured = catalog ? validateModels(catalog) : modelsFromIds(ids, mode);

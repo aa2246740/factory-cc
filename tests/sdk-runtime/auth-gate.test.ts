@@ -1,11 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadConfig } from "../../src/config.js";
 import { SdkRuntime, type SdkHandle, type SdkUserInput } from "../../src/runtime/sdk-runtime.js";
 import type { RuntimeRequest } from "../../src/runtime/types.js";
 import type { SessionRecord } from "../../src/sessions/state.js";
+import { readClaudeConfig } from "../../src/upstream/claude-config.js";
 import { forbiddenNamesIn, type AuthMode } from "../../src/upstream/auth-env.js";
 import { startTestBridge } from "../helpers/server.js";
 
@@ -51,7 +52,7 @@ function create(sdk: FakeSdk, authMode: AuthMode, extra: Record<string, unknown>
   const config = loadConfig({
     mode: "sdk", dataDir: mkdtempSync(join(tmpdir(), "relay-auth-gate-")), authMode, permissionMode: "bypass",
     upstreamBaseUrl: "https://offline.invalid/anthropic", upstreamModel: "offline-test-model", upstreamTokenEnv: "BRIDGE_TEST_FAKE_KEY",
-    requestTimeoutMs: 300, toolWaitMs: 300, ...extra,
+    requestTimeoutMs: 300, toolWaitMs: 300, ...(authMode === "claude-config" ? { models: [{ id: "relay", model: "sonnet", displayName: "Claude Sonnet" }] } : {}), ...extra,
   });
   const runtime = new SdkRuntime(config, logger, sdk);
   runtimes.push(runtime);
@@ -207,6 +208,66 @@ describe("auth verification gate", () => {
       for (const key of Object.keys(process.env)) delete process.env[key];
       Object.assign(process.env, snapshot);
     }
+  });
+
+  describe("claude-config first-prompt gate", () => {
+    function configured(settings: unknown = {}) {
+      const root = mkdtempSync(join(tmpdir(), "relay-config-gate-"));
+      writeFileSync(join(root, "settings.json"), JSON.stringify(settings));
+      const config = readClaudeConfig({ HOME: root, CLAUDE_CONFIG_DIR: root });
+      rmSync(root, { recursive: true, force: true });
+      return config;
+    }
+
+    it.each([{}, { subscriptionType: "max" }, { apiKeySource: "ANTHROPIC_API_KEY" }])("accepts helper routing with classification %j and preserves isolation", async (info) => {
+      const helper = "relative-helper --offline-secret";
+      const sdk = new FakeSdk(async () => info);
+      const runtime = create(sdk, "claude-config", { claudeConfig: configured({ apiKeyHelper: helper, env: { ANTHROPIC_API_KEY: "literal-never-used" } }) });
+      await runtime.handle(request());
+      expect(sdk.inputs).toHaveLength(1);
+      expect(sdk.calls[0]!.options).toMatchObject({ settings: { apiKeyHelper: helper }, settingSources: [], strictMcpConfig: true });
+      expect(JSON.stringify(sdk.calls[0]!.options)).not.toContain("literal-never-used");
+      expect(JSON.stringify(logger.info.mock.calls)).not.toContain(helper);
+    });
+
+    it.each([{}, { subscriptionType: "max" }, { apiKeySource: "ANTHROPIC_API_KEY" }])("requires a recognized login only for pure login: %j", async (info) => {
+      const sdk = new FakeSdk(async () => info), runtime = create(sdk, "claude-config", { claudeConfig: configured() });
+      if (Object.keys(info).length) {
+        await runtime.handle(request()); expect(sdk.inputs).toHaveLength(1);
+      } else {
+        await expect(runtime.handle(request())).rejects.toThrow("Claude Code is not logged in. Run claude and log in, then retry.");
+        expect(sdk.inputs).toHaveLength(0);
+      }
+    });
+
+    it.each(["gateway", "credential"])("accepts unknown classification with resolved %s", async (source) => {
+      const root = mkdtempSync(join(tmpdir(), "relay-config-gate-"));
+      const config = readClaudeConfig({ HOME: root, CLAUDE_CONFIG_DIR: root, ...(source === "gateway" ? { ANTHROPIC_BASE_URL: "https://offline.invalid" } : { ANTHROPIC_AUTH_TOKEN: "offline-shell-key" }) });
+      rmSync(root, { recursive: true, force: true });
+      const sdk = new FakeSdk(async () => ({}));
+      await create(sdk, "claude-config", { claudeConfig: config }).handle(request());
+      expect(sdk.inputs).toHaveLength(1);
+      expect(logger.info).toHaveBeenCalledWith("auth_verified", expect.objectContaining({ mode: "claude-config", kind: "unknown", ok: true }));
+    });
+
+    it("redacts helper and replacement credentials from SDK startup errors", async () => {
+      const config = configured({ apiKeyHelper: "helper --secret-value" });
+      config.env.ANTHROPIC_AUTH_TOKEN = "offline-replacement-key";
+      const sdk = new FakeSdk(async () => ({}));
+      vi.spyOn(sdk, "query").mockImplementation(() => { throw new Error("helper --secret-value offline-replacement-key"); });
+      const runtime = create(sdk, "claude-config", { claudeConfig: config });
+      await expect(runtime.handle(request())).rejects.toThrow("[REDACTED] [REDACTED]");
+      expect(JSON.stringify(runtime.describe())).not.toMatch(/helper --secret-value|offline-replacement-key/);
+    });
+
+    it.each(["throw", "timeout", "missing"])("refuses accountInfo %s even with a helper before sending a prompt", async (kind) => {
+      const sdk = new FakeSdk(kind === "missing" ? undefined : kind === "throw" ? async () => { throw new Error("helper --secret-value"); } : () => new Promise(() => undefined));
+      const runtime = create(sdk, "claude-config", { claudeConfig: configured({ apiKeyHelper: "helper --secret-value" }), requestTimeoutMs: 20 });
+      await expect(runtime.handle(request())).rejects.toMatchObject({ code: "auth_mode_mismatch" });
+      expect(sdk.inputs).toHaveLength(0);
+      expect(JSON.stringify(runtime.describe())).not.toContain("helper --secret-value");
+      expect(JSON.stringify(logger.info.mock.calls)).not.toContain("helper --secret-value");
+    });
   });
 
   it("omits auth verification from /healthz and keeps the masked email on the admin runtime route", async () => {

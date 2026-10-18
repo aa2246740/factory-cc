@@ -1,4 +1,5 @@
 import { isAbsolute } from "node:path";
+import { claudeConfigEnvNames, assertClaudeCredential, readClaudeConfig, type ClaudeConfig } from "./claude-config.js";
 import { BridgeError } from "../types.js";
 import type { UpstreamSelection } from "./providers.js";
 
@@ -15,7 +16,7 @@ import type { UpstreamSelection } from "./providers.js";
  * account. `classifyAuth` therefore stays narrow and fails closed: an
  * unrecognized combination is `unknown`, never a guessed success.
  */
-export const AUTH_MODES = ["byok", "subscription", "anthropic-api", "cloud", "inherit"] as const;
+export const AUTH_MODES = ["byok", "claude-config", "subscription", "anthropic-api", "cloud", "inherit"] as const;
 export type AuthMode = (typeof AUTH_MODES)[number];
 
 export const API_KEY_SOURCES = [
@@ -74,6 +75,7 @@ const FD_PATTERN = /^(?:CLAUDE_CODE_|CCR_).+_FILE_DESCRIPTOR$/;
 
 export interface BuildChildEnvOptions {
   bridgeListen?: string;
+  claudeConfig?: ClaudeConfig;
   /** Overrides `sourceEnv.BRIDGE_ENV_PASSTHROUGH` when provided, including an empty string. */
   passthrough?: string;
 }
@@ -172,6 +174,13 @@ export function buildChildEnv(
   assertRequirements(mode, sourceEnv, selection);
 
   const env = baseEnv(sourceEnv);
+  if (mode === "claude-config") {
+    const resolved = opts.claudeConfig ?? readClaudeConfig(sourceEnv, bridgeListen);
+    assertClaudeCredential(resolved);
+    Object.assign(env, resolved.env);
+    refuseBridgeLoop(env.ANTHROPIC_BASE_URL, bridgeListen);
+    return env;
+  }
   for (const key of extraNames(mode, sourceEnv)) copyIfSet(env, sourceEnv, key);
   for (const key of passthrough) copyIfSet(env, sourceEnv, key);
   if (mode === "byok") applyByokSelection(env, sourceEnv, selection!);
@@ -277,6 +286,7 @@ function passthroughRejected(mode: AuthMode, key: string, sourceEnv: NodeJS.Proc
 }
 
 function isExplicitExtra(mode: AuthMode, key: string, sourceEnv: NodeJS.ProcessEnv): boolean {
+  if (mode === "claude-config") return claudeConfigEnvNames().includes(key) || key === "CLAUDE_CONFIG_DIR" || key === "CLAUDE_CODE_OAUTH_TOKEN";
   if (mode === "subscription") return key === "CLAUDE_CODE_OAUTH_TOKEN" || key === "CLAUDE_CONFIG_DIR";
   if (mode === "anthropic-api") {
     if (key === "ANTHROPIC_API_KEY" || (MODEL_SLOT_NAMES as readonly string[]).includes(key)) return true;
@@ -351,7 +361,7 @@ function truthy(value: string | undefined): boolean {
   return !["0", "false", "no", "off"].includes(value.trim().toLowerCase());
 }
 
-function refuseBridgeLoop(baseUrl: string | undefined, bridgeListen: string): void {
+export function refuseBridgeLoop(baseUrl: string | undefined, bridgeListen: string): void {
   if (!baseUrl) return;
   if ((bridgeListen && baseUrl.includes(bridgeListen)) || /127\.0\.0\.1:1878/.test(baseUrl)) {
     throw new Error("refusing to point Claude Code ANTHROPIC_BASE_URL at Relay Bridge");

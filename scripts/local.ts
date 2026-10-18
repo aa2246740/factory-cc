@@ -5,6 +5,7 @@ import { dirname, join, resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { Writable } from "node:stream";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { readClaudeConfig, needsClaudeCredential, supplyClaudeCredential, claudeConfigModels, claudeConfigSummary, type ClaudeConfig } from "../src/upstream/claude-config.js";
 import { loadConfig } from "../src/config.js";
 import { isAnthropicHost, preflightAuth } from "../src/upstream/auth-env.js";
 import { installFactoryHooks, removeFactoryHooks } from "../src/control/factory-hooks.js";
@@ -20,20 +21,26 @@ const help = `Usage: npm run local -- <project> [options]
 Start an isolated Bridge and interactive Droid for an existing project.
 Claude Code and Droid must already be installed and available on PATH.
 
-  --auth <mode>     byok (default) | subscription | anthropic-api
+  --auth <mode>     claude-config (default) | byok | subscription | anthropic-api
   --base-url <URL>  Anthropic-compatible BYOK endpoint (prompted if omitted)
   --model <ID>      Default model (prompted for byok if omitted)
   --models <IDs>    Actual model choices, e.g. glm-5.2,glm-4.7 or sonnet,opus,haiku
-  --key-env <NAME>  Read the BYOK key from this explicitly named environment variable
+  --key-env <NAME>  Read the byok/claude-config key from this environment variable
   -h, --help       Show help without changing any files
 
 If BRIDGE_AUTH is set and differs from --auth, the launcher exits instead of
-silently using byok. subscription and anthropic-api skip the endpoint, model and
+silently using a different mode. claude-config follows only Claude Code auth, routing
+and model settings; hooks, permissions, plugins, MCP and CLAUDE.md stay isolated.
+subscription and anthropic-api skip the endpoint, model and
 key prompts and default to sonnet,opus,haiku. They do not isolate CLAUDE_CONFIG_DIR.
 Run \`npm run doctor -- --auth subscription\` before the first real query; that
-check sends no prompt. An sk-ant- key is refused unless the BYOK host is anthropic.com.
+check sends no prompt. An sk-ant- key is refused unless the target host is anthropic.com.
 
-Without --key-env, the BYOK key is requested with terminal echo disabled. It is never
+claude-config reads only the user settings.json auth/routing allowlist once. Literal
+settings credentials are discarded; use a helper, a hidden prompt or --key-env.
+Shell/settings conflicts are refused by name. Cloud switches require --auth cloud.
+
+With --auth byok and without --key-env, the BYOK key is requested with terminal echo disabled. It is never
 saved. Defaults are https://api.z.ai/api/anthropic and glm-5.2; endpoint and model
 are remembered per project. The launcher installs /relay-droid and its discovery
 skill, preserves other project hooks, and removes its own hooks when Droid exits.
@@ -41,7 +48,7 @@ State stays in this repository's tmp/local directory. Native tool permissions st
 in ask mode. For native approvals, open the printed control URL and load its private
 admin-token file. FACTORY_AIRGAP_ENABLED=1 remains an experimental Factory CLI mode.`;
 
-const LOCAL_AUTH = ["byok", "subscription", "anthropic-api"] as const;
+const LOCAL_AUTH = ["claude-config", "byok", "subscription", "anthropic-api"] as const;
 type LocalAuth = (typeof LOCAL_AUTH)[number];
 
 export interface LocalArgs { project: string; baseUrl?: string; model?: string; models?: string[]; keyEnv?: string; auth: LocalAuth; help: boolean }
@@ -62,7 +69,7 @@ function modelId(value: string): string {
 }
 
 export function parseLocalArgs(argv: string[]): LocalArgs {
-  const result: LocalArgs = { project: "", auth: "byok", help: false };
+  const result: LocalArgs = { project: "", auth: "claude-config", help: false };
   const seen = new Set<string>();
   for (let index = 0; index < argv.length; index++) {
     const flag = argv[index]!;
@@ -81,7 +88,7 @@ export function parseLocalArgs(argv: string[]): LocalArgs {
     else if (flag === "--model") result.model = modelId(value);
     else if (flag === "--models") result.models = parseModelIds(value);
     else if (flag === "--auth") {
-      if (!(LOCAL_AUTH as readonly string[]).includes(value)) throw new Error("--auth must be byok, subscription or anthropic-api.");
+      if (!(LOCAL_AUTH as readonly string[]).includes(value)) throw new Error("--auth must be claude-config, byok, subscription or anthropic-api.");
       result.auth = value as LocalAuth;
     } else {
       if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(value) || ["HOME", "PATH", "SHELL", "PWD", "USER", "LOGNAME", "CODEX_HOME"].includes(value)) throw new Error("--key-env must name a dedicated key environment variable.");
@@ -227,12 +234,13 @@ export async function runLocal(argv: string[], env: NodeJS.ProcessEnv = process.
   if (!lstatSync(project).isDirectory()) throw new Error("Project path must be an existing directory.");
   const state = localStateDirectory(project);
   directory(state); directory(join(project, ".factory"));
-  const preferencesPath = join(state, "provider.json"), saved = preferences(preferencesPath);
+  const preferencesPath = join(state, "provider.json"), saved = args.auth === "byok" ? preferences(preferencesPath) : {};
   const abort = new AbortController();
   let interrupted = false;
   const interrupt = () => { interrupted = true; abort.abort(); };
   // Closing the terminal sends SIGHUP; treat it like SIGTERM so hooks, token files and the lock are removed.
   process.on("SIGINT", interrupt); process.on("SIGTERM", interrupt); process.on("SIGHUP", interrupt);
+  let claudeConfig: ClaudeConfig | undefined;
   let key = "", app: BridgeApp | undefined, releaseLock: (() => void) | undefined;
   const runtimeKey = `RELAY_LOCAL_PROVIDER_KEY_${randomBytes(8).toString("hex").toUpperCase()}`;
   const previous = new Map<string, string | undefined>();
@@ -258,6 +266,18 @@ export async function runLocal(argv: string[], env: NodeJS.ProcessEnv = process.
       if (key.startsWith("sk-ant-") && !isAnthropicHost(new URL(baseUrl).hostname)) {
         throw new Error("Refusing to send an Anthropic API key (sk-ant-) to a host outside anthropic.com. Use --auth anthropic-api, or point --base-url at https://api.anthropic.com.");
       }
+    } else if (args.auth === "claude-config") {
+      if (args.baseUrl) throw new Error("--base-url is only used with --auth byok.");
+      claudeConfig = readClaudeConfig(env, "127.0.0.1:18787");
+      if (args.keyEnv || needsClaudeCredential(claudeConfig)) {
+        key = (args.keyEnv ? env[args.keyEnv] ?? "" : await question("Claude Code credential (hidden; never saved): ", abort.signal, true)).trim();
+        supplyClaudeCredential(claudeConfig, key, args.keyEnv ? `--key-env ${args.keyEnv}` : "typed at launch");
+      }
+      const resolved = claudeConfigModels(claudeConfig);
+      catalog = args.models || args.model ? modelsFromIds(args.models ?? [args.model!], args.auth) : resolved.models;
+      ids = catalog.map((item) => item.id); model = args.model ?? (ids.includes(resolved.defaultModel) ? resolved.defaultModel : ids[0]!);
+      preflightAuth(args.auth, env, undefined, { claudeConfig, bridgeListen: "127.0.0.1:18787" });
+      process.stdout.write(claudeConfigSummary(claudeConfig, catalog, model));
     } else {
       if (args.baseUrl || args.keyEnv) throw new Error("--base-url and --key-env are only used with --auth byok.");
       ids = args.models ?? (args.model ? [args.model] : ["sonnet", "opus", "haiku"]);
@@ -295,12 +315,12 @@ export async function runLocal(argv: string[], env: NodeJS.ProcessEnv = process.
     const config = loadConfig({ mode: "sdk", authMode: args.auth, permissionMode: "ask", host: "127.0.0.1", port: 0,
       clientToken, adminToken, hookToken, dataDir: join(state, "bridge-data"), sdkCwd: project, persistSessions: true,
       maxBodyBytes: 8 * 1024 * 1024, maxSessions: 32, maxTurns: 160, toolWaitMs: 8 * 60 * 60 * 1000, requestTimeoutMs: 10 * 60 * 1000,
-      claudeExecutable: env.BRIDGE_CLAUDE_EXECUTABLE ?? "claude", models: catalog,
+      claudeExecutable: env.BRIDGE_CLAUDE_EXECUTABLE ?? "claude", models: catalog, claudeConfig,
       ...(args.auth === "byok" ? { upstreamBaseUrl: baseUrl, upstreamModel: model, upstreamTokenEnv: runtimeKey } : {}) });
     app = createBridgeApp(config, createLogger(config.logDir), join(config.sandboxDir, "CANARY.txt"));
     await listen(app, config);
     configureDroid(["--settings", settingsPath, "--base-url", app.url, "--manifest", join(state, "manifest.env"), "--models", ids.join(","),
-      ...(args.model ? ["--model", model] : [])], { BRIDGE_CLIENT_TOKEN: clientToken, ...(args.auth === "byok" ? { BRIDGE_UPSTREAM_MODEL: model } : {}), BRIDGE_AUTH: args.auth }, catalog);
+      ...(args.model || args.auth === "claude-config" ? ["--model", model] : [])], { BRIDGE_CLIENT_TOKEN: clientToken, ...(args.auth === "byok" ? { BRIDGE_UPSTREAM_MODEL: model } : {}), BRIDGE_AUTH: args.auth }, catalog);
     hookAttempted = true;
     installFactoryHooks({ hooksPath, configPath: hookConfig, url: app.url, hookToken });
     privateWrite(adminPath, `${adminToken}\n`); adminWritten = true;
@@ -312,7 +332,8 @@ export async function runLocal(argv: string[], env: NodeJS.ProcessEnv = process.
     return await runDroid(["--home", home, "--cwd", project, "--airgap", "1", "--", "--settings", settingsPath], { env: childEnv, signal: abort.signal, handleProcessSignals: false });
   } catch (error) {
     if (interrupted) return 130;
-    const message = error instanceof Error ? error.message : "Local launcher failed.";
+    const raw = error instanceof Error ? error.message : "Local launcher failed.";
+    const message = claudeConfig?.helper ? raw.replaceAll(claudeConfig.helper, "[REDACTED]") : raw;
     throw new Error(key ? message.replaceAll(key, "[REDACTED]") : message);
   } finally {
     const failures: unknown[] = [];

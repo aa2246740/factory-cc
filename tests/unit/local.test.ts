@@ -9,6 +9,7 @@ import type { BridgeConfig } from "../../src/config.js";
 import type { BridgeApp } from "../../src/http/app.js";
 
 const observed = vi.hoisted(() => ({ runDroid: vi.fn(), apps: [] as Array<{ app: BridgeApp; config: BridgeConfig }> }));
+vi.mock("node:child_process", async (original) => ({ ...await original<typeof import("node:child_process")>(), execFileSync: vi.fn(() => "offline fixture start time") }));
 vi.mock("node:readline/promises", () => ({ createInterface: vi.fn(() => { throw new Error("Unexpected interactive prompt"); }) }));
 vi.mock("../../scripts/configure-droid.js", async (original) => {
   const actual = await original<typeof import("../../scripts/configure-droid.js")>();
@@ -43,7 +44,7 @@ function fixture() {
     BRIDGE_MODE: "mock", BRIDGE_PERMISSION: "bypass", BRIDGE_SDK_CWD: root,
     BRIDGE_DROID_EXECUTABLE: process.execPath, BRIDGE_CLAUDE_EXECUTABLE: process.execPath,
   };
-  const argv = [project, "--base-url", "https://provider.invalid/anthropic", "--model", "offline-selected-model", "--key-env", "LOCAL_TEST_PROVIDER_KEY"];
+  const argv = [project, "--auth", "byok", "--base-url", "https://provider.invalid/anthropic", "--model", "offline-selected-model", "--key-env", "LOCAL_TEST_PROVIDER_KEY"];
   return { root, project, home, state, env, argv, userSettings };
 }
 function files(directory: string): string[] {
@@ -140,6 +141,85 @@ describe("one-command isolated local launch", () => {
       expect(existsSync(f.state)).toBe(false);
       expect(readdirSync(f.project)).toEqual([]);
     }
+
+    it("defaults to claude-config, uses mapped aliases and reports only non-secret settings", async () => {
+      const f = officialFixture();
+      const helper = "helper --offline-secret", literal = "literal-offline-secret";
+      writeFileSync(join(f.home, ".claude/settings.json"), JSON.stringify({ apiKeyHelper: helper, hooks: {}, permissions: {}, enabledPlugins: {}, mcpServers: {}, env: {
+        ANTHROPIC_BASE_URL: "https://offline.invalid:8443/private?key=hidden", ANTHROPIC_API_KEY: literal, ANTHROPIC_DEFAULT_OPUS_MODEL: "mapped-opus", ANTHROPIC_DEFAULT_FABLE_MODEL: "mapped-fable", ANTHROPIC_MODEL: "mapped-fable", UNKNOWN: literal,
+      } }));
+      observed.runDroid.mockImplementationOnce(async (argv: string[], options: { env: NodeJS.ProcessEnv }) => {
+        const { config } = observed.apps[0]!;
+        expect(config.authMode).toBe("claude-config");
+        expect(config.claudeConfig?.helper).toBe(helper);
+        expect(config.claudeConfig?.env.ANTHROPIC_API_KEY).toBeUndefined();
+        expect(config.models?.map((item) => item.model)).toEqual(["opus", "fable"]);
+        expect(options.env.BRIDGE_MODEL_ID).toBe("fable");
+        const settings = JSON.parse(readFileSync(argument(argv, "--settings")!, "utf8"));
+        expect(settings.sessionDefaultSettings.model).toBe("custom:Claude-Fable-(mapped-fable)-0");
+        return 0;
+      });
+      expect(parseLocalArgs([f.project]).auth).toBe("claude-config");
+      expect(await runLocal([f.project], f.env)).toBe(0);
+      expect(createInterface).not.toHaveBeenCalled();
+      const output = vi.mocked(process.stdout.write).mock.calls.map((call) => String(call[0])).join("");
+      expect(output).toContain(join(f.home, ".claude/settings.json"));
+      expect(output).toContain("Request target: https://offline.invalid:8443");
+      expect(output).toContain("Not carried over: enabledPlugins, env.UNKNOWN, hooks, mcpServers, permissions");
+      expect(output).not.toMatch(/helper --offline-secret|literal-offline-secret/);
+      expect(output).not.toContain("/private?key=hidden");
+      for (const path of [...files(f.project), ...files(f.state)]) {
+        expect(readFileSync(path, "utf8")).not.toContain(helper); expect(readFileSync(path, "utf8")).not.toContain(literal);
+      }
+      expect(existsSync(join(f.state, "provider.json"))).toBe(false);
+    });
+
+    it("replaces a settings literal using --key-env in the same variable without persisting secrets", async () => {
+      const f = officialFixture();
+      writeFileSync(join(f.home, ".claude/settings.json"), JSON.stringify({ env: { ANTHROPIC_AUTH_TOKEN: "unused-literal" } }));
+      f.env.LAUNCH_KEY = "offline-key-for-config-mode";
+      observed.runDroid.mockImplementationOnce(async (_argv: string[], options: { env: NodeJS.ProcessEnv }) => {
+        expect(observed.apps[0]!.config.claudeConfig?.env.ANTHROPIC_AUTH_TOKEN).toBe(f.env.LAUNCH_KEY);
+        expect(Object.values(options.env)).not.toContain(f.env.LAUNCH_KEY);
+        return 0;
+      });
+      expect(await runLocal([f.project, "--key-env", "LAUNCH_KEY"], f.env)).toBe(0);
+      const output = vi.mocked(process.stdout.write).mock.calls.map((call) => String(call[0])).join("");
+      expect(output).toContain("Credential source: --key-env LAUNCH_KEY");
+      expect(output).not.toContain(f.env.LAUNCH_KEY); expect(output).not.toContain("unused-literal");
+      for (const path of [...files(f.project), ...files(f.state)]) expect(readFileSync(path, "utf8")).not.toMatch(/offline-key-for-config-mode|unused-literal/);
+    });
+
+    it("requests a hidden replacement for a literal credential before creating any state", async () => {
+      const f = officialFixture();
+      writeFileSync(join(f.home, ".claude/settings.json"), JSON.stringify({ env: { ANTHROPIC_API_KEY: "unused-literal" } }));
+      const stdinTty = Object.getOwnPropertyDescriptor(process.stdin, "isTTY"), stdoutTty = Object.getOwnPropertyDescriptor(process.stdout, "isTTY");
+      Object.defineProperty(process.stdin, "isTTY", { configurable: true, get: () => true });
+      Object.defineProperty(process.stdout, "isTTY", { configurable: true, get: () => true });
+      vi.mocked(createInterface).mockImplementationOnce(() => { throw new Error("offline prompt reached"); });
+      try { await expect(runLocal([f.project], f.env)).rejects.toThrow("offline prompt reached"); }
+      finally {
+        if (stdinTty) Object.defineProperty(process.stdin, "isTTY", stdinTty); else Reflect.deleteProperty(process.stdin, "isTTY");
+        if (stdoutTty) Object.defineProperty(process.stdout, "isTTY", stdoutTty); else Reflect.deleteProperty(process.stdout, "isTTY");
+      }
+      expect(createInterface).toHaveBeenCalledWith(expect.objectContaining({ terminal: true, output: expect.not.objectContaining({ isTTY: true }) }));
+      expect(existsSync(f.state)).toBe(false); expect(readdirSync(f.project)).toEqual([]);
+    });
+
+    it("refuses config conflicts before creating local state", async () => {
+      const f = officialFixture();
+      writeFileSync(join(f.home, ".claude/settings.json"), '{"env":{"ANTHROPIC_BASE_URL":"https://one.invalid"}}');
+      f.env.ANTHROPIC_BASE_URL = "https://two.invalid";
+      await expect(runLocal([f.project], f.env)).rejects.toThrow("conflict: ANTHROPIC_BASE_URL");
+      expectNoStart(f);
+    });
+
+    it("keeps explicit model overrides in claude-config mode", async () => {
+      const f = officialFixture();
+      writeFileSync(join(f.home, ".claude/settings.json"), '{"env":{"ANTHROPIC_DEFAULT_OPUS_MODEL":"mapped-opus"}}');
+      expect(await runLocal([f.project, "--models", "fable,sonnet", "--model", "sonnet"], f.env)).toBe(0);
+      expect(observed.apps[0]!.config.models?.map((item) => item.id)).toEqual(["fable", "sonnet"]);
+    });
 
     it("launches subscription with the default catalog, preserves shell basics and cleans up lifecycle state", async () => {
       const f = officialFixture();
@@ -408,7 +488,7 @@ describe("one-command isolated local launch", () => {
 
   it("remembers real model choices and preserves different valid Mission selections on restart", async () => {
     const f = fixture();
-    const argv = [f.project, "--base-url", "https://provider.invalid/anthropic", "--models", "glm-5.2,glm-4.7", "--model", "glm-5.2", "--key-env", "LOCAL_TEST_PROVIDER_KEY"];
+    const argv = [f.project, "--auth", "byok", "--base-url", "https://provider.invalid/anthropic", "--models", "glm-5.2,glm-4.7", "--model", "glm-5.2", "--key-env", "LOCAL_TEST_PROVIDER_KEY"];
     observed.runDroid.mockImplementationOnce(async (droidArgs: string[]) => {
       const path = argument(droidArgs, "--settings")!, settings = JSON.parse(readFileSync(path, "utf8"));
       expect(settings.customModels.map((model: { displayName: string }) => model.displayName)).toEqual(["GLM-5.2", "GLM-4.7"]);
@@ -432,7 +512,7 @@ describe("one-command isolated local launch", () => {
       expect(observed.apps[1]!.config.models?.map((model) => model.model)).toEqual(["glm-5.2", "glm-4.7"]);
       return 0;
     });
-    expect(await runLocal([f.project, "--key-env", "LOCAL_TEST_PROVIDER_KEY"], f.env)).toBe(0);
+    expect(await runLocal([f.project, "--auth", "byok", "--key-env", "LOCAL_TEST_PROVIDER_KEY"], f.env)).toBe(0);
   });
 
   it("refuses to ignore BRIDGE_AUTH when it disagrees with --auth", async () => {

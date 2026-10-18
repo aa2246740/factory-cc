@@ -1,3 +1,6 @@
+import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { runDoctor, type DoctorSdk } from "../../scripts/doctor.js";
 
@@ -47,4 +50,42 @@ describe("doctor auth dry-run", () => {
     expect(errors.join("")).toContain("ANTHROPIC_API_KEY");
     expect(errors.join("")).not.toContain(secret);
   });
+  it.each(["helper", "gateway", "login", "unknown", "literal", "throw"])("runs claude-config dry-run offline for %s without yielding a prompt or leaking secrets", async (kind) => {
+    const dir = mkdtempSync(join(tmpdir(), "relay-doctor-config-"));
+    const helper = "helper --offline-secret", literal = "offline-literal-never-use";
+    writeFileSync(join(dir, "settings.json"), JSON.stringify({ ...(kind === "helper" || kind === "throw" ? { apiKeyHelper: helper } : {}), env: {
+      ...(kind === "gateway" ? { ANTHROPIC_BASE_URL: "https://offline.invalid/path?key=hidden" } : {}),
+      ...(kind === "literal" ? { ANTHROPIC_API_KEY: literal } : {}), UNKNOWN_NAME: literal,
+    }, hooks: {} }));
+    const lines: string[] = [];
+    vi.spyOn(console, "log").mockImplementation((value) => { lines.push(String(value)); });
+    vi.spyOn(console, "error").mockImplementation((value) => { lines.push(String(value)); });
+    let options: Record<string, unknown> | undefined, prompt: AsyncIterable<unknown> | undefined;
+    const close = vi.fn();
+    const loadSdk = vi.fn(async (): Promise<DoctorSdk> => ({ query(args) {
+      options = args.options; prompt = args.prompt;
+      return { accountInfo: async () => {
+        if (kind === "throw") throw new Error(helper);
+        return kind === "login" ? { subscriptionType: "max" } : {};
+      }, close };
+    } }));
+    try {
+      const code = await runDoctor(["--auth", "claude-config"], { HOME: dir, CLAUDE_CONFIG_DIR: dir }, { loadSdk });
+      const success = ["helper", "gateway", "login"].includes(kind);
+      expect(code).toBe(success ? 0 : 1);
+      const output = lines.join("\n");
+      expect(output).not.toContain(helper); expect(output).not.toContain(literal); expect(output).not.toContain("?key=hidden");
+      if (kind === "literal") { expect(loadSdk).not.toHaveBeenCalled(); return; }
+      expect(options).toMatchObject({ settingSources: [], strictMcpConfig: true });
+      if (kind === "helper") expect(options?.settings).toEqual({ apiKeyHelper: helper });
+      expect(close).toHaveBeenCalledOnce();
+      expect(JSON.parse(lines.at(-1)!)).toMatchObject({ promptSent: false });
+      if (kind === "unknown") expect(output).toContain("Claude Code is not logged in.");
+      if (success) expect(JSON.parse(lines.at(-1)!)).toMatchObject({ classification: { kind: kind === "login" ? "subscription" : "unknown" }, promptSent: false });
+      let yielded = false;
+      void prompt![Symbol.asyncIterator]().next().then(() => { yielded = true; });
+      await Promise.resolve(); expect(yielded).toBe(false);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+
 });
