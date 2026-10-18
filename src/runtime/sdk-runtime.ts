@@ -1,4 +1,4 @@
-import { DESKTOP_DISALLOWED_TOOLS, DESKTOP_APPROVAL_DENIAL } from "./desktop-policy.js";
+import { DESKTOP_DISALLOWED_TOOLS, DESKTOP_APPROVAL_DENIAL, DESKTOP_READ_DENIAL } from "./desktop-policy.js";
 import { mkdirSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { isAbsolute, join } from "node:path";
@@ -860,7 +860,7 @@ export class SdkRuntime implements BridgeRuntime {
   }
 
   private async canUseTool(live: LiveSdk, name: string, input: Record<string, unknown>, context: NativePermissionContext = {}): Promise<RuntimePermissionDecision> {
-    if (this.config.desktopProfile) return { behavior: "deny", message: DESKTOP_APPROVAL_DENIAL };
+    if (this.config.desktopProfile) return { behavior: "deny", message: ["Read", "Glob", "Grep", "LS"].includes(name) ? DESKTOP_READ_DENIAL : DESKTOP_APPROVAL_DENIAL };
     if (live.terminal) return { behavior: "deny", message: "Session is closed" };
     const denial = toolAccessDenial(live, name, live.current && this.control?.factoryPermissionMode?.(live.current.session.bridgeSessionId));
     if (denial) return { behavior: "deny", message: denial };

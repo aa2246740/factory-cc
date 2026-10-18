@@ -1342,6 +1342,9 @@ it("desktop profile blocks native side effects and denies approval immediately w
   expect(options.systemPrompt).toMatchObject({ preset: "claude_code", append: expect.stringContaining("Droid owns approvals") });
   const check = options.canUseTool as (name: string, input: object) => Promise<unknown>;
   expect(await check("Read", {})).toEqual({ behavior: "deny", message: expect.stringContaining("Droid applies its current mode") });
+  // A read outside the project points at attached images and Droid's own commands, not a subagent detour.
+  expect(await check("Read", { file_path: "/Users/someone/.factory/temp/images/a.jpeg" })).toEqual({ behavior: "deny", message: expect.stringContaining("Images the user attached are already in the conversation") });
+  expect(await check("Bash", {})).toEqual({ behavior: "deny", message: expect.not.stringContaining("Images the user attached") });
   expect(approval).not.toHaveBeenCalled();
   const guard = (options.hooks as { PreToolUse: Array<{ hooks: Array<(hook: { tool_name: string }) => Promise<unknown>> }> }).PreToolUse[0]!.hooks[0]!;
   expect(await guard({ tool_name: "Bash" })).toMatchObject({ hookSpecificOutput: { permissionDecision: "deny" } });
