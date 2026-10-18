@@ -161,6 +161,15 @@ function revertDroid(settingsPath: string, backup: string, absentMarker: string,
   return { reverted: true, settingsPath, outcome, ...(notice ? { notice } : {}) };
 }
 
+/**
+ * Droid infers a custom model's capabilities from its name. Its remote
+ * script_tool_models flag puts names such as claude-opus-5-5 in Script mode, where
+ * Read, Execute, Create and Edit are only reachable inside Droid scripts. Every
+ * entry runs Claude Code behind this Bridge, so pin one built-in base that uses
+ * direct tools and gives every entry the same request settings.
+ */
+export const DROID_BASE_MODEL = "claude-sonnet-5-5";
+
 export function configureDroid(argv: string[], env: NodeJS.ProcessEnv = process.env, catalog?: BridgeModel[]): Record<string, unknown> {
   const args = parseArgs(argv);
   if (args.help === "1") return { help };
@@ -200,7 +209,7 @@ export function configureDroid(argv: string[], env: NodeJS.ProcessEnv = process.
   const owned = ownedModels(existing, previous);
   const kept = existing.filter((item) => !owned.has(item));
   const incoming: CustomModel[] = configured.map((model) => ({ model: model.id, displayName: model.displayName, baseUrl, apiKey: token,
-    provider: "anthropic", authMode: "bearer", maxOutputTokens: 4096 }));
+    baseModelId: DROID_BASE_MODEL, provider: "anthropic", authMode: "bearer", maxOutputTokens: 4096 }));
   const combined = [...kept, ...incoming], oldIds = selectionIds(existing), newIds = selectionIds(combined);
   const defaultSelection = newIds[kept.length + configured.findIndex((model) => model.id === defaultId)]!;
   const canonicalForModel = new Map(configured.map((model, index) => [model.id, newIds[kept.length + index]!]));

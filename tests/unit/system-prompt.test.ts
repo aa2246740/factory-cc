@@ -173,6 +173,27 @@ describe("T3-style system prompt", () => {
     expect(JSON.stringify(content)).toContain("What port are we using?");
   });
 
+  it("delivers every user message after the last reply, including a prompt Droid follows with a reminder", () => {
+    // Droid desktop's request after switching to Opus (session bf273f5d, 2026-10-19 02:11:13 +08:00):
+    // the new prompt, then Droid's own model-change reminder as a separate user message.
+    const question = "What is your current working directory? Reply with only the absolute path.";
+    const reminder = "<system-reminder>The active model changed. Most tools are now available only inside Script; call them through Script from now on, and call the remaining top-level tools directly. Earlier direct tool calls remain in the conversation as history.</system-reminder>";
+    const input = request();
+    input.request.messages = [
+      { role: "user", content: "Remember the code word PELICAN-58. Reply with exactly: OK" },
+      { role: "assistant", content: "OK" },
+      { role: "user", content: [{ type: "text", text: question }] },
+      { role: "user", content: [{ type: "text", text: reminder }] },
+    ];
+    expect(buildDynamicUserContent(input, "/work", { includeContext: false })).toEqual([{ type: "text", text: question }, { type: "text", text: reminder }]);
+    const imported = JSON.stringify(buildInitialUserContent(input, "/work"));
+    expect(imported.indexOf("Current user message:")).toBeLessThan(imported.indexOf(question));
+    expect(imported).not.toContain("Prior user message 3");
+    // A request made only of user messages is all current, not imported history.
+    input.request.messages = [{ role: "user", content: "<system-reminder>\nAvailable skills\n</system-reminder>" }, { role: "user", content: question }];
+    expect(JSON.stringify(buildInitialUserContent(input, "/work"))).not.toContain("Imported conversation history");
+  });
+
   it("keeps a native slash command in the last text block when adding host context", () => {
     const input = request();
     input.request.messages = [{ role: "user", content: "/compact Preserve the current task" }];

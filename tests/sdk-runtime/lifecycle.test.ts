@@ -1468,3 +1468,19 @@ describe("Droid tool cancellation (desktop profile)", () => {
     expect(sdk.inputs).toHaveLength(1);
   });
 });
+
+it("sends a prompt that Droid follows with its own reminder message as part of the new turn", async () => {
+  const sdk = new FakeSdk(async function* (_input, index) { yield success(`reply-${index}`); });
+  const { runtime } = create(sdk);
+  const s = session();
+  const opening = user("Remember the code word PELICAN-58. Reply with exactly: OK");
+  await runtime.handle(request(s, "unused", { messages: [opening] }));
+  const question = "What is your current working directory? Reply with only the absolute path.";
+  const reminder = "<system-reminder>The active model changed. Most tools are now available only inside Script.</system-reminder>";
+  await runtime.handle(request(s, "unused", { messages: [opening, { role: "assistant", content: "reply-0" }, user(question), user(reminder)] }));
+  expect(sdk.inputs).toHaveLength(2);
+  const text = JSON.stringify(sdk.inputs[1]!.message.content);
+  expect(text).toContain(question);
+  expect(text.indexOf(question)).toBeLessThan(text.indexOf("The active model changed"));
+  expect(text).not.toContain("PELICAN-58");
+});

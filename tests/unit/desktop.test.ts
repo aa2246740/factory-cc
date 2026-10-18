@@ -36,7 +36,8 @@ it("installs built Node service, private token files and helper models without e
   // the 0600 settings carry the loopback client token, never admin or hook authority.
   const settings = JSON.parse(readFileSync(paths.settings, "utf8"));
   expect(settings.customModels).toHaveLength(1);
-  expect(settings.customModels[0]).toMatchObject({ model: "sonnet", apiKey: tokens[0], authMode: "bearer" });
+  // A pinned direct-tool base keeps Droid's Script mode away from names like claude-opus-5-5.
+  expect(settings.customModels[0]).toMatchObject({ model: "sonnet", apiKey: tokens[0], authMode: "bearer", baseModelId: "claude-sonnet-5-5" });
   expect(settings.customModels[0].apiKeyHelper).toBeUndefined();
   for (const token of tokens.slice(1)) expect(readFileSync(paths.settings, "utf8")).not.toContain(token);
   expect(existsSync(join(root, "HELPER-RAN"))).toBe(false);
@@ -74,6 +75,16 @@ it("status checks only the registered port and reports unavailable external repo
   expect(await desktop(["status"], deps)).toMatchObject({ loaded: true, plistPresent: true, healthy: true, repositoryPresent: false });
   expect(deps.health).toHaveBeenCalledExactlyOnceWith(18787);
   await expect(desktop(["restart"], deps)).rejects.toThrow("unmounted"); expect(existsSync(paths.plist)).toBe(true);
+});
+it("status warns when Droid's cached Script-mode list includes the pinned base model", async () => {
+  const { deps } = fixture(); await desktop(["install"], deps);
+  const flags = (models: string[]) => { mkdirSync(join(deps.home, ".factory/cache"), { recursive: true });
+    writeFileSync(join(deps.home, ".factory/cache/feature-flags.json"), JSON.stringify({ configs: { script_tool_models: { models } } })); };
+  expect(await desktop(["status"], deps)).not.toHaveProperty("warning");
+  flags(["claude-opus-5-5", "gpt-6.1-sol"]);
+  expect(await desktop(["status"], deps)).not.toHaveProperty("warning");
+  flags(["claude-opus-5-5", "claude-sonnet-5-5"]);
+  expect(await desktop(["status"], deps)).toMatchObject({ warning: expect.stringContaining("Script mode") });
 });
 it("busy port fails before writing state or changing settings", async () => {
   const { deps, paths } = fixture(); deps.assertPortFree = async () => { throw new Error("busy"); };

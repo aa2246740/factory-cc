@@ -85,14 +85,21 @@ function userBlocks(content: string | ContentBlock[]): ContentBlock[] {
   });
 }
 
+/** The new user turn: every user message after the last assistant reply. Droid can
+ * follow the prompt with its own reminder message, e.g. after a model switch. */
+export function trailingUserMessages(messages: RuntimeRequest["request"]["messages"]): RuntimeRequest["request"]["messages"] {
+  let start = messages.length;
+  while (start > 0 && messages[start - 1]?.role === "user") start--;
+  return messages.slice(start);
+}
+
 /** Append only the new user content; Claude Code retains the earlier native transcript. */
 export function buildDynamicUserContent(
   input: RuntimeRequest,
   cwd?: string,
   options: { includeContext?: boolean } = {},
 ): ContentBlock[] {
-  const latest = [...input.request.messages].reverse().find((message) => message.role === "user");
-  const blocks = latest ? userBlocks(latest.content) : [];
+  const blocks = trailingUserMessages(input.request.messages).flatMap((message) => userBlocks(message.content));
   const context = options.includeContext === false ? "" : buildHostContext(input, cwd);
   if (!context) return blocks;
   // Claude Code recognizes native slash commands only in the last text block.
@@ -109,18 +116,15 @@ export function buildDynamicUserContent(
  * reference material, not executable tool messages or a fabricated SDK transcript.
  */
 export function buildInitialUserContent(input: RuntimeRequest, cwd?: string): ContentBlock[] {
-  if (input.request.messages.length === 1) return buildDynamicUserContent(input, cwd);
-  let latestIndex = -1;
-  for (let i = input.request.messages.length - 1; i >= 0; i -= 1) {
-    if (input.request.messages[i]?.role === "user") { latestIndex = i; break; }
-  }
+  const messages = input.request.messages;
+  const current = messages.length - trailingUserMessages(messages).length;
+  if (current === 0) return buildDynamicUserContent(input, cwd);
   const blocks: ContentBlock[] = [{
     type: "text",
-    text: "Imported conversation history follows as reference context. Previous tool calls are historical records, not requests to execute them again. The final user message is the current task.",
+    text: "Imported conversation history follows as reference context. Previous tool calls are historical records, not requests to execute them again. The final user messages are the current task.",
   }];
-  for (let i = 0; i < input.request.messages.length; i += 1) {
-    if (i === latestIndex) continue;
-    const message = input.request.messages[i]!;
+  for (let i = 0; i < current; i += 1) {
+    const message = messages[i]!;
     blocks.push({ type: "text", text: `Prior ${message.role} message ${i + 1}:` });
     for (const block of asBlocks(message.content)) {
       if (block.type === "text" || block.type === "image" || block.type === "document") {
@@ -136,10 +140,9 @@ export function buildInitialUserContent(input: RuntimeRequest, cwd?: string): Co
       }
     }
   }
-  // The current message can carry results of tools that were never delivered
+  // The current messages can carry results of tools that were never delivered
   // (an interrupted tool call); keep them as reference rather than dropping them.
-  const latest = latestIndex >= 0 ? input.request.messages[latestIndex]! : undefined;
-  for (const block of latest ? asBlocks(latest.content) : []) {
+  for (const block of messages.slice(current).flatMap((message) => asBlocks(message.content))) {
     if (block.type !== "tool_result") continue;
     blocks.push({ type: "text", text: `Historical tool result ${block.tool_use_id}:` });
     blocks.push(...userBlocks((block.content as string | ContentBlock[] | undefined) ?? ""));

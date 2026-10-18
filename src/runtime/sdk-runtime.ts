@@ -13,7 +13,7 @@ import { appendLogLine, type Logger } from "../logging.js";
 import { claudeToolTraceDetail, isDroidMcpName, selectDroidMcpTools } from "./droid-tools.js";
 import { DroidMcpCatalog, StableDroidToolNames } from "./droid-mcp-catalog.js";
 import { hostAllowsAnyTools, nativeToolAllowed } from "./native-tool-policy.js";
-import { buildDynamicUserContent, buildHostContext, buildInitialUserContent, buildPresetSystemPrompt, describePromptLayout } from "./system-prompt.js";
+import { buildDynamicUserContent, buildHostContext, buildInitialUserContent, buildPresetSystemPrompt, describePromptLayout, trailingUserMessages } from "./system-prompt.js";
 import { UsageLedger } from "./usage.js";
 import { INTERRUPT_GRACE_MS, TurnWatchdog } from "./turn-watchdog.js";
 import type { BridgeRuntime, RuntimeApprovalRequest, RuntimeControl, RuntimeEvent, RuntimeHostCall, RuntimeHostCompletion, RuntimeHostEnd, RuntimePermissionDecision, RuntimeRequest, RuntimeTurn, StreamSink } from "./types.js";
@@ -551,7 +551,7 @@ export class SdkRuntime implements BridgeRuntime {
   }
 
   private continuationContent(input: RuntimeRequest, live: LiveSdk, context: string): ContentBlock[] {
-    const content = trailingUserMessages(input).flatMap((message) => buildDynamicUserContent({
+    const content = trailingUserMessages(input.request.messages).flatMap((message) => buildDynamicUserContent({
       ...input, request: { ...input.request, messages: [message] },
     }, resolveCwd(input, this.config), { includeContext: false }));
     if (context !== live.lastHostContext) content.push({ type: "text", text: context });
@@ -560,7 +560,7 @@ export class SdkRuntime implements BridgeRuntime {
 
   /** The user's next turn after a cancellation, built like any new turn from all trailing user content. */
   private followupContent(input: RuntimeRequest, live: LiveSdk, context: string): ContentBlock[] {
-    const blocks = trailingUserMessages(input).flatMap((message) => asBlocks(message.content)).filter((block) => block.type !== "tool_result");
+    const blocks = trailingUserMessages(input.request.messages).flatMap((message) => asBlocks(message.content)).filter((block) => block.type !== "tool_result");
     if (!blocks.length) return [];
     return buildDynamicUserContent({ ...input, request: { ...input.request, messages: [{ role: "user", content: blocks }] } },
       resolveCwd(input, this.config), { includeContext: context !== live.lastHostContext });
@@ -1218,17 +1218,10 @@ export class SdkRuntime implements BridgeRuntime {
   }
 }
 
-function trailingUserMessages(input: RuntimeRequest): RuntimeRequest["request"]["messages"] {
-  const messages = input.request.messages;
-  let start = messages.length;
-  while (start > 0 && messages[start - 1]?.role === "user") start--;
-  return messages.slice(start);
-}
-
 function latestToolResults(input: RuntimeRequest, includeTrailingUserMessages = false): DroidResult[] {
   const latest = input.request.messages.at(-1);
   if (!latest || latest.role !== "user") throw new BridgeError(400, "invalid_turn", "A new turn must end with a user message");
-  const messages = includeTrailingUserMessages ? trailingUserMessages(input) : [latest];
+  const messages = includeTrailingUserMessages ? trailingUserMessages(input.request.messages) : [latest];
   return messages.flatMap((message) => asBlocks(message.content)).filter((block) => block.type === "tool_result").map((block) => {
     const result = block as { tool_use_id?: string; content?: string | ContentBlock[]; is_error?: boolean };
     return {

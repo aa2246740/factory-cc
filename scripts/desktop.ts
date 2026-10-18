@@ -8,7 +8,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { z } from "zod";
 import { modelsFromIds, parseModelIds, type BridgeModel } from "../src/models.js";
 import { assertClaudeCredential, claudeConfigModels, readClaudeConfig } from "../src/upstream/claude-config.js";
-import { configureDroid } from "./configure-droid.js";
+import { configureDroid, DROID_BASE_MODEL } from "./configure-droid.js";
 
 const LABEL = "ai.factory-cc.bridge";
 const installationSchema = z.object({ version: z.literal(1), port: z.number().int().min(1).max(65535), repo: z.string(), node: z.string(), path: z.string(),
@@ -105,6 +105,14 @@ function syncModels(deps: DesktopDependencies, install: Installation) {
   return configureDroid(["--settings", paths.settings, "--base-url", `http://127.0.0.1:${install.port}`, "--auth", "claude-config",
     "--manifest", paths.models, "--preserve-selections"], { HOME: deps.home, BRIDGE_CLIENT_TOKEN: readFileSync(paths.token, "utf8").trim() }, models);
 }
+/** Droid's cached remote list of models it runs in Script mode; empty when unavailable. */
+function scriptToolModels(home: string): string[] {
+  try {
+    const flags = JSON.parse(readFileSync(join(home, ".factory/cache/feature-flags.json"), "utf8")) as { configs?: { script_tool_models?: { models?: unknown } } };
+    const models = flags.configs?.script_tool_models?.models;
+    return Array.isArray(models) ? models.filter((model): model is string => typeof model === "string") : [];
+  } catch { return []; }
+}
 /** claude-opus-5-5 -> "Claude Code · Opus 5.5 (claude-opus-5-5)"; other IDs are shown as given. */
 function explicitLabel(model: BridgeModel): BridgeModel {
   const match = /^claude-(opus|sonnet|haiku|fable)-(\d+)-(\d+)$/.exec(model.id);
@@ -131,8 +139,10 @@ export async function desktop(argv: string[], deps: DesktopDependencies): Promis
   if (action === "status") {
     const install = readInstallation(deps);
     const loaded = deps.run("launchctl", ["print", `${domain}/${LABEL}`]).status === 0;
+    const scriptMode = scriptToolModels(deps.home).includes(DROID_BASE_MODEL);
     return { installed: true, plistPresent: existsSync(paths.plist), loaded, port: install.port, models: install.models ?? "follow Claude Code settings",
-      repositoryPresent: existsSync(join(install.repo, "dist/index.js")), healthy: await deps.health(install.port), caveat };
+      repositoryPresent: existsSync(join(install.repo, "dist/index.js")), healthy: await deps.health(install.port), caveat,
+      ...(scriptMode ? { warning: `Droid now runs ${DROID_BASE_MODEL} in Script mode, so these models lose direct Read/Execute/Create/Edit tools. Update factory-cc to a base model outside script_tool_models.` } : {}) };
   }
   if (action === "uninstall") {
     if (!existsSync(paths.manifest)) {
