@@ -324,7 +324,11 @@ describe("HTTP execution lifecycle", () => {
     turn.events = [
       { at: "2026-10-15T00:00:00.000Z", type: "usage", data: { cacheRead: 900 } },
       { at: "2026-10-15T00:00:00.000Z", type: "compact_boundary", data: { before: 10000, after: 1000 } },
+      { at: "2026-10-15T00:00:00.000Z", type: "cancelled_turn_followup", data: { sdkSessionId: "official-sdk-session" } },
     ];
+    const unlogged = { at: "2026-10-15T00:00:00.000Z", type: "claude_code_tool", data: { name: "Read", id: "read-1" } };
+    const logged = turn.events;
+    turn.events = [...logged, unlogged];
     vi.mocked(runtime.handle).mockResolvedValue(turn);
     const { app, token, config } = await startTestBridge({ persistSessions: true });
     apps.push(app);
@@ -332,9 +336,9 @@ describe("HTTP execution lifecycle", () => {
     expect(response.status).toBe(200);
     expect(app.store.get(response.session!)?.sdkSessionId).toBe("official-sdk-session");
     expect(readFileSync(join(config.dataDir, "sessions", "sessions.jsonl"), "utf8")).toContain("official-sdk-session");
-    const logged = JSON.parse(readFileSync(join(config.logDir, "turns.jsonl"), "utf8").trim());
-    expect(logged.usage.cache_read_input_tokens).toBe(900);
-    expect(logged.events).toEqual(turn.events);
+    const entry = JSON.parse(readFileSync(join(config.logDir, "turns.jsonl"), "utf8").trim());
+    expect(entry.usage.cache_read_input_tokens).toBe(900);
+    expect(entry.events).toEqual(logged);
   });
 
   it("continues an unambiguous full transcript without an explicit session ID", async () => {

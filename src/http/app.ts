@@ -422,7 +422,8 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
         usage: turn.response.usage,
         sdkBillingUsage: turn.sdkBillingUsage,
         compactMetadata: turn.compactMetadata,
-        events: (turn.events ?? []).filter((event) => /usage|compact/i.test(event.type)),
+        // Cancellation events carry only IDs and tool names, and show how a cancelled Droid tool was handled.
+        events: (turn.events ?? []).filter((event) => /usage|compact|cancelled_turn/i.test(event.type)),
       })));
       completed = true;
       if (writer) writer.finish(turn.response);

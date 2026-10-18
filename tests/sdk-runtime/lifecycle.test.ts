@@ -7,7 +7,8 @@ import { SdkRuntime, type SdkHandle, type SdkUserInput } from "../../src/runtime
 import { forbiddenNamesIn } from "../../src/upstream/auth-env.js";
 import type { RuntimeApprovalRequest, RuntimePermissionDecision, RuntimeRequest } from "../../src/runtime/types.js";
 import type { SessionRecord } from "../../src/sessions/state.js";
-import type { ContentBlock } from "../../src/types.js";
+import type { ContentBlock, Message } from "../../src/types.js";
+import { historyMessageHashes } from "../../src/sessions/correlate.js";
 
 const runtimes: SdkRuntime[] = [];
 const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
@@ -1348,54 +1349,54 @@ it("desktop profile blocks native side effects and denies approval immediately w
 });
 
 describe("Droid tool cancellation (desktop profile)", () => {
-  const create_ = { name: "Create", input_schema: { type: "object" as const, properties: {} } };
+  const createTool = { name: "Create", input_schema: { type: "object" as const, properties: {} } };
   const execute = { name: "Execute", input_schema: { type: "object" as const, properties: {} } };
-  const cancelled: ContentBlock = { type: "tool_result", tool_use_id: "create-1", content: "Tool execution cancelled by user", is_error: true };
-  const followupText = "Run the shell command: touch cmd-test.txt";
+  // Droid's session file stores the bare text; its API request adds "Error: ".
+  const cancellation = (id: string, text = "Tool execution cancelled by user"): ContentBlock =>
+    ({ type: "tool_result", tool_use_id: id, content: `Error: ${text}`, is_error: true });
   type Guard = (hook: { tool_name: string; tool_use_id?: string }) => Promise<unknown>;
 
-  function setup() {
+  function setup(proposal: { id: string; input: Record<string, string> }, followupCommand: string) {
     const project = realpathSync(mkdtempSync(join(tmpdir(), "relay-cancel-project-")));
     const reminder: ContentBlock = { type: "text", text: `<system-reminder>\n\nUser system info (fixture)\n\n% pwd\n${project}\n</system-reminder>` };
     const seen: { createResult?: unknown; windDownGuard?: unknown; followupGuard?: unknown; executeResult?: unknown } = {};
     const sdk = new FakeSdk(async function* (_input, index, fake) {
       const guard = (fake.calls[0]!.options.hooks as { PreToolUse: Array<{ hooks: Guard[] }> }).PreToolUse[0]!.hooks[0]!;
       if (index === 0) {
-        yield { type: "assistant", message: { content: [{ type: "tool_use", id: "create-1", name: "mcp__droid__Create", input: { file_path: "reject-me.txt" } }] } };
-        seen.createResult = await fake.handlers.get("Create")!({ file_path: "reject-me.txt" }, { toolUseID: "create-1" });
+        yield { type: "assistant", message: { content: [{ type: "tool_use", id: proposal.id, name: "mcp__droid__Create", input: proposal.input }] } };
+        seen.createResult = await fake.handlers.get("Create")!(proposal.input, { toolUseID: proposal.id });
         // A model that tries another way after the cancellation is stopped by the bridge.
         seen.windDownGuard = await guard({ tool_name: "mcp__droid__Execute", tool_use_id: "retry" });
-        yield { type: "assistant", message: { content: [{ type: "text", text: "Cancelled; reject-me.txt was not created." }] } };
-        yield success("Cancelled; reject-me.txt was not created.");
+        yield { type: "assistant", message: { content: [{ type: "text", text: "Cancelled; the file was not created." }] } };
+        yield success("Cancelled; the file was not created.");
         return;
       }
       seen.followupGuard = await guard({ tool_name: "mcp__droid__Execute", tool_use_id: "execute-1" });
-      yield { type: "assistant", message: { content: [{ type: "tool_use", id: "execute-1", name: "mcp__droid__Execute", input: { command: "touch cmd-test.txt" } }] } };
-      seen.executeResult = await fake.handlers.get("Execute")!({ command: "touch cmd-test.txt" }, { toolUseID: "execute-1" });
+      yield { type: "assistant", message: { content: [{ type: "tool_use", id: "execute-1", name: "mcp__droid__Execute", input: { command: followupCommand } }] } };
+      seen.executeResult = await fake.handlers.get("Execute")!({ command: followupCommand }, { toolUseID: "execute-1" });
       yield success("done");
     });
     const dataDir = join(mkdtempSync(join(tmpdir(), "relay-cancel-sdk-")), "bridge-data");
     const { runtime } = create(sdk, { desktopProfile: true, permissionMode: "ask", dataDir, toolWaitMs: 5_000, requestTimeoutMs: 5_000 });
     const s = session();
-    const tools = [create_, execute];
-    const opening = user([reminder, { type: "text", text: "Create a file named reject-me.txt containing no" }]);
-    const proposal = { role: "assistant" as const, content: [{ type: "tool_use" as const, id: "create-1", name: "Create", input: { file_path: "reject-me.txt" } }] };
-    return { sdk, runtime, s, tools, opening, proposal, seen };
+    const tools = [createTool, execute];
+    const opening = user([reminder, { type: "text", text: "Create the file" }]);
+    return { sdk, runtime, s, tools, opening, seen };
   }
 
-  it.each([
-    ["separate user messages", (text: string) => [user([cancelled]), user(text)]],
-    ["one user message", (text: string) => [user([cancelled, { type: "text", text }])]],
-  ])("starts the user's next message as its own turn after a cancellation (%s)", async (_layout, tail) => {
-    const { sdk, runtime, s, tools, opening, proposal, seen } = setup();
+  /** Drive one cancellation round trip and check every boundary of the follow-up turn. */
+  async function expectFollowupTurn(tail: (proposal: Message) => Message[], proposal: { id: string; input: Record<string, string> }, followupText: string, followupCommand: string) {
+    const { sdk, runtime, s, tools, opening, seen } = setup(proposal, followupCommand);
     const first = await runtime.handle(request(s, "unused", { tools, messages: [opening] }));
-    expect(first.response.content).toContainEqual(expect.objectContaining({ type: "tool_use", id: "create-1", name: "Create" }));
+    expect(first.response.content).toContainEqual(expect.objectContaining({ type: "tool_use", id: proposal.id, name: "Create" }));
+    const assistant: Message = { role: "assistant", content: [{ type: "tool_use", id: proposal.id, name: "Create", input: proposal.input }] };
+    const history = [opening, ...tail(assistant)];
 
-    const second = await runtime.handle(request(s, "unused", { tools, messages: [opening, proposal, ...tail(followupText)] }));
+    const second = await runtime.handle(request(s, "unused", { tools, messages: history }));
     // The cancellation reaches Claude Code as Droid's own error result, with no user text inside it.
     const createResult = JSON.stringify(seen.createResult);
-    expect(seen.createResult).toMatchObject({ isError: true, content: [{ type: "text", text: "Tool execution cancelled by user" }, { type: "text", text: expect.stringContaining("did not run") }] });
-    expect(createResult).not.toContain("touch cmd-test.txt");
+    expect(seen.createResult).toMatchObject({ isError: true, content: [{ type: "text", text: expect.stringMatching(/^Error: /) }, { type: "text", text: expect.stringContaining("did not run") }] });
+    expect(createResult).not.toContain(followupCommand);
     expect(createResult).not.toContain("Host continuation context");
     expect(seen.windDownGuard).toMatchObject({ hookSpecificOutput: { permissionDecision: "deny", permissionDecisionReason: expect.stringContaining("BRIDGE_USER_CANCELLED") } });
     // The follow-up is a genuine user turn, and the same HTTP reply carries Droid's next approval.
@@ -1406,16 +1407,46 @@ describe("Droid tool cancellation (desktop profile)", () => {
     expect(seen.followupGuard).toEqual({});
     expect(second.response.stop_reason).toBe("tool_use");
     expect(second.response.content).toEqual([
-      { type: "text", text: "Cancelled; reject-me.txt was not created." },
-      expect.objectContaining({ type: "tool_use", id: "execute-1", name: "Execute", input: { command: "touch cmd-test.txt" } }),
+      { type: "text", text: "Cancelled; the file was not created." },
+      expect.objectContaining({ type: "tool_use", id: "execute-1", name: "Execute", input: { command: followupCommand } }),
     ]);
 
-    const executed = { role: "assistant" as const, content: second.response.content };
-    const done = await runtime.handle(request(s, "unused", { tools, messages: [opening, proposal, ...tail(followupText), executed,
-      user([{ type: "tool_result", tool_use_id: "execute-1", content: "Command completed successfully" }])] }));
+    const executed: Message = { role: "assistant", content: second.response.content };
+    const done = await runtime.handle(request(s, "unused", { tools, messages: [...history, executed,
+      user([{ type: "tool_result", tool_use_id: "execute-1", content: "Command completed successfully\n\n[Process exited with code 0]" }])] }));
     expect(done.response.stop_reason).toBe("end_turn");
-    expect(seen.executeResult).toMatchObject({ isError: false, content: [{ type: "text", text: "Command completed successfully" }] });
+    expect(seen.executeResult).toMatchObject({ isError: false, content: [{ type: "text", text: expect.stringContaining("Command completed successfully") }] });
     expect(sdk.calls).toHaveLength(1);
+  }
+
+  it("handles the exact messages Droid desktop sent after the GUI retest cancellation", async () => {
+    // Session a82e99fa (2026-10-19 00:07:36 +08:00): messages 12-14 of that request.
+    const proposal = { id: "toolu_01KsArp3sQXvV59NLsGFonHN", input: { file_path: "/Volumes/Workspace/Scratch/factory-cc-e2e-20261018/gui-a/reject-retest-20261019.txt", content: "no" } };
+    const followupText = "Run the shell command: touch cmd-retest-20261019.txt";
+    const tail = (assistant: Message): Message[] => [
+      assistant,
+      user([{ type: "tool_result", tool_use_id: proposal.id, content: "Error: Tool execution cancelled by user", is_error: true }]),
+      user([{ type: "text", text: followupText }]),
+    ];
+    // The running bridge recorded these fingerprints for that request; equal hashes prove this is its real input.
+    expect(historyMessageHashes(tail({ role: "assistant", content: [{ type: "tool_use", id: proposal.id, name: "Create", input: proposal.input }] }))).toEqual([
+      "e87a2cd5e4a4a55114ffcd021dffb22282ad0cecb3963d9e0848cab08e279d3c",
+      "9e4297bfd598d9c4c34f631ab2b2781c0fbdc6a81b341f9498967587f1227cc5",
+      "f28ac29df5909726717ca00774c975b491ace6048e7d83b288c685ac37509813",
+    ]);
+    await expectFollowupTurn(tail, proposal, followupText, "touch cmd-retest-20261019.txt");
+  });
+
+  it.each([
+    ["one user message", "Tool execution cancelled by user", true],
+    ["separate user messages", "工具执行已被用户取消", false],
+    ["separate user messages", "Tool execution was interrupted", false],
+  ])("starts the user's next message as its own turn after a cancellation (%s, %s)", async (_layout, text, merged) => {
+    const proposal = { id: "create-1", input: { file_path: "reject-me.txt" } };
+    const followupText = "Run the shell command: touch cmd-test.txt";
+    await expectFollowupTurn((assistant) => merged
+      ? [assistant, user([cancellation(proposal.id, text), { type: "text", text: followupText }])]
+      : [assistant, user([cancellation(proposal.id, text)]), user(followupText)], proposal, followupText, "touch cmd-test.txt");
   });
 
   it("keeps a failing tool's error and its host context as tool-result continuation", async () => {
@@ -1429,7 +1460,7 @@ describe("Droid tool cancellation (desktop profile)", () => {
     const s = session();
     await runtime.handle(request(s, "run", { tools: [tool] }));
     await runtime.handle(request(s, [
-      { type: "tool_result", tool_use_id: "run-1", content: "exit 1: Tool execution cancelled by user", is_error: true },
+      { type: "tool_result", tool_use_id: "run-1", content: "Error: exit 1: Tool execution cancelled by user", is_error: true },
       { type: "text", text: "<system-reminder>todo list unchanged</system-reminder>" },
     ], { tools: [tool] }));
     expect(JSON.stringify(delivered)).toContain("Host continuation context");
