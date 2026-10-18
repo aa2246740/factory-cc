@@ -183,6 +183,19 @@ const USER_CANCELLATIONS = new Set([
 ]);
 const CANCELLED_TOOL_NOTE = "The user cancelled this tool call in Droid, so it did not run. Do not retry it or try another way. Acknowledge the cancellation in one short sentence, then end your turn.";
 const CANCELLED_TURN_DENIAL = "BRIDGE_USER_CANCELLED: The user cancelled the previous tool call in Droid. Do not retry it or use any other tool now; acknowledge the cancellation and end your turn.";
+/**
+ * accountInfo() resolves only when Claude Code answers its initialize request,
+ * so this bounds process startup. A Mission starting several workers and Task
+ * subagents at once has taken over 10s. Until it answers, no prompt is sent.
+ */
+const SDK_START_TIMEOUT_MS = 60_000;
+
+/** Claude Code had not started in time; its account was never examined. */
+class SdkStartTimeout extends BridgeError {
+  constructor(readonly timeoutMs: number) {
+    super(503, "sdk_start_timeout", `Claude Code did not finish starting within ${timeoutMs}ms, so its account could not be verified and no prompt was sent. Retry the request.`);
+  }
+}
 
 /** Official Claude Code owns the agent loop, tools, context, and compaction. */
 export class SdkRuntime implements BridgeRuntime {
@@ -770,14 +783,14 @@ export class SdkRuntime implements BridgeRuntime {
       // Iterate the Query itself. Its close() owns process shutdown; never call raw generator.return().
       live.loop = this.consume(live, live.query, live.queryEpoch, expectedResumeId);
       // Gate before this method returns, so handle() has not pushed a user message yet.
-      await this.verifyDeclaredAuth(live);
+      await this.verifyDeclaredAuth(live, input.session.bridgeSessionId);
     } catch (error) {
       this.stop(live, this.sdkError(error));
       throw this.sdkError(error);
     }
   }
 
-  private async verifyDeclaredAuth(live: LiveSdk): Promise<void> {
+  private async verifyDeclaredAuth(live: LiveSdk, sessionId: string): Promise<void> {
     const mode = this.config.authMode;
     if (mode === "inherit") {
       void this.observeInheritAuth(live);
@@ -789,11 +802,18 @@ export class SdkRuntime implements BridgeRuntime {
       this.rejectAuth(live, mode, "unknown", `Declared BRIDGE_AUTH=${mode} but the SDK query does not expose accountInfo(). Refusing to send a prompt.`);
       return;
     }
-    const timeoutMs = Math.min(10_000, Math.max(1, this.config.requestTimeoutMs));
+    const timeoutMs = Math.min(SDK_START_TIMEOUT_MS, Math.max(1, this.config.requestTimeoutMs));
+    const started = Date.now();
     let info: Record<string, unknown>;
     try {
       info = await withTimeout(query.accountInfo(), timeoutMs);
     } catch (error) {
+      if (error instanceof SdkStartTimeout) {
+        // Not an authentication result: keep the last real verification.
+        this.logger.warn("sdk_start_timeout", { mode, timeoutMs, sessionId });
+        this.stop(live, error);
+        throw error;
+      }
       const detail = error instanceof Error ? error.message : "accountInfo failed";
       const safe = mode === "claude-config" || /sk-ant-|Bearer /i.test(detail) ? "accountInfo failed or timed out" : detail;
       this.rejectAuth(live, mode, "unknown", `Declared BRIDGE_AUTH=${mode} but account verification did not succeed: ${safe}`);
@@ -803,7 +823,7 @@ export class SdkRuntime implements BridgeRuntime {
     live.accountSnapshot = observed;
     const email = maskEmail(stringField(info, "email"));
     const classification = classifyAuth(observed, live.initApiKeySource);
-    this.rememberAuth(mode, classification, observed, email);
+    this.rememberAuth(mode, classification, observed, email, Date.now() - started);
     if (mode === "claude-config") {
       if ((!this.config.claudeConfig || claudeConfigNeedsLogin(this.config.claudeConfig)) && classification.kind === "unknown") this.rejectAuth(live, mode, "unknown", CLAUDE_LOGIN_REQUIRED);
       return;
@@ -818,7 +838,7 @@ export class SdkRuntime implements BridgeRuntime {
   private observeInheritAuth(live: LiveSdk): void {
     const query = live.query;
     if (!query?.accountInfo) return;
-    const timeoutMs = Math.min(10_000, Math.max(1, this.config.requestTimeoutMs));
+    const timeoutMs = Math.min(SDK_START_TIMEOUT_MS, Math.max(1, this.config.requestTimeoutMs));
     void withTimeout(query.accountInfo(), timeoutMs).then((info) => {
       if (live.terminal) return;
       const observed = observationFrom(info);
@@ -828,7 +848,7 @@ export class SdkRuntime implements BridgeRuntime {
     }).catch(() => undefined);
   }
 
-  private rememberAuth(mode: BridgeConfig["authMode"], classification: AuthClassification, observed: AuthObservation, email?: string): void {
+  private rememberAuth(mode: BridgeConfig["authMode"], classification: AuthClassification, observed: AuthObservation, email?: string, startupMs?: number): void {
     const record: AuthVerification = {
       mode, kind: classification.kind, reason: classification.reason,
       subscriptionType: observed.subscriptionType, apiKeySource: observed.apiKeySource, tokenSource: observed.tokenSource,
@@ -837,7 +857,7 @@ export class SdkRuntime implements BridgeRuntime {
     this.authVerification = record;
     const gated = mode === "subscription" || mode === "anthropic-api";
     const ok = mode === "claude-config" ? Boolean(this.config.claudeConfig && !claudeConfigNeedsLogin(this.config.claudeConfig)) || classification.kind !== "unknown" : gated ? classification.kind === mode : true;
-    this.logger.info("auth_verified", { ...record, ok });
+    this.logger.info("auth_verified", { ...record, ok, ...startupMs !== undefined && { startupMs } });
   }
 
   private rejectAuth(live: LiveSdk, mode: BridgeConfig["authMode"], kind: AuthClassification["kind"], message: string): never {
@@ -1358,7 +1378,7 @@ function mismatchMessage(mode: string, classification: AuthClassification, obser
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_resolve, reject) => {
-    timer = setTimeout(() => reject(new BridgeError(401, "auth_mode_mismatch", `accountInfo timed out after ${timeoutMs}ms`)), timeoutMs);
+    timer = setTimeout(() => reject(new SdkStartTimeout(timeoutMs)), timeoutMs);
   });
   return Promise.race([promise, timeout]).finally(() => { if (timer) clearTimeout(timer); });
 }

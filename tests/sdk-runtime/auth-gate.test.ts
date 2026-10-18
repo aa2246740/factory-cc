@@ -164,7 +164,7 @@ describe("auth verification gate", () => {
       await expect(create(missing, "subscription").handle(request())).rejects.toMatchObject({ code: "auth_mode_mismatch" });
       expect(missing.inputs).toHaveLength(0);
       const hung = new FakeSdk(() => new Promise(() => undefined));
-      await expect(create(hung, "subscription", { requestTimeoutMs: 30 }).handle(request())).rejects.toMatchObject({ code: "auth_mode_mismatch" });
+      await expect(create(hung, "subscription", { requestTimeoutMs: 30 }).handle(request())).rejects.toMatchObject({ status: 503, code: "sdk_start_timeout" });
       expect(hung.inputs).toHaveLength(0);
     } finally { restore(); }
   });
@@ -260,13 +260,59 @@ describe("auth verification gate", () => {
       expect(JSON.stringify(runtime.describe())).not.toMatch(/helper --secret-value|offline-replacement-key/);
     });
 
-    it.each(["throw", "timeout", "missing"])("refuses accountInfo %s even with a helper before sending a prompt", async (kind) => {
+    it.each([
+      { kind: "throw", status: 401, code: "auth_mode_mismatch" },
+      { kind: "timeout", status: 503, code: "sdk_start_timeout" },
+      { kind: "missing", status: 401, code: "auth_mode_mismatch" },
+    ])("refuses accountInfo $kind even with a helper before sending a prompt", async ({ kind, status, code }) => {
       const sdk = new FakeSdk(kind === "missing" ? undefined : kind === "throw" ? async () => { throw new Error("helper --secret-value"); } : () => new Promise(() => undefined));
       const runtime = create(sdk, "claude-config", { claudeConfig: configured({ apiKeyHelper: "helper --secret-value" }), requestTimeoutMs: 20 });
-      await expect(runtime.handle(request())).rejects.toMatchObject({ code: "auth_mode_mismatch" });
+      await expect(runtime.handle(request())).rejects.toMatchObject({ status, code });
       expect(sdk.inputs).toHaveLength(0);
       expect(JSON.stringify(runtime.describe())).not.toContain("helper --secret-value");
       expect(JSON.stringify(logger.info.mock.calls)).not.toContain("helper --secret-value");
+    });
+  });
+
+  describe("Claude Code startup wait", () => {
+    afterEach(() => { vi.useRealTimers(); });
+
+    it("waits past 10s for a slow start and still sends the prompt only after verification", async () => {
+      vi.useFakeTimers();
+      const restore = isolate("subscription");
+      try {
+        let answered = false;
+        const sdk = new FakeSdk(() => new Promise((resolve) => setTimeout(() => { answered = true; resolve({ subscriptionType: "max" }); }, 15_000)));
+        const pending = create(sdk, "subscription", { requestTimeoutMs: 120_000 }).handle(request());
+        await vi.advanceTimersByTimeAsync(14_000);
+        expect(sdk.inputs).toHaveLength(0);
+        await vi.advanceTimersByTimeAsync(1_000);
+        await expect(pending).resolves.toMatchObject({ response: { stop_reason: "end_turn" } });
+        expect(answered).toBe(true);
+        expect(sdk.inputs).toHaveLength(1);
+        expect(logger.info).toHaveBeenCalledWith("auth_verified", expect.objectContaining({ mode: "subscription", kind: "subscription", ok: true, startupMs: 15_000 }));
+      } finally { restore(); }
+    });
+
+    it("reports a start that never answers as a retryable timeout, not an auth result", async () => {
+      vi.useFakeTimers();
+      const restore = isolate("subscription");
+      try {
+        const verified = create(new FakeSdk(async () => ({ subscriptionType: "max" })), "subscription", { requestTimeoutMs: 120_000 });
+        await verified.handle(request());
+        const before = verified.describe().authVerification;
+        const hung = new FakeSdk(() => new Promise(() => undefined));
+        const runtime = create(hung, "subscription", { requestTimeoutMs: 120_000 });
+        const pending = runtime.handle(request());
+        const settled = expect(pending).rejects.toMatchObject({ status: 503, code: "sdk_start_timeout", message: expect.stringContaining("no prompt was sent") });
+        await vi.advanceTimersByTimeAsync(60_000);
+        await settled;
+        expect(hung.inputs).toHaveLength(0);
+        expect(runtime.describe().authVerification ?? null).toBeNull();
+        expect(verified.describe().authVerification).toEqual(before);
+        expect(logger.warn).toHaveBeenCalledWith("sdk_start_timeout", expect.objectContaining({ mode: "subscription", timeoutMs: 60_000, sessionId: "session-a" }));
+        expect(logger.info).not.toHaveBeenCalledWith("auth_verified", expect.objectContaining({ ok: false }));
+      } finally { restore(); }
     });
   });
 
