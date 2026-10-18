@@ -104,6 +104,31 @@ describe("auth verification gate", () => {
     } finally { restore(); }
   });
 
+  it.each(["max", "pro"])("accepts subscriptionType %s without an apiKeySource", async (subscriptionType) => {
+    const restore = isolate("subscription");
+    try {
+      const sdk = new FakeSdk(async () => ({ subscriptionType }));
+      const runtime = create(sdk, "subscription");
+      await expect(runtime.handle(request())).resolves.toMatchObject({ response: { stop_reason: "end_turn" } });
+      expect(sdk.inputs).toHaveLength(1);
+      expect(runtime.describe().authVerification).toMatchObject({ kind: "subscription" });
+    } finally { restore(); }
+  });
+
+  it.each([
+    { name: "API key source despite a Max subscription", accountInfo: async () => ({ apiKeySource: "ANTHROPIC_API_KEY", subscriptionType: "max" }) },
+    { name: "empty account info", accountInfo: async () => ({}) },
+    { name: "account info failure", accountInfo: async (): Promise<Record<string, unknown>> => { throw new Error("offline account lookup failure"); } },
+  ])("rejects $name without sending the prompt", async ({ accountInfo }) => {
+    const restore = isolate("subscription");
+    try {
+      const sdk = new FakeSdk(accountInfo);
+      await expect(create(sdk, "subscription").handle(request())).rejects.toMatchObject({ code: "auth_mode_mismatch" });
+      expect(sdk.calls).toHaveLength(1);
+      expect(sdk.inputs).toHaveLength(0);
+    } finally { restore(); }
+  });
+
   it("rejects anthropic-api when accountInfo reports a subscription", async () => {
     const restore = isolate("anthropic-api", { ANTHROPIC_API_KEY: "offline-anthropic-key" });
     try {

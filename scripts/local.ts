@@ -210,9 +210,9 @@ async function question(label: string, signal: AbortSignal, hidden = false): Pro
 function safeDroidEnv(source: NodeJS.ProcessEnv, key: string, keyEnv?: string): NodeJS.ProcessEnv {
   const result = { ...source };
   for (const [name, value] of Object.entries(result)) {
-    if (name === keyEnv || name.startsWith("RELAY_LOCAL_PROVIDER_KEY_") || value?.includes(key)
+    if (name === keyEnv || name.startsWith("RELAY_LOCAL_PROVIDER_KEY_") || (key && value?.includes(key))
       || name.startsWith("ANTHROPIC_") || name.startsWith("CLAUDE_CODE_") || name.startsWith("BRIDGE_UPSTREAM_")
-      || ["FACTORY_API_KEY", "BRIDGE_FACTORY_BINDING", "BRIDGE_FACTORY_LAUNCH_ID", "BRIDGE_LAUNCH_ID", "AGENT_PROXY_AUTH_TOKEN", "CCR_AGENT_PROXY_TOKEN_FILE_DESCRIPTOR"].includes(name)) delete result[name];
+      || ["CLAUDE_CONFIG_DIR", "FACTORY_API_KEY", "BRIDGE_FACTORY_BINDING", "BRIDGE_FACTORY_LAUNCH_ID", "BRIDGE_LAUNCH_ID", "AGENT_PROXY_AUTH_TOKEN", "CCR_AGENT_PROXY_TOKEN_FILE_DESCRIPTOR"].includes(name)) delete result[name];
   }
   return result;
 }

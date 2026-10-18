@@ -3,10 +3,17 @@ import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSyn
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createInterface } from "node:readline/promises";
+import { configureDroid } from "../../scripts/configure-droid.js";
 import type { BridgeConfig } from "../../src/config.js";
 import type { BridgeApp } from "../../src/http/app.js";
 
 const observed = vi.hoisted(() => ({ runDroid: vi.fn(), apps: [] as Array<{ app: BridgeApp; config: BridgeConfig }> }));
+vi.mock("node:readline/promises", () => ({ createInterface: vi.fn(() => { throw new Error("Unexpected interactive prompt"); }) }));
+vi.mock("../../scripts/configure-droid.js", async (original) => {
+  const actual = await original<typeof import("../../scripts/configure-droid.js")>();
+  return { ...actual, configureDroid: vi.fn(actual.configureDroid) };
+});
 vi.mock("../../scripts/run-droid.js", async (original) => ({ ...await original<typeof import("../../scripts/run-droid.js")>(), runDroid: observed.runDroid }));
 vi.mock("../../src/http/app.js", async (original) => {
   const actual = await original<typeof import("../../src/http/app.js")>();
@@ -48,7 +55,7 @@ function files(directory: string): string[] {
 }
 function argument(argv: string[], flag: string): string | undefined { const index = argv.indexOf(flag); return index < 0 ? undefined : argv[index + 1]; }
 
-beforeEach(() => { observed.runDroid.mockReset(); observed.runDroid.mockResolvedValue(0); observed.apps.length = 0; vi.spyOn(process.stdout, "write").mockImplementation(() => true); });
+beforeEach(() => { observed.runDroid.mockReset(); observed.runDroid.mockResolvedValue(0); observed.apps.length = 0; vi.mocked(configureDroid).mockClear(); vi.mocked(createInterface).mockClear(); vi.spyOn(process.stdout, "write").mockImplementation(() => true); });
 afterEach(async () => {
   for (const { app } of observed.apps) if (app.server.listening) await app.close();
   vi.restoreAllMocks();
@@ -114,6 +121,124 @@ describe("one-command isolated local launch", () => {
     expect(Object.values(process.env)).not.toContain(providerKey);
     expect(vi.mocked(process.stdout.write).mock.calls.map((call) => String(call[0])).join("")).not.toContain(providerKey);
     for (const path of [...files(f.project), ...files(f.state)]) expect(readFileSync(path, "utf8"), path).not.toContain(providerKey);
+  });
+
+  describe("official Claude auth launches", () => {
+    function officialFixture() {
+      const f = fixture();
+      for (const name of Object.keys(f.env)) {
+        if (name.startsWith("ANTHROPIC_") || name.startsWith("CLAUDE_CODE_") || name.startsWith("BRIDGE_UPSTREAM_")
+          || ["LOCAL_TEST_PROVIDER_KEY", "DUPLICATE_PROVIDER_ALIAS", "FACTORY_API_KEY"].includes(name)) delete f.env[name];
+      }
+      return f;
+    }
+    function expectNoStart(f: ReturnType<typeof fixture>) {
+      expect(observed.runDroid).not.toHaveBeenCalled();
+      expect(observed.apps).toHaveLength(0);
+      expect(configureDroid).not.toHaveBeenCalled();
+      expect(createInterface).not.toHaveBeenCalled();
+      expect(existsSync(f.state)).toBe(false);
+      expect(readdirSync(f.project)).toEqual([]);
+    }
+
+    it("launches subscription with the default catalog, preserves shell basics and cleans up lifecycle state", async () => {
+      const f = officialFixture();
+      f.env.CLAUDE_CODE_OAUTH_TOKEN = "offline-oauth-token-not-for-droid";
+      f.env.CLAUDE_CONFIG_DIR = join(f.home, ".claude");
+      observed.runDroid.mockImplementationOnce(async (argv: string[], options: { env: NodeJS.ProcessEnv }) => {
+        const { app, config } = observed.apps[0]!;
+        expect(config).toMatchObject({ mode: "sdk", authMode: "subscription", host: "127.0.0.1", permissionMode: "ask" });
+        expect(app.server.address()).toMatchObject({ address: "127.0.0.1" });
+        expect(config.models).toEqual([
+          { id: "sonnet", model: "sonnet", displayName: "Claude Sonnet" },
+          { id: "opus", model: "opus", displayName: "Claude Opus" },
+          { id: "haiku", model: "haiku", displayName: "Claude Haiku" },
+        ]);
+        const settings = JSON.parse(readFileSync(argument(argv, "--settings")!, "utf8"));
+        expect(settings.customModels).toEqual(config.models!.map((model) => expect.objectContaining({
+          model: model.id, displayName: model.displayName, baseUrl: app.url, apiKey: config.clientToken,
+        })));
+        expect(settings.sessionDefaultSettings.model).toBe("custom:Claude-Sonnet-0");
+        const manifest = readFileSync(join(f.state, "manifest.env"), "utf8");
+        expect(manifest).toContain("DROID_MODEL_IDS=custom:Claude-Sonnet-0,custom:Claude-Opus-0,custom:Claude-Haiku-0\n");
+        expect(manifest).toContain("DROID_DEFAULT_MODEL_ID=custom:Claude-Sonnet-0\n");
+        expect(configureDroid).toHaveBeenCalledWith(expect.any(Array), expect.objectContaining({ BRIDGE_AUTH: "subscription" }), config.models);
+        expect(options.env.HOME).toBe(f.home);
+        expect(options.env.PATH).toBe(f.env.PATH);
+        for (const name of ["CLAUDE_CONFIG_DIR", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN", "FACTORY_API_KEY", "BRIDGE_FACTORY_BINDING"]) expect(options.env[name], name).toBeUndefined();
+        expect(options.env.BRIDGE_CLIENT_TOKEN).toBe(config.clientToken);
+        expect(options.env.BRIDGE_ADMIN_TOKEN).toBe(config.adminToken);
+        expect(Object.values(options.env)).not.toContain(config.hookToken);
+        expect(Object.values(options.env)).not.toContain(f.env.CLAUDE_CODE_OAUTH_TOKEN);
+        expect(JSON.stringify(argv)).not.toContain(f.env.CLAUDE_CODE_OAUTH_TOKEN);
+        expect(existsSync(join(f.state, "provider.json"))).toBe(false);
+        for (const name of ["factory-hooks.json", "admin-token", "launcher.lock"]) expect(existsSync(join(f.state, name)), name).toBe(true);
+        expect(JSON.parse(readFileSync(join(f.project, ".factory/hooks.json"), "utf8"))).toHaveProperty("SessionStart");
+        return 0;
+      });
+      expect(await runLocal([f.project, "--auth", "subscription"], f.env)).toBe(0);
+      expect(createInterface).not.toHaveBeenCalled();
+      expect(observed.runDroid).toHaveBeenCalledTimes(1);
+      expect(observed.apps[0]!.app.server.listening).toBe(false);
+      expect(existsSync(join(f.state, "provider.json"))).toBe(false);
+      expect(JSON.parse(readFileSync(join(f.project, ".factory/hooks.json"), "utf8"))).toEqual({});
+      for (const name of ["factory-hooks.json", "admin-token", "launcher.lock"]) expect(existsSync(join(f.state, name)), name).toBe(false);
+      for (const path of [...files(f.project), ...files(f.state)]) expect(readFileSync(path, "utf8"), path).not.toContain(f.env.CLAUDE_CODE_OAUTH_TOKEN);
+    });
+
+    it("selects opus from an explicit subscription catalog", async () => {
+      const f = officialFixture();
+      observed.runDroid.mockImplementationOnce(async (argv: string[], options: { env: NodeJS.ProcessEnv }) => {
+        expect(observed.apps[0]!.config.models?.map((model) => model.id)).toEqual(["opus", "sonnet"]);
+        const settings = JSON.parse(readFileSync(argument(argv, "--settings")!, "utf8"));
+        expect(settings.customModels.map((model: { displayName: string }) => model.displayName)).toEqual(["Claude Opus", "Claude Sonnet"]);
+        expect(settings.sessionDefaultSettings.model).toBe("custom:Claude-Opus-0");
+        expect(options.env.BRIDGE_MODEL_ID).toBe("opus");
+        expect(readFileSync(join(f.state, "manifest.env"), "utf8")).toContain("DROID_DEFAULT_MODEL_ID=custom:Claude-Opus-0\n");
+        return 0;
+      });
+      expect(await runLocal([f.project, "--auth", "subscription", "--models", "opus,sonnet", "--model", "opus"], f.env)).toBe(0);
+    });
+
+    it.each(["ANTHROPIC_API_KEY", "ANTHROPIC_BASE_URL", "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX"])("refuses subscription shell variable %s before creating state and redacts its value", async (name) => {
+      const f = officialFixture();
+      const value = "offline-secret-value-must-not-appear";
+      f.env[name] = value;
+      const launch = runLocal([f.project, "--auth", "subscription"], f.env);
+      await expect(launch).rejects.toThrow(name);
+      await expect(launch).rejects.not.toThrow(value);
+      expectNoStart(f);
+    });
+
+    it.each([["--base-url", "https://provider.invalid/anthropic"], ["--key-env", "LOCAL_TEST_PROVIDER_KEY"]])("refuses subscription option %s before creating state", async (flag, value) => {
+      const f = officialFixture();
+      await expect(runLocal([f.project, "--auth", "subscription", flag, value], f.env)).rejects.toThrow(/only used with --auth byok/);
+      expectNoStart(f);
+    });
+
+    it("launches anthropic-api with an explicit key without passing it to Droid", async () => {
+      const f = officialFixture();
+      f.env.ANTHROPIC_API_KEY = "offline-api-key-never-sent";
+      observed.runDroid.mockImplementationOnce(async (_argv: string[], options: { env: NodeJS.ProcessEnv }) => {
+        expect(observed.apps[0]!.config).toMatchObject({ authMode: "anthropic-api", host: "127.0.0.1" });
+        expect(configureDroid).toHaveBeenCalledWith(expect.any(Array), expect.objectContaining({ BRIDGE_AUTH: "anthropic-api" }), expect.any(Array));
+        expect(options.env.HOME).toBe(f.home);
+        expect(options.env.ANTHROPIC_API_KEY).toBeUndefined();
+        expect(options.env.CLAUDE_CONFIG_DIR).toBeUndefined();
+        expect(Object.values(options.env)).not.toContain(f.env.ANTHROPIC_API_KEY);
+        return 0;
+      });
+      expect(await runLocal([f.project, "--auth", "anthropic-api"], f.env)).toBe(0);
+      expect(createInterface).not.toHaveBeenCalled();
+      expect(existsSync(join(f.state, "provider.json"))).toBe(false);
+      for (const name of ["factory-hooks.json", "admin-token", "launcher.lock"]) expect(existsSync(join(f.state, name)), name).toBe(false);
+    });
+
+    it("refuses anthropic-api without a key before creating state", async () => {
+      const f = officialFixture();
+      await expect(runLocal([f.project, "--auth", "anthropic-api"], f.env)).rejects.toThrow(/ANTHROPIC_API_KEY/);
+      expectNoStart(f);
+    });
   });
 
   it("cleans up after Droid startup failure and releases ownership so the next launch can run", async () => {
