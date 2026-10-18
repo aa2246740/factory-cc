@@ -177,3 +177,30 @@ it("uninstall after a desktop edit removes owned selections and keeps all other 
   delete expected.model;
   expect(after).toEqual(expected);
 });
+it("labels all desktop aliases as Claude Code without changing model IDs", async () => {
+  const { deps, paths } = fixture();
+  writeFileSync(join(deps.home, ".claude/settings.json"), JSON.stringify({ apiKeyHelper: "never-run", env: {
+    ANTHROPIC_DEFAULT_SONNET_MODEL: "claude-sonnet-5-5", ANTHROPIC_DEFAULT_OPUS_MODEL: "fixture-opus",
+    ANTHROPIC_DEFAULT_HAIKU_MODEL: "fixture-haiku", ANTHROPIC_DEFAULT_FABLE_MODEL: "fixture-fable" } }));
+  await desktop(["install"], deps);
+  const models = JSON.parse(readFileSync(paths.settings, "utf8")).customModels;
+  expect(models.map((v: { model: string; displayName: string }) => [v.model, v.displayName])).toEqual([
+    ["opus", "Claude Code · Opus (fixture-opus)"], ["sonnet", "Claude Code · Sonnet (claude-sonnet-5-5)"],
+    ["haiku", "Claude Code · Haiku (fixture-haiku)"], ["fable", "Claude Code · Fable (fixture-fable)"],
+  ]);
+});
+it("labels unmapped desktop defaults as Claude Code", async () => {
+  const { deps, paths } = fixture();
+  writeFileSync(join(deps.home, ".claude/settings.json"), JSON.stringify({ apiKeyHelper: "never-run" }));
+  await desktop(["install"], deps);
+  expect(JSON.parse(readFileSync(paths.settings, "utf8")).customModels.map((v: { displayName: string }) => v.displayName))
+    .toEqual(["Claude Code · Sonnet", "Claude Code · Opus", "Claude Code · Haiku"]);
+});
+it.each(["restart", "status"])("%s explains how to install when the state or manifest is absent", async (action) => {
+  const { deps, paths, run } = fixture();
+  const message = "Bridge desktop is not installed; run npm run desktop -- install.";
+  await expect(desktop([action], deps)).rejects.toThrow(message);
+  mkdirSync(paths.state, { recursive: true });
+  await expect(desktop([action], deps)).rejects.toThrow(message);
+  expect(run).not.toHaveBeenCalled(); expect(deps.health).not.toHaveBeenCalled();
+});

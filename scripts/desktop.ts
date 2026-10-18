@@ -56,8 +56,13 @@ export function desktopPlist(deps: DesktopDependencies, install: Installation): 
 }
 function readInstallation(deps: DesktopDependencies): Installation {
   const paths = desktopPaths(deps.home);
-  if (lstatSync(paths.state).isSymbolicLink() || lstatSync(paths.manifest).isSymbolicLink()) throw new Error("Refusing a linked desktop installation.");
-  return installationSchema.parse(JSON.parse(readFileSync(paths.manifest, "utf8")));
+  try {
+    if (lstatSync(paths.state).isSymbolicLink() || lstatSync(paths.manifest).isSymbolicLink()) throw new Error("Refusing a linked desktop installation.");
+    return installationSchema.parse(JSON.parse(readFileSync(paths.manifest, "utf8")));
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") throw new Error("Bridge desktop is not installed; run npm run desktop -- install.");
+    throw error;
+  }
 }
 function checkedRun(deps: DesktopDependencies, command: string, args: string[]) {
   const result = deps.run(command, args);
@@ -75,8 +80,9 @@ function syncModels(deps: DesktopDependencies, install: Installation) {
   const config = readClaudeConfig({ HOME: deps.home, PATH: install.path }, `127.0.0.1:${install.port}`);
   assertClaudeCredential(config);
   const catalog = claudeConfigModels(config);
+  const models = catalog.models.map((model) => ({ ...model, displayName: `Claude Code · ${model.displayName.replace(/^Claude /, "")}` }));
   return configureDroid(["--settings", paths.settings, "--base-url", `http://127.0.0.1:${install.port}`, "--auth", "claude-config",
-    "--manifest", paths.models, "--preserve-selections"], { HOME: deps.home }, catalog.models,
+    "--manifest", paths.models, "--preserve-selections"], { HOME: deps.home }, models,
   { apiKeyHelper: `/bin/cat '${paths.token.replaceAll("'", "'\\''")}'`, apiKeyHelperTtlMs: 300000 });
 }
 export async function desktop(argv: string[], deps: DesktopDependencies): Promise<Record<string, unknown>> {
@@ -87,7 +93,6 @@ export async function desktop(argv: string[], deps: DesktopDependencies): Promis
   const paths = desktopPaths(deps.home), domain = `gui/${deps.uid}`;
   const caveat = "The repository and Node executable must remain available. If /Volumes/Workspace is unmounted, this service cannot start.";
   if (action === "status") {
-    if (!existsSync(paths.manifest)) return { installed: false, plistPresent: existsSync(paths.plist), caveat };
     const install = readInstallation(deps);
     const loaded = deps.run("launchctl", ["print", `${domain}/${LABEL}`]).status === 0;
     return { installed: true, plistPresent: existsSync(paths.plist), loaded, port: install.port,
