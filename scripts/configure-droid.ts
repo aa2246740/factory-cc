@@ -19,6 +19,7 @@ const help = `Usage: npm run configure-droid -- [options]
   --model <ID>        Default model, selected from --models
   --auth claude-config|byok|subscription|anthropic-api|cloud|inherit
                        subscription and anthropic-api default to sonnet,opus,haiku; the others need explicit model IDs
+  --preserve-selections  Keep existing desktop model choices; only retarget owned/renumbered IDs
   --manifest <path>   Private script manifest
   --revert            Restore original settings (or, if you edited them since, remove only the
                        bridge's models and selections) and delete the backup and metadata
@@ -31,6 +32,7 @@ function parseArgs(argv: string[]): Record<string, string> {
     const flag = argv[index]!;
     if (flag === "--help" || flag === "-h") { out.help = "1"; continue; }
     if (flag === "--revert") { out.revert = "1"; continue; }
+    if (flag === "--preserve-selections") { out["preserve-selections"] = "1"; continue; }
     if (!["--settings", "--home", "--base-url", "--manifest", "--models", "--model", "--auth"].includes(flag)) throw new Error("Unknown configuration option; use --help.");
     if (out[flag.slice(2)] !== undefined) throw new Error(`Duplicate option ${flag}.`);
     const value = argv[++index];
@@ -97,6 +99,23 @@ function selectionIds(models: CustomModel[]): string[] {
   });
 }
 
+/** Retarget existing selection keys only; preserve containers and unrelated settings verbatim. */
+function retargetSelections(current: Record<string, unknown>, replacements: Map<string, string | undefined>): void {
+  const retarget = (container: Record<string, unknown>, keys: string[]): void => {
+    for (const key of keys) {
+      const value = container[key];
+      if (typeof value !== "string" || !replacements.has(value)) continue;
+      const replacement = replacements.get(value);
+      if (replacement === undefined) delete container[key];
+      else container[key] = replacement;
+    }
+  };
+  const plain = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
+  retarget(current, ["model", "specModeModel", "missionOrchestratorModel"]);
+  if (plain(current.sessionDefaultSettings)) retarget(current.sessionDefaultSettings, ["model", "specModeModel"]);
+  if (plain(current.missionModelSettings)) retarget(current.missionModelSettings, ["workerModel", "validationWorkerModel"]);
+}
+
 /** Settings the user edited after the last configure: drop only what the bridge added or selected. */
 function removeBridgeEntries(settingsPath: string, metadata: ManagedMetadata): boolean {
   let current: Record<string, unknown> & { customModels?: unknown };
@@ -115,18 +134,7 @@ function removeBridgeEntries(settingsPath: string, metadata: ManagedMetadata): b
     if (owned.has(item)) { removed.add(oldIds[index]!); if (typeof item.id === "string") removed.add(item.id); }
     else renumbered.set(oldIds[index]!, newIds[kept.indexOf(item)]!);
   });
-  const retarget = (container: Record<string, unknown>, keys: string[]): void => {
-    for (const key of keys) {
-      const value = container[key];
-      if (typeof value !== "string") continue;
-      if (removed.has(value) && !renumbered.has(value)) delete container[key];
-      else if (renumbered.has(value)) container[key] = renumbered.get(value)!;
-    }
-  };
-  const plain = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
-  retarget(current, ["model", "specModeModel", "missionOrchestratorModel"]);
-  if (plain(current.sessionDefaultSettings)) retarget(current.sessionDefaultSettings, ["model", "specModeModel"]);
-  if (plain(current.missionModelSettings)) retarget(current.missionModelSettings, ["workerModel", "validationWorkerModel"]);
+  retargetSelections(current, new Map([...Array.from(removed, (id): [string, undefined] => [id, undefined]), ...renumbered]));
   writePrivateFile(settingsPath, `${JSON.stringify(current, null, 2)}\n`);
   return owned.size > 0;
 }
@@ -209,23 +217,37 @@ export function configureDroid(argv: string[], env: NodeJS.ProcessEnv = process.
     return keptIndex >= 0 ? newIds[keptIndex]! : defaultSelection;
   };
   current.customModels = combined;
-  const priorDefaults = current.sessionDefaultSettings;
-  if (priorDefaults !== undefined && (!priorDefaults || typeof priorDefaults !== "object" || Array.isArray(priorDefaults))) throw new Error("Invalid session default settings; settings were not changed.");
-  const defaults = (priorDefaults ?? {}) as Record<string, unknown>;
-  const sessionDefaults: Record<string, unknown> = { ...defaults,
-    model: args.model ? defaultSelection : migrate(Object.hasOwn(defaults, "model") ? defaults.model : current.model) };
-  if (defaults.specModeModel !== undefined || current.specModeModel !== undefined) {
-    const specModel = Object.hasOwn(defaults, "specModeModel") ? defaults.specModeModel : current.specModeModel;
-    sessionDefaults.specModeModel = typeof specModel === "string" ? migrate(specModel) : specModel;
-    delete current.specModeModel;
+  if (args["preserve-selections"] === "1") {
+    const replacements = new Map<string, string | undefined>();
+    existing.forEach((item, index) => {
+      if (owned.has(item)) {
+        const replacement = canonicalForModel.get(item.model);
+        replacements.set(oldIds[index]!, replacement);
+        if (typeof item.id === "string") replacements.set(item.id, replacement);
+      }
+    });
+    // Kept selection IDs take precedence, matching surgical uninstall semantics.
+    kept.forEach((item, index) => replacements.set(oldIds[existing.indexOf(item)]!, newIds[index]!));
+    retargetSelections(current, replacements);
+  } else {
+    const priorDefaults = current.sessionDefaultSettings;
+    if (priorDefaults !== undefined && (!priorDefaults || typeof priorDefaults !== "object" || Array.isArray(priorDefaults))) throw new Error("Invalid session default settings; settings were not changed.");
+    const defaults = (priorDefaults ?? {}) as Record<string, unknown>;
+    const sessionDefaults: Record<string, unknown> = { ...defaults,
+      model: args.model ? defaultSelection : migrate(Object.hasOwn(defaults, "model") ? defaults.model : current.model) };
+    if (defaults.specModeModel !== undefined || current.specModeModel !== undefined) {
+      const specModel = Object.hasOwn(defaults, "specModeModel") ? defaults.specModeModel : current.specModeModel;
+      sessionDefaults.specModeModel = typeof specModel === "string" ? migrate(specModel) : specModel;
+      delete current.specModeModel;
+    }
+    current.sessionDefaultSettings = sessionDefaults;
+    delete current.model;
+    current.missionOrchestratorModel = migrate(current.missionOrchestratorModel);
+    const priorMission = current.missionModelSettings;
+    if (priorMission !== undefined && (!priorMission || typeof priorMission !== "object" || Array.isArray(priorMission))) throw new Error("Invalid Mission settings; settings were not changed.");
+    const mission = (priorMission ?? {}) as Record<string, unknown>;
+    current.missionModelSettings = { skipScrutiny: false, skipUserTesting: false, ...mission, workerModel: migrate(mission.workerModel), validationWorkerModel: migrate(mission.validationWorkerModel) };
   }
-  current.sessionDefaultSettings = sessionDefaults;
-  delete current.model;
-  current.missionOrchestratorModel = migrate(current.missionOrchestratorModel);
-  const priorMission = current.missionModelSettings;
-  if (priorMission !== undefined && (!priorMission || typeof priorMission !== "object" || Array.isArray(priorMission))) throw new Error("Invalid Mission settings; settings were not changed.");
-  const mission = (priorMission ?? {}) as Record<string, unknown>;
-  current.missionModelSettings = { skipScrutiny: false, skipUserTesting: false, ...mission, workerModel: migrate(mission.workerModel), validationWorkerModel: migrate(mission.validationWorkerModel) };
   mkdirSync(dirname(settingsPath), { recursive: true });
   if (!existsSync(backup) && !existsSync(absentMarker)) {
     if (original === undefined) writePrivateFile(absentMarker, "original settings did not exist\n"); else writePrivateFile(backup, original);

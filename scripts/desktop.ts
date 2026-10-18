@@ -76,7 +76,7 @@ function syncModels(deps: DesktopDependencies, install: Installation) {
   assertClaudeCredential(config);
   const catalog = claudeConfigModels(config);
   return configureDroid(["--settings", paths.settings, "--base-url", `http://127.0.0.1:${install.port}`, "--auth", "claude-config",
-    "--manifest", paths.models], { HOME: deps.home }, catalog.models,
+    "--manifest", paths.models, "--preserve-selections"], { HOME: deps.home }, catalog.models,
   { apiKeyHelper: `/bin/cat '${paths.token.replaceAll("'", "'\\''")}'`, apiKeyHelperTtlMs: 300000 });
 }
 export async function desktop(argv: string[], deps: DesktopDependencies): Promise<Record<string, unknown>> {

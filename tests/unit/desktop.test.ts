@@ -97,3 +97,83 @@ it("rejects literal-only Claude credentials offline without creating state", asy
   const { deps, paths } = fixture(); writeFileSync(join(deps.home, ".claude/settings.json"), JSON.stringify({ env: { ANTHROPIC_API_KEY: "fixture-not-real" } }));
   await expect(desktop(["install"], deps)).rejects.toThrow("Literal settings credentials"); expect(existsSync(paths.state)).toBe(false);
 });
+
+function selection(label: string, index = 0): string { return `custom:${label.trim().replace(/\s+/g, "-")}-${index}`; }
+function realisticSettings() {
+  return { model: "factory-default", specModeModel: "factory-spec", missionOrchestratorModel: "factory-orchestrator",
+    sessionDefaultSettings: { model: "factory-default", specModeModel: null, reasoningEffort: "high" },
+    missionModelSettings: { workerModel: "factory-worker", validationWorkerModel: "custom:Duplicate-1", skipScrutiny: true, workerReasoningEffort: "high" },
+    customModels: [{ model: "mine", displayName: "Duplicate" }, { model: "other", displayName: "Duplicate" }],
+    theme: "dark", hooks: { original: true }, unrelated: { nested: [1, false, null] } };
+}
+it("only appends models to realistic desktop settings and restores the exact original bytes", async () => {
+  const { deps, paths } = fixture(); mkdirSync(join(deps.home, ".factory"));
+  const original = realisticSettings(), bytes = JSON.stringify(original, null, 4) + "\n\n";
+  writeFileSync(paths.settings, bytes);
+  await desktop(["install"], deps);
+  const installed = JSON.parse(readFileSync(paths.settings, "utf8"));
+  expect(installed.customModels.slice(0, 2)).toEqual(original.customModels);
+  expect(installed.customModels).toHaveLength(3);
+  const { customModels: _models, ...other } = installed;
+  const { customModels: _originalModels, ...originalOther } = original;
+  expect(other).toEqual(originalOther);
+  await desktop(["restart"], deps);
+  expect(JSON.parse(readFileSync(paths.settings, "utf8"))).toEqual(installed);
+  await desktop(["uninstall"], deps);
+  expect(readFileSync(paths.settings, "utf8")).toBe(bytes);
+});
+it("does not create absent selection containers or defaults", async () => {
+  const { deps, paths } = fixture(); await desktop(["install"], deps);
+  expect(Object.keys(JSON.parse(readFileSync(paths.settings, "utf8")))).toEqual(["customModels"]);
+});
+it("restart remaps kept duplicate labels and surviving owned models, dropping removed owned selections", async () => {
+  const { deps, paths } = fixture();
+  writeFileSync(join(deps.home, ".claude/settings.json"), JSON.stringify({ apiKeyHelper: "never-run", env: {
+    ANTHROPIC_DEFAULT_SONNET_MODEL: "fixture-sonnet", ANTHROPIC_DEFAULT_OPUS_MODEL: "fixture-opus" } }));
+  await desktop(["install"], deps);
+  const current = JSON.parse(readFileSync(paths.settings, "utf8"));
+  const sonnet = current.customModels.find((v: { model: string }) => v.model === "sonnet");
+  const opus = current.customModels.find((v: { model: string }) => v.model === "opus");
+  // Droid adds derived IDs; a user adds a same-label model after the owned one.
+  sonnet.id = selection(sonnet.displayName); opus.id = selection(opus.displayName);
+  const mine = { model: "mine", displayName: sonnet.displayName };
+  current.customModels.push(mine);
+  current.model = selection(sonnet.displayName, 1);
+  current.specModeModel = opus.id;
+  current.sessionDefaultSettings = { model: sonnet.id, specModeModel: opus.id, reasoningEffort: "high" };
+  current.missionOrchestratorModel = "factory-orchestrator";
+  current.missionModelSettings = { workerModel: sonnet.id, validationWorkerModel: opus.id, skipUserTesting: true };
+  writeFileSync(paths.settings, JSON.stringify(current));
+  // Same Bridge ID survives with a changed mapped version/display name.
+  writeFileSync(join(deps.home, ".claude/settings.json"), JSON.stringify({ apiKeyHelper: "never-run", env: { ANTHROPIC_DEFAULT_SONNET_MODEL: "fixture-sonnet-new" } }));
+  await desktop(["restart"], deps);
+  const updated = JSON.parse(readFileSync(paths.settings, "utf8"));
+  expect(updated.customModels[0]).toEqual(mine);
+  expect(updated.customModels.map((v: { model: string }) => v.model)).toEqual(["mine", "sonnet"]);
+  expect(updated.model).toBe(selection(mine.displayName));
+  expect(updated).not.toHaveProperty("specModeModel");
+  const newSonnet = selection(updated.customModels[1].displayName);
+  expect(updated.sessionDefaultSettings).toEqual({ model: newSonnet, reasoningEffort: "high" });
+  expect(updated.missionOrchestratorModel).toBe("factory-orchestrator");
+  expect(updated.missionModelSettings).toEqual({ workerModel: newSonnet, skipUserTesting: true });
+});
+it("uninstall after a desktop edit removes owned selections and keeps all other settings", async () => {
+  const { deps, paths } = fixture(); mkdirSync(join(deps.home, ".factory"));
+  const original = realisticSettings(); writeFileSync(paths.settings, JSON.stringify(original));
+  await desktop(["install"], deps);
+  const edited = JSON.parse(readFileSync(paths.settings, "utf8"));
+  const bridge = edited.customModels[2]; bridge.id = selection(bridge.displayName);
+  const later = { model: "later", displayName: bridge.displayName };
+  edited.customModels.push(later); edited.theme = "light";
+  edited.model = bridge.id; edited.specModeModel = selection(bridge.displayName, 1);
+  edited.sessionDefaultSettings.specModeModel = bridge.id;
+  edited.missionModelSettings.workerModel = bridge.id;
+  writeFileSync(paths.settings, JSON.stringify(edited));
+  await desktop(["uninstall"], deps);
+  const after = JSON.parse(readFileSync(paths.settings, "utf8"));
+  const expected: Record<string, unknown> = { ...original, theme: "light", customModels: [...original.customModels, later],
+    specModeModel: selection(later.displayName), sessionDefaultSettings: { model: "factory-default", reasoningEffort: "high" },
+    missionModelSettings: { validationWorkerModel: "custom:Duplicate-1", skipScrutiny: true, workerReasoningEffort: "high" } };
+  delete expected.model;
+  expect(after).toEqual(expected);
+});
