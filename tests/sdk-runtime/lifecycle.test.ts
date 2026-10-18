@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { mkdtempSync, readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadConfig } from "../../src/config.js";
@@ -1318,4 +1318,31 @@ describe("official SDK streaming-input lifecycle (injected offline SDK)", () => 
     expect(log).toContain('"source":"provider_message"');
     expect(log).toContain('"source":"sdk_result"');
   });
+});
+
+
+it("desktop profile blocks native side effects and denies approval immediately while retaining Droid MCP", async () => {
+  const sdk = new FakeSdk(async function* () { yield success("ok"); });
+  const dataDir = mkdtempSync(join(tmpdir(), "relay-desktop-sdk-"));
+  const project = realpathSync(mkdtempSync(join(tmpdir(), "relay-desktop-project-")));
+  const { runtime } = create(sdk, { desktopProfile: true, permissionMode: "ask", dataDir: join(dataDir, "bridge-data") });
+  const approval = vi.fn();
+  runtime.setControl({ requestApproval: approval });
+  const input = request(session(), [
+    { type: "text", text: `<system-reminder>\n\nUser system info (fixture)\n\n% pwd\n${project}\n</system-reminder>` },
+    { type: "text", text: "inspect" },
+  ], { tools: [{ name: "Execute", input_schema: { type: "object", properties: {} } }, { name: "Read", input_schema: { type: "object", properties: {} } }] });
+  await runtime.handle(input);
+  const options = sdk.calls[0]!.options;
+  expect(options).toMatchObject({ cwd: project, permissionMode: "default", allowDangerouslySkipPermissions: false,
+    settingSources: [], strictMcpConfig: true, allowedTools: ["mcp__droid__*"], tools: { type: "preset", preset: "claude_code" } });
+  expect(options.disallowedTools).toEqual(expect.arrayContaining(["Bash", "Write", "Edit", "MultiEdit", "NotebookEdit", "TaskStop", "TaskOutput", "KillShell", "Agent", "EnterWorktree", "ScheduleWakeup"]));
+  expect(options.disallowedTools).not.toEqual(expect.arrayContaining(["Read"]));
+  expect(options.systemPrompt).toMatchObject({ preset: "claude_code", append: expect.stringContaining("Droid owns approvals") });
+  const check = options.canUseTool as (name: string, input: object) => Promise<unknown>;
+  expect(await check("Read", {})).toEqual({ behavior: "deny", message: expect.stringContaining("Droid applies its current mode") });
+  expect(approval).not.toHaveBeenCalled();
+  const guard = (options.hooks as { PreToolUse: Array<{ hooks: Array<(hook: { tool_name: string }) => Promise<unknown>> }> }).PreToolUse[0]!.hooks[0]!;
+  expect(await guard({ tool_name: "Bash" })).toMatchObject({ hookSpecificOutput: { permissionDecision: "deny" } });
+  expect(await guard({ tool_name: "Read" })).toEqual({});
 });

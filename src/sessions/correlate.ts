@@ -4,7 +4,7 @@ import { asBlocks, collectToolResults } from "../protocol/content.js";
 import type { ContentBlock, Message, MessagesRequest, RoleTag } from "../types.js";
 import { BridgeError } from "../types.js";
 import { isEnded, type SessionRecord } from "./state.js";
-import { canonicalWorkspacePath } from "../workspace.js";
+import { canonicalWorkspacePath, resolveRequestCwd } from "../workspace.js";
 
 type Headers = Record<string, string | string[] | undefined>;
 
@@ -46,7 +46,7 @@ export function historyMessageHashes(messages: Message[]): string[] {
  * complete transcript prefix; host context and catalogs never identify a session.
  */
 export function sessionContextHash(headers: Headers, request: MessagesRequest, cwd?: string): string {
-  const workspace = cwd ?? process.env.BRIDGE_SDK_CWD ?? header(headers, "x-bridge-cwd");
+  const workspace = cwd ?? resolveRequestCwd(headers, request);
   return hash({
     model: request.model,
     role: roleFromHeaders(headers),

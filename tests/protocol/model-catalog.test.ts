@@ -1,3 +1,6 @@
+import { mkdirSync, mkdtempSync, realpathSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { postMessages, startTestBridge } from "../helpers/server.js";
 import type { BridgeApp } from "../../src/http/app.js";
@@ -78,4 +81,25 @@ describe("HTTP model selection", () => {
     expect((await postMessages(app.url, token, request("haiku"), headers)).status).toBe(409);
     expect(app.store.get(first.session!)).toMatchObject({ hostEnded: "resumable", state: "IDLE", notes: ["host-ended"] });
   });
+});
+
+
+it("desktop rejects missing cwd before session creation and isolates different project directories", async () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "relay-desktop-http-")));
+  const one = join(root, "one"), two = join(root, "two"); mkdirSync(one); mkdirSync(two);
+  const { app, token } = await startTestBridge({ desktopProfile: true, dataDir: join(root, "state/bridge-data") });
+  apps.push(app);
+  const missing = await postMessages(app.url, token, request("sonnet"), { "x-bridge-cwd": one });
+  expect(missing.status).toBe(400); expect(missing.json).toMatchObject({ error: { type: "invalid_project_directory", message: expect.stringContaining("Open a project folder in Droid") } });
+  expect(app.store.list()).toHaveLength(0); expect(runtime.handle).not.toHaveBeenCalled();
+  const body = (cwd: string) => ({ model: "sonnet", max_tokens: 32, messages: [{ role: "user", content: [
+    { type: "text", text: `<system-reminder>\nUser system info (fixture)\n% pwd\n${cwd}\n</system-reminder>` },
+    { type: "text", text: "hello" },
+  ] }] });
+  const first = await postMessages(app.url, token, body(one), headers);
+  expect(first.status).toBe(200);
+  const switched = await postMessages(app.url, token, body(two), headers);
+  expect(switched.status).toBe(409); expect(switched.json).toMatchObject({ error: { type: "session_context_changed" } });
+  const fresh = await postMessages(app.url, token, body(two), { "x-bridge-session": "another-project" });
+  expect(fresh.status).toBe(200); expect(app.store.list()).toHaveLength(2);
 });

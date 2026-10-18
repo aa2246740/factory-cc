@@ -1,6 +1,6 @@
 import { assertClaudeCredential, readClaudeConfig, claudeConfigModels, type ClaudeConfig } from "./upstream/claude-config.js";
 import { randomBytes } from "node:crypto";
-import { chmodSync, mkdirSync } from "node:fs";
+import { chmodSync, mkdirSync, readFileSync } from "node:fs";
 import { isIPv6 } from "node:net";
 import { resolve } from "node:path";
 import type { BridgeMode } from "./types.js";
@@ -9,6 +9,7 @@ import { canonicalWorkspacePath } from "./workspace.js";
 import { modelsFromIds, parseModelIds, validateModels, type BridgeModel } from "./models.js";
 
 export interface BridgeConfig {
+  desktopProfile?: boolean;
   host: string;
   port: number;
   mode: BridgeMode;
@@ -98,6 +99,15 @@ function ensurePrivateDir(path: string): void {
   chmodSync(path, 0o700);
 }
 
+function tokenEnv(name: string): string | undefined {
+  const file = env(`${name}_FILE`);
+  if (file && env(name)) throw new Error(`${name} and ${name}_FILE cannot both be set.`);
+  if (!file) return env(name);
+  const value = readFileSync(file, "utf8").trim();
+  if (!value || /\s/.test(value)) throw new Error(`${name}_FILE must contain a nonempty token without whitespace.`);
+  return value;
+}
+
 export function loadConfig(overrides: Partial<BridgeConfig> = {}): BridgeConfig {
   const authMode = parseAuthMode(overrides.authMode ?? env("BRIDGE_AUTH", "byok"));
   const claudeConfig = authMode === "claude-config" ? overrides.claudeConfig ?? readClaudeConfig(process.env, `${overrides.host ?? env("BRIDGE_HOST", "127.0.0.1")}:${overrides.port ?? intEnv("BRIDGE_PORT", 18787)}`) : undefined;
@@ -129,9 +139,9 @@ export function loadConfig(overrides: Partial<BridgeConfig> = {}): BridgeConfig 
       throw new Error(`BRIDGE_HOST=${host} listens on every interface, so the Host header remote clients send is not known. Set BRIDGE_ALLOWED_HOSTS to the comma-separated names or IPs they will use, for example 192.168.1.20,devbox.local.`);
     }
   }
-  const clientToken = overrides.clientToken ?? env("BRIDGE_CLIENT_TOKEN", randomBytes(24).toString("hex"))!;
-  const adminToken = overrides.adminToken ?? env("BRIDGE_ADMIN_TOKEN", randomBytes(24).toString("hex"))!;
-  const hookToken = overrides.hookToken ?? env("BRIDGE_HOOK_TOKEN", randomBytes(24).toString("hex"))!;
+  const clientToken = overrides.clientToken ?? (tokenEnv("BRIDGE_CLIENT_TOKEN") ?? randomBytes(24).toString("hex"))!;
+  const adminToken = overrides.adminToken ?? (tokenEnv("BRIDGE_ADMIN_TOKEN") ?? randomBytes(24).toString("hex"))!;
+  const hookToken = overrides.hookToken ?? (tokenEnv("BRIDGE_HOOK_TOKEN") ?? randomBytes(24).toString("hex"))!;
   if (adminToken === clientToken || hookToken === adminToken || hookToken === clientToken) {
     throw new Error("BRIDGE_CLIENT_TOKEN, BRIDGE_ADMIN_TOKEN and BRIDGE_HOOK_TOKEN must be different.");
   }
@@ -140,7 +150,10 @@ export function loadConfig(overrides: Partial<BridgeConfig> = {}): BridgeConfig 
     ? permissionRaw
     : "ask") as "bypass" | "ask";
 
+  const desktopProfile = overrides.desktopProfile ?? env("BRIDGE_DESKTOP") === "1";
+  if (desktopProfile && (permissionMode !== "ask" || !isLoopbackHost(host))) throw new Error("Desktop profile requires ask permissions and loopback binding.");
   const config: BridgeConfig = {
+    desktopProfile,
     host,
     port: overrides.port ?? intEnv("BRIDGE_PORT", 18787),
     mode,

@@ -1,3 +1,4 @@
+import { resolveRequestCwd } from "../workspace.js";
 import { createHash, randomUUID } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { mkdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
@@ -253,7 +254,7 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
       if (config.mode === "sdk") resolveRequestModel(config, parsed.model);
     }
     const role = roleFromHeaders(headers);
-    const cwd = process.env.BRIDGE_SDK_CWD || header(headers, "x-bridge-cwd") || config.sdkCwd;
+    const cwd = resolveRequestCwd(headers, parsed, config);
     const prepared = control.prepareRequest(parsed, cwd);
     const request = prepared.request;
     const contextHash = sessionContextHash(headers, request, cwd);

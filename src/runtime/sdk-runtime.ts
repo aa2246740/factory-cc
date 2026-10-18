@@ -1,7 +1,8 @@
+import { DESKTOP_DISALLOWED_TOOLS, DESKTOP_APPROVAL_DENIAL } from "./desktop-policy.js";
 import { mkdirSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { isAbsolute, join } from "node:path";
-import { canonicalWorkspacePath } from "../workspace.js";
+import { resolveRequestCwd } from "../workspace.js";
 import { asBlocks } from "../protocol/content.js";
 import { assistantMessage } from "../protocol/messages.js";
 import { ToolMailbox } from "../relay/mailbox.js";
@@ -687,16 +688,17 @@ export class SdkRuntime implements BridgeRuntime {
       // Permit the dynamic host namespace only. Droid executes these operations
       // with its own permissions; native Claude Code builtins are not covered.
       allowedTools: ["mcp__droid__*"],
-      env, permissionMode: this.config.permissionMode === "ask" ? "default" : "bypassPermissions",
-      allowDangerouslySkipPermissions: this.config.permissionMode !== "ask", abortController: abort,
-      systemPrompt: buildPresetSystemPrompt(),
+      env, permissionMode: this.config.desktopProfile || this.config.permissionMode === "ask" ? "default" : "bypassPermissions",
+      allowDangerouslySkipPermissions: !this.config.desktopProfile && this.config.permissionMode !== "ask", abortController: abort,
+      systemPrompt: buildPresetSystemPrompt(this.config.desktopProfile),
       canUseTool: async (name: string, toolInput: Record<string, unknown>, context?: NativePermissionContext) => live.queryEpoch === epoch
         ? this.canUseTool(live, name, toolInput, context)
         : { behavior: "deny", message: "This native query has been retired." },
     };
+    if (this.config.desktopProfile) options.disallowedTools = [...DESKTOP_DISALLOWED_TOOLS];
     // Empty setting sources keep settings.json env blocks and permissions.allow
     // from bypassing this bridge. inherit keeps the CLI default (all sources).
-    if (this.config.authMode !== "inherit") {
+    if (this.config.desktopProfile || this.config.authMode !== "inherit") {
       options.settingSources = [];
       options.strictMcpConfig = true;
     }
@@ -714,6 +716,7 @@ export class SdkRuntime implements BridgeRuntime {
     options.hooks = { PreToolUse: [{ hooks: [async (hook: { tool_name?: string; tool_use_id?: string }) => {
         if (live.queryEpoch !== epoch) return { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: "This native query has been retired." } };
         if (live.terminal) return { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: "The host session has ended." } };
+        if (this.config.desktopProfile && hook.tool_name && !hook.tool_name.startsWith("mcp__droid__") && !["Read", "Glob", "Grep", "LS"].includes(hook.tool_name)) return { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: DESKTOP_APPROVAL_DENIAL } };
         const denial = toolAccessDenial(live, hook.tool_name, this.control?.factoryPermissionMode?.(input.session.bridgeSessionId));
         if (!denial) return {};
         const data = { sessionId: input.session.bridgeSessionId, sdkSessionId: live.sdkSessionId, toolName: hook.tool_name, toolUseId: hook.tool_use_id, reason: denial };
@@ -823,6 +826,7 @@ export class SdkRuntime implements BridgeRuntime {
   }
 
   private async canUseTool(live: LiveSdk, name: string, input: Record<string, unknown>, context: NativePermissionContext = {}): Promise<RuntimePermissionDecision> {
+    if (this.config.desktopProfile) return { behavior: "deny", message: DESKTOP_APPROVAL_DENIAL };
     if (live.terminal) return { behavior: "deny", message: "Session is closed" };
     const denial = toolAccessDenial(live, name, live.current && this.control?.factoryPermissionMode?.(live.current.session.bridgeSessionId));
     if (denial) return { behavior: "deny", message: denial };
@@ -1232,8 +1236,7 @@ function toolAccessDenial(live: LiveSdk, name: string | undefined, factoryPermis
   return `BRIDGE_HOST_TOOL_NOT_ADVERTISED: ${name ?? "Unknown tool"} is not authorized by the current host tool set. Use only its advertised native equivalents or Factory MCP tools; do not work around this restriction.`;
 }
 function resolveCwd(input: RuntimeRequest, config: BridgeConfig): string {
-  const raw = input.headers["x-bridge-cwd"];
-  return canonicalWorkspacePath(process.env.BRIDGE_SDK_CWD || (Array.isArray(raw) ? raw[0] : raw) || config.sdkCwd);
+  return resolveRequestCwd(input.headers, input.request, config);
 }
 function extractToolUses(message: Record<string, unknown>): DroidCall[] {
   const content = (message.message as { content?: unknown[] } | undefined)?.content ?? [];

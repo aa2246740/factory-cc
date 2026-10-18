@@ -26,11 +26,11 @@ export interface PresetSystemPrompt {
   append: string;
 }
 
-export function buildPresetSystemPrompt(): PresetSystemPrompt {
+export function buildPresetSystemPrompt(desktopProfile = false): PresetSystemPrompt {
   return {
     type: "preset",
     preset: "claude_code",
-    append: STABLE_DROID_APPEND,
+    append: STABLE_DROID_APPEND + (desktopProfile ? " Desktop profile: all changes, commands, background jobs, planning approvals and subagents MUST use the advertised mcp__droid__ tools. Droid owns approvals and autonomy, including spec mode. Native tools are read-only and may be denied; never work around that denial." : ""),
   };
 }
 

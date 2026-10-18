@@ -101,12 +101,12 @@ async function main(): Promise<void> {
       writeFileSync(join(config.dataDir, "upstream.json"), `${JSON.stringify(record, null, 2)}\n`);
       logger.info("upstream", record);
     }
-    if (!envProvided("BRIDGE_ADMIN_TOKEN")) {
+    if (!envProvided("BRIDGE_ADMIN_TOKEN") && !envProvided("BRIDGE_ADMIN_TOKEN_FILE")) {
       const adminPath = join(config.dataDir, "admin-token");
       privateTokenFile(adminPath, config.adminToken);
       console.log(`Admin token file: ${adminPath}`);
     }
-    if (!envProvided("BRIDGE_HOOK_TOKEN")) {
+    if (!envProvided("BRIDGE_HOOK_TOKEN") && !envProvided("BRIDGE_HOOK_TOKEN_FILE")) {
       const hookPath = join(config.dataDir, "hook-token");
       privateTokenFile(hookPath, config.hookToken);
       console.log(`Hook token file: ${hookPath}`);
