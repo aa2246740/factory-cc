@@ -157,6 +157,9 @@ interface LiveSdk {
   /** Set while interrupt() waits for the aborted turn to end. */
   interrupting?: boolean;
   windDown?: () => void;
+  /** The user cancelled a Droid tool. Its native turn may only wind down, without
+   * tools; what the user sent next is pushed as its own turn once that turn ends. */
+  cancelledTurn?: { followup: ContentBlock[] };
 }
 
 /**
@@ -167,6 +170,11 @@ interface LiveSdk {
 const BACKSTOP_SLACK_MS = INTERRUPT_GRACE_MS + 1_000;
 
 type DroidResult = { tool_use_id: string; content: string | ContentBlock[]; is_error?: boolean };
+
+/** Droid's whole result when the user picks "No, cancel"; Droid then ends its own turn. */
+const USER_CANCELLATION = /^(?:tool execution|request) (?:was )?(?:cancell?ed|interrupted) by (?:the )?user\.?$/i;
+const CANCELLED_TOOL_NOTE = "The user cancelled this tool call in Droid, so it did not run. Do not retry it or try another way. Briefly acknowledge the cancellation and end your turn; wait for the user's next message.";
+const CANCELLED_TURN_DENIAL = "BRIDGE_USER_CANCELLED: The user cancelled the previous tool call in Droid. Do not retry it or use any other tool now; acknowledge the cancellation and end your turn.";
 
 /** Official Claude Code owns the agent loop, tools, context, and compaction. */
 export class SdkRuntime implements BridgeRuntime {
@@ -350,8 +358,12 @@ export class SdkRuntime implements BridgeRuntime {
       }
       if (modelRoute) await this.selectModel(live, modelRoute, results.length > 0);
       const context = buildHostContext(input, resolveCwd(input, this.config));
-      const continuation = results.length ? this.continuationContent(input, live, context) : [];
-      if (continuation.length && results.every((result) => live.resultFingerprints.has(result.tool_use_id))) {
+      // Droid ends its own turn when the user cancels a tool, without a request.
+      // Whatever arrives with that result later is the user's next turn, never
+      // context inside the tool result, where it would read as an injection.
+      const followup = results.some(isUserCancellation) ? this.followupContent(input, live, context) : [];
+      const continuation = results.length && !followup.length ? this.continuationContent(input, live, context) : [];
+      if ((continuation.length || followup.length) && results.every((result) => live.resultFingerprints.has(result.tool_use_id))) {
         throw new BridgeError(409, "stale_tool_result_context", "New host context cannot be attached to an already-delivered tool result");
       }
       // Validate before changing catalog, fingerprints, or mailbox state.
@@ -367,7 +379,7 @@ export class SdkRuntime implements BridgeRuntime {
       if (live.query && input.request.tools !== undefined) await this.updateCatalog(live, input);
       if (live.terminal) throw live.terminal;
       if (results.length) {
-        this.submitResults(live, results, continuation);
+        this.submitResults(live, results, continuation, followup);
         live.lastHostContext = context;
         this.flushOutbox(live);
       } else {
@@ -538,7 +550,16 @@ export class SdkRuntime implements BridgeRuntime {
     return content.length ? [{ type: "text", text: "Host continuation context supplied by Droid with these tool results (not an additional user turn):" }, ...content] : [];
   }
 
-  private submitResults(live: LiveSdk, results: DroidResult[], continuation: ContentBlock[] = []): Array<"accepted" | "duplicate"> {
+  /** The user's next turn after a cancellation, built like any new turn from all trailing user content. */
+  private followupContent(input: RuntimeRequest, live: LiveSdk, context: string): ContentBlock[] {
+    const blocks = trailingUserMessages(input).flatMap((message) => asBlocks(message.content)).filter((block) => block.type !== "tool_result");
+    if (!blocks.length) return [];
+    return buildDynamicUserContent({ ...input, request: { ...input.request, messages: [{ role: "user", content: blocks }] } },
+      resolveCwd(input, this.config), { includeContext: context !== live.lastHostContext });
+  }
+
+  private submitResults(live: LiveSdk, results: DroidResult[], continuation: ContentBlock[] = [], followup: ContentBlock[] = []): Array<"accepted" | "duplicate"> {
+    if (results.some((result) => isUserCancellation(result) && !live.resultFingerprints.has(result.tool_use_id))) live.cancelledTurn = { followup };
     let attached = false;
     return results.map((result) => {
       const fresh = !live.resultFingerprints.has(result.tool_use_id);
@@ -547,11 +568,12 @@ export class SdkRuntime implements BridgeRuntime {
       // validateResults already proved a repeat has the same fingerprint. What the
       // mailbox kept may carry host continuation text, so do not compare against it.
       if (!fresh) return "duplicate" as const;
-      const delivered = !attached && continuation.length
-        ? { ...result, content: [...asBlocks(result.content), ...continuation] }
-        : result;
-      if (delivered !== result) attached = true;
-      return live.mailbox.submitResult(delivered);
+      const extra: ContentBlock[] = isUserCancellation(result) ? [{ type: "text", text: CANCELLED_TOOL_NOTE }] : [];
+      if (!attached && continuation.length) {
+        extra.push(...continuation);
+        attached = true;
+      }
+      return live.mailbox.submitResult(extra.length ? { ...result, content: [...asBlocks(result.content), ...extra] } : result);
     });
   }
 
@@ -716,6 +738,10 @@ export class SdkRuntime implements BridgeRuntime {
     options.hooks = { PreToolUse: [{ hooks: [async (hook: { tool_name?: string; tool_use_id?: string }) => {
         if (live.queryEpoch !== epoch) return { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: "This native query has been retired." } };
         if (live.terminal) return { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: "The host session has ended." } };
+        if (live.cancelledTurn) {
+          live.events.push({ at: now(), type: "cancelled_turn_tool_denied", data: { toolName: hook.tool_name, toolUseId: hook.tool_use_id } });
+          return { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: CANCELLED_TURN_DENIAL } };
+        }
         if (this.config.desktopProfile && hook.tool_name && !hook.tool_name.startsWith("mcp__droid__") && !["Read", "Glob", "Grep", "LS"].includes(hook.tool_name)) return { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: DESKTOP_APPROVAL_DENIAL } };
         const denial = toolAccessDenial(live, hook.tool_name, this.control?.factoryPermissionMode?.(input.session.bridgeSessionId));
         if (!denial) return {};
@@ -1039,6 +1065,7 @@ export class SdkRuntime implements BridgeRuntime {
             // unmatched is moot: interrupt() now retires this process.
             for (const id of live.candidates.keys()) live.retiredCandidates.add(id);
             live.candidates.clear();
+            live.cancelledTurn = undefined;
             live.windDown?.();
             continue;
           }
@@ -1050,9 +1077,22 @@ export class SdkRuntime implements BridgeRuntime {
           if (live.pending.size || live.handlerArrivals.size) throw new BridgeError(502, "sdk_unfinished_tools", "SDK ended a turn while Droid tools were unresolved");
           for (const id of live.candidates.keys()) live.retiredCandidates.add(id);
           live.candidates.clear();
-          live.active = false;
           const fallback = extractText(message);
           if (!live.streamed && !live.blocks.length && fallback) live.blocks.push({ type: "text", text: fallback });
+          const cancelled = live.cancelledTurn;
+          live.cancelledTurn = undefined;
+          if (cancelled?.followup.length) {
+            // The cancelled turn has wound down. The user's next message is a real
+            // user turn whose reply continues this same HTTP response.
+            live.sentUserTurns++;
+            live.inputs.push({
+              type: "user", message: { role: "user", content: cancelled.followup },
+              parent_tool_use_id: null, session_id: live.sdkSessionId ?? "", uuid: randomUUID(),
+            });
+            live.events.push({ at: now(), type: "cancelled_turn_followup", data: { sdkSessionId: live.sdkSessionId } });
+            continue;
+          }
+          live.active = false;
           this.publish(live, this.makeTurn(live, [], "end_turn"));
         }
       }
@@ -1142,6 +1182,7 @@ export class SdkRuntime implements BridgeRuntime {
     error = this.sdkError(error);
     live.terminal = error;
     live.active = false;
+    live.cancelledTurn = undefined;
     live.inputs.close();
     for (const approval of live.approvals) approval.abort();
     live.approvals.clear();
@@ -1186,6 +1227,13 @@ function latestToolResults(input: RuntimeRequest, includeTrailingUserMessages = 
     tool_use_id: String(result.tool_use_id ?? ""), content: result.content ?? "", is_error: Boolean(result.is_error),
     };
   });
+}
+
+function isUserCancellation(result: DroidResult): boolean {
+  if (!result.is_error) return false;
+  const text = typeof result.content === "string" ? result.content
+    : result.content.map((block) => block.type === "text" && typeof block.text === "string" ? block.text : "\u0000").join("");
+  return USER_CANCELLATION.test(text.trim());
 }
 
 function hasNewUserContent(input: RuntimeRequest): boolean {

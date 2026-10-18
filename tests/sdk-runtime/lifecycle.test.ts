@@ -1346,3 +1346,94 @@ it("desktop profile blocks native side effects and denies approval immediately w
   expect(await guard({ tool_name: "Bash" })).toMatchObject({ hookSpecificOutput: { permissionDecision: "deny" } });
   expect(await guard({ tool_name: "Read" })).toEqual({});
 });
+
+describe("Droid tool cancellation (desktop profile)", () => {
+  const create_ = { name: "Create", input_schema: { type: "object" as const, properties: {} } };
+  const execute = { name: "Execute", input_schema: { type: "object" as const, properties: {} } };
+  const cancelled: ContentBlock = { type: "tool_result", tool_use_id: "create-1", content: "Tool execution cancelled by user", is_error: true };
+  const followupText = "Run the shell command: touch cmd-test.txt";
+  type Guard = (hook: { tool_name: string; tool_use_id?: string }) => Promise<unknown>;
+
+  function setup() {
+    const project = realpathSync(mkdtempSync(join(tmpdir(), "relay-cancel-project-")));
+    const reminder: ContentBlock = { type: "text", text: `<system-reminder>\n\nUser system info (fixture)\n\n% pwd\n${project}\n</system-reminder>` };
+    const seen: { createResult?: unknown; windDownGuard?: unknown; followupGuard?: unknown; executeResult?: unknown } = {};
+    const sdk = new FakeSdk(async function* (_input, index, fake) {
+      const guard = (fake.calls[0]!.options.hooks as { PreToolUse: Array<{ hooks: Guard[] }> }).PreToolUse[0]!.hooks[0]!;
+      if (index === 0) {
+        yield { type: "assistant", message: { content: [{ type: "tool_use", id: "create-1", name: "mcp__droid__Create", input: { file_path: "reject-me.txt" } }] } };
+        seen.createResult = await fake.handlers.get("Create")!({ file_path: "reject-me.txt" }, { toolUseID: "create-1" });
+        // A model that tries another way after the cancellation is stopped by the bridge.
+        seen.windDownGuard = await guard({ tool_name: "mcp__droid__Execute", tool_use_id: "retry" });
+        yield { type: "assistant", message: { content: [{ type: "text", text: "Cancelled; reject-me.txt was not created." }] } };
+        yield success("Cancelled; reject-me.txt was not created.");
+        return;
+      }
+      seen.followupGuard = await guard({ tool_name: "mcp__droid__Execute", tool_use_id: "execute-1" });
+      yield { type: "assistant", message: { content: [{ type: "tool_use", id: "execute-1", name: "mcp__droid__Execute", input: { command: "touch cmd-test.txt" } }] } };
+      seen.executeResult = await fake.handlers.get("Execute")!({ command: "touch cmd-test.txt" }, { toolUseID: "execute-1" });
+      yield success("done");
+    });
+    const dataDir = join(mkdtempSync(join(tmpdir(), "relay-cancel-sdk-")), "bridge-data");
+    const { runtime } = create(sdk, { desktopProfile: true, permissionMode: "ask", dataDir, toolWaitMs: 5_000, requestTimeoutMs: 5_000 });
+    const s = session();
+    const tools = [create_, execute];
+    const opening = user([reminder, { type: "text", text: "Create a file named reject-me.txt containing no" }]);
+    const proposal = { role: "assistant" as const, content: [{ type: "tool_use" as const, id: "create-1", name: "Create", input: { file_path: "reject-me.txt" } }] };
+    return { sdk, runtime, s, tools, opening, proposal, seen };
+  }
+
+  it.each([
+    ["separate user messages", (text: string) => [user([cancelled]), user(text)]],
+    ["one user message", (text: string) => [user([cancelled, { type: "text", text }])]],
+  ])("starts the user's next message as its own turn after a cancellation (%s)", async (_layout, tail) => {
+    const { sdk, runtime, s, tools, opening, proposal, seen } = setup();
+    const first = await runtime.handle(request(s, "unused", { tools, messages: [opening] }));
+    expect(first.response.content).toContainEqual(expect.objectContaining({ type: "tool_use", id: "create-1", name: "Create" }));
+
+    const second = await runtime.handle(request(s, "unused", { tools, messages: [opening, proposal, ...tail(followupText)] }));
+    // The cancellation reaches Claude Code as Droid's own error result, with no user text inside it.
+    const createResult = JSON.stringify(seen.createResult);
+    expect(seen.createResult).toMatchObject({ isError: true, content: [{ type: "text", text: "Tool execution cancelled by user" }, { type: "text", text: expect.stringContaining("did not run") }] });
+    expect(createResult).not.toContain("touch cmd-test.txt");
+    expect(createResult).not.toContain("Host continuation context");
+    expect(seen.windDownGuard).toMatchObject({ hookSpecificOutput: { permissionDecision: "deny", permissionDecisionReason: expect.stringContaining("BRIDGE_USER_CANCELLED") } });
+    // The follow-up is a genuine user turn, and the same HTTP reply carries Droid's next approval.
+    expect(sdk.inputs).toHaveLength(2);
+    expect(sdk.inputs[1]!.message.role).toBe("user");
+    expect(sdk.inputs[1]!.message.content).toContainEqual({ type: "text", text: followupText });
+    expect(sdk.inputs[1]!.message.content.some((block) => block.type === "tool_result")).toBe(false);
+    expect(seen.followupGuard).toEqual({});
+    expect(second.response.stop_reason).toBe("tool_use");
+    expect(second.response.content).toEqual([
+      { type: "text", text: "Cancelled; reject-me.txt was not created." },
+      expect.objectContaining({ type: "tool_use", id: "execute-1", name: "Execute", input: { command: "touch cmd-test.txt" } }),
+    ]);
+
+    const executed = { role: "assistant" as const, content: second.response.content };
+    const done = await runtime.handle(request(s, "unused", { tools, messages: [opening, proposal, ...tail(followupText), executed,
+      user([{ type: "tool_result", tool_use_id: "execute-1", content: "Command completed successfully" }])] }));
+    expect(done.response.stop_reason).toBe("end_turn");
+    expect(seen.executeResult).toMatchObject({ isError: false, content: [{ type: "text", text: "Command completed successfully" }] });
+    expect(sdk.calls).toHaveLength(1);
+  });
+
+  it("keeps a failing tool's error and its host context as tool-result continuation", async () => {
+    let delivered: unknown;
+    const sdk = new FakeSdk(async function* (_input, _index, fake) {
+      yield { type: "assistant", message: { content: [{ type: "tool_use", id: "run-1", name: "mcp__droid__TaskOutput", input: {} }] } };
+      delivered = await fake.handlers.get("TaskOutput")!({}, { toolUseID: "run-1" });
+      yield success("handled");
+    });
+    const { runtime } = create(sdk);
+    const s = session();
+    await runtime.handle(request(s, "run", { tools: [tool] }));
+    await runtime.handle(request(s, [
+      { type: "tool_result", tool_use_id: "run-1", content: "exit 1: Tool execution cancelled by user", is_error: true },
+      { type: "text", text: "<system-reminder>todo list unchanged</system-reminder>" },
+    ], { tools: [tool] }));
+    expect(JSON.stringify(delivered)).toContain("Host continuation context");
+    expect(JSON.stringify(delivered)).not.toContain("did not run");
+    expect(sdk.inputs).toHaveLength(1);
+  });
+});
