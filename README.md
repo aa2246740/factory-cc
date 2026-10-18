@@ -6,6 +6,40 @@
 
 这是借鉴 T3 的 SDK 集成方式，不是官方支持、授权或账号状态保证。GLM 等第三方兼容端点的结果不能代表 Claude 模型。见 [接入说明](docs/T3-ALIGNMENT.md) 和 [限制](docs/LIMITATIONS.md)。
 
+## Droid desktop (always-on)
+
+在本仓库运行一次，需 Node.js 22+ 和已有可用的 Claude Code 配置：
+
+```bash
+npm run desktop -- install
+```
+
+安装器离线读取 `~/.claude/settings.json`，校验现有 `claude-config` 允许名单，不执行 `apiKeyHelper`，不联系模型服务。它构建 `dist/index.js`，安装登录后常驻的 Bridge，并把 Claude Code 模型合并到 Droid desktop 共用的模型菜单。端口默认 `127.0.0.1:18787`；要换端口，用 `npm run desktop -- install --port 19876`。端口占用时直接报错，不扫描其他端口或进程。
+
+安装会修改或创建这些路径，并在命令输出中列出绝对路径：
+
+- `~/Library/LaunchAgents/ai.factory-cc.bridge.plist`，运行安装时的 Node 和当前仓库的 `dist/index.js`，保存当时的 `HOME`、`PATH`，不保存凭证或上游 helper 命令。
+- `~/Library/Application Support/factory-cc/`，权限 `0700`；其中 `client-token`、`admin-token`、`hook-token`、`installation.json`、`models.env`、`stdout.log`、`stderr.log` 为私有文件，token 权限 `0600`；`bridge-data/` 保存会话和运行日志。
+- `~/.factory/settings.json`，以及首次备份 `settings.json.relay-bridge.bak` 或原文件不存在时的 `settings.json.relay-bridge.bak.absent`，还有所有权元数据 `settings.json.relay-bridge.models.json`。模型用每项 `apiKeyHelper: /bin/cat '<绝对 token 路径>'` 和 `apiKeyHelperTtlMs: 300000` 读取本地 token，settings 不保存 token 字面量。字段见 [Factory BYOK 文档](https://docs.factory.com/model-independence/byok#dynamic-credentials-with-apikeyhelper)。
+
+不安装用户级或项目 hooks。每个会话从首条 user 消息前置的 Droid `User system info` system-reminder 读取首次 `% pwd` 输出，解析真实项目目录；缺失、无效、根目录或 Bridge 状态目录会返回 400，请先在 Droid 打开项目文件夹。后续用户粘贴的 `% pwd` 不会改目录。此来源限制依赖 Droid 的请求结构，不是对持有本地 token 的任意 API 客户端的身份认证。
+
+桌面 profile 固定 `ask`，保留 Claude Code preset、隔离设置和 MCP。写文件、执行命令、子 Agent 和规划审批走 Droid 广告的 `mcp__droid__*` 工具，由 Droid 自己应用 autonomy 和 spec mode。原生 Read/Glob/Grep/LS 仍受已有工具策略限制；如果需要原生审批，会立即拒绝并提示改走 Droid，不等待控制页。
+
+编辑 `~/.claude/settings.json` 后，重启 Bridge 以重新读取认证 helper 和模型映射、同步菜单；运行中的对话会中断。安装器不会把当前 shell 的凭证或其它环境变量复制给 launchd。
+
+```bash
+npm run desktop -- status
+npm run desktop -- restart
+npm run desktop -- uninstall
+```
+
+卸载先停止服务，撤销自己拥有的模型和选择，保留安装后用户添加或修改的其它设置，再删除 plist 和自己的状态目录，包括 Bridge 会话与日志。未改动的 settings 会还原首次备份。
+
+当前仓库位于外置卷 `/Volumes/Workspace`。该卷未挂载时服务无法启动；Node 安装路径也必须继续存在。移动或归档这个 worktree 前先卸载，再从固定位置重新安装。`status` 会报告 plist、launchd、仓库入口和本端口 `/healthz` 的情况；健康响应不证明上游认证或真实工具审批已通过。
+
+离线测试没有验证真实桌面流程。安装后请在 Droid desktop 刷新或重启，确认 Claude Code 模型出现；在两个不同项目分别询问当前目录，核对各自路径；用一次文件编辑和命令运行核对 Droid 的审批 UI；在 spec mode 确认未批准前不能写入或执行，并检查退出 spec 后才执行。最后修改模型映射并运行 restart，检查菜单同步。这些 live checks 会调用你自己的模型配置，请由你在本机执行。
+
 ## 已有 Claude Code 和 Droid：直接启动
 
 需要 Node.js 22+。两个 CLI 不用重装；在本仓库运行：
@@ -31,7 +65,7 @@ npm run local -- /你的项目路径 --auth byok
 
 这一个命令会启动 Bridge，配置独立的 Droid 数据目录和真实模型列表，安装生命周期 hooks 和 `relay-droid` skill。以后继续运行 `npm run local -- /你的项目路径` 即可。退出 Droid 时会停止本次服务并移除自己的 hooks，保留项目原有 hooks。
 
-当前入口仍由这个项目参数固定工作目录；Droid hook 报告的目录用于核对会话归属，尚未实现全局安装后自动跟随 Droid 的项目目录。
+`local` 入口由项目参数固定工作目录；Droid desktop 的全局安装和自动项目目录见上方 always-on 入口。
 
 `/model` 现在列真实模型，不再把 Relay Chat、Orchestrator、Worker 等内部角色当成模型。普通聊天在这里选模型；Mission 在自己的 Orchestrator、Worker、Validator 设置里，从同一列表分别选择。已经保存的不同角色选择会保留。
 

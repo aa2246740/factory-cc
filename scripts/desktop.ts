@@ -1,0 +1,163 @@
+import { spawnSync } from "node:child_process";
+import { randomBytes } from "node:crypto";
+import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { createServer } from "node:net";
+import { homedir } from "node:os";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { z } from "zod";
+import { assertClaudeCredential, claudeConfigModels, readClaudeConfig } from "../src/upstream/claude-config.js";
+import { configureDroid } from "./configure-droid.js";
+
+const LABEL = "ai.factory-cc.bridge";
+const installationSchema = z.object({ version: z.literal(1), port: z.number().int().min(1).max(65535), repo: z.string(), node: z.string(), path: z.string() });
+type Installation = z.infer<typeof installationSchema>;
+export type Runner = (command: string, args: string[]) => { status: number; stdout?: string };
+export interface DesktopDependencies {
+  home: string;
+  repo: string;
+  node: string;
+  path: string;
+  uid: number;
+  platform: string;
+  run: Runner;
+  assertPortFree: (port: number) => Promise<void>;
+  health: (port: number) => Promise<boolean>;
+}
+export function desktopPaths(home: string) {
+  const state = join(home, "Library/Application Support/factory-cc");
+  return { state, data: join(state, "bridge-data"), token: join(state, "client-token"),
+    admin: join(state, "admin-token"), hook: join(state, "hook-token"),
+    manifest: join(state, "installation.json"), models: join(state, "models.env"),
+    plist: join(home, `Library/LaunchAgents/${LABEL}.plist`), settings: join(home, ".factory/settings.json") };
+}
+function privateFile(path: string, value: string) {
+  writeFileSync(path, value, { mode: 0o600, flag: "wx" });
+  chmodSync(path, 0o600);
+}
+function xml(value: string): string { return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&apos;"); }
+export function desktopPlist(deps: DesktopDependencies, install: Installation): string {
+  const paths = desktopPaths(deps.home);
+  const env = { HOME: deps.home, PATH: install.path, BRIDGE_MODE: "sdk", BRIDGE_AUTH: "claude-config",
+    BRIDGE_PERMISSION: "ask", BRIDGE_DESKTOP: "1", BRIDGE_HOST: "127.0.0.1", BRIDGE_PORT: String(install.port),
+    BRIDGE_DATA_DIR: paths.data, BRIDGE_CLIENT_TOKEN_FILE: paths.token,
+    BRIDGE_ADMIN_TOKEN_FILE: paths.admin, BRIDGE_HOOK_TOKEN_FILE: paths.hook };
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>Label</key><string>${LABEL}</string>
+<key>ProgramArguments</key><array><string>${xml(install.node)}</string><string>${xml(join(install.repo, "dist/index.js"))}</string></array>
+<key>WorkingDirectory</key><string>${xml(install.repo)}</string>
+<key>EnvironmentVariables</key><dict>${Object.entries(env).map(([key, value]) => `<key>${key}</key><string>${xml(value)}</string>`).join("\n")}</dict>
+<key>RunAtLoad</key><true/><key>KeepAlive</key><true/><key>ThrottleInterval</key><integer>30</integer>
+<key>StandardOutPath</key><string>${xml(join(paths.state, "stdout.log"))}</string>
+<key>StandardErrorPath</key><string>${xml(join(paths.state, "stderr.log"))}</string>
+</dict></plist>\n`;
+}
+function readInstallation(deps: DesktopDependencies): Installation {
+  const paths = desktopPaths(deps.home);
+  if (lstatSync(paths.state).isSymbolicLink() || lstatSync(paths.manifest).isSymbolicLink()) throw new Error("Refusing a linked desktop installation.");
+  return installationSchema.parse(JSON.parse(readFileSync(paths.manifest, "utf8")));
+}
+function checkedRun(deps: DesktopDependencies, command: string, args: string[]) {
+  const result = deps.run(command, args);
+  if (result.status !== 0) throw new Error(`${command === "launchctl" ? "launchctl " + args[0] : "Build"} failed (exit ${result.status}).`);
+  return result;
+}
+function bootout(deps: DesktopDependencies) {
+  const result = deps.run("launchctl", ["bootout", `gui/${deps.uid}/${LABEL}`]);
+  // launchctl reports ESRCH (3) when the service is already absent.
+  if (result.status !== 0 && result.status !== 3) throw new Error(`launchctl bootout failed (exit ${result.status}); installation was preserved.`);
+}
+function syncModels(deps: DesktopDependencies, install: Installation) {
+  const paths = desktopPaths(deps.home);
+  // Deliberately use exactly the environment launchd will receive. Never inherit shell credentials.
+  const config = readClaudeConfig({ HOME: deps.home, PATH: install.path }, `127.0.0.1:${install.port}`);
+  assertClaudeCredential(config);
+  const catalog = claudeConfigModels(config);
+  return configureDroid(["--settings", paths.settings, "--base-url", `http://127.0.0.1:${install.port}`, "--auth", "claude-config",
+    "--manifest", paths.models], { HOME: deps.home }, catalog.models,
+  { apiKeyHelper: `/bin/cat '${paths.token.replaceAll("'", "'\\''")}'`, apiKeyHelperTtlMs: 300000 });
+}
+export async function desktop(argv: string[], deps: DesktopDependencies): Promise<Record<string, unknown>> {
+  const [action, ...options] = argv;
+  if (!["install", "uninstall", "status", "restart"].includes(action ?? "")) throw new Error("Usage: npm run desktop -- install [--port 18787] | uninstall | status | restart");
+  if (deps.platform !== "darwin") throw new Error("Desktop LaunchAgent installation requires macOS.");
+  if (options.length && (action !== "install" || options.length !== 2 || options[0] !== "--port" || !/^\d+$/.test(options[1] ?? ""))) throw new Error("Only install accepts --port <1..65535>.");
+  const paths = desktopPaths(deps.home), domain = `gui/${deps.uid}`;
+  const caveat = "The repository and Node executable must remain available. If /Volumes/Workspace is unmounted, this service cannot start.";
+  if (action === "status") {
+    if (!existsSync(paths.manifest)) return { installed: false, plistPresent: existsSync(paths.plist), caveat };
+    const install = readInstallation(deps);
+    const loaded = deps.run("launchctl", ["print", `${domain}/${LABEL}`]).status === 0;
+    return { installed: true, plistPresent: existsSync(paths.plist), loaded, port: install.port,
+      repositoryPresent: existsSync(join(install.repo, "dist/index.js")), healthy: await deps.health(install.port), caveat };
+  }
+  if (action === "uninstall") {
+    if (!existsSync(paths.manifest)) {
+      if (existsSync(paths.state) || existsSync(paths.plist)) throw new Error("Unrecognized installation; refusing to delete files without our installation manifest.");
+      return { installed: false, changed: [] };
+    }
+    readInstallation(deps);
+    bootout(deps);
+    if (existsSync(`${paths.settings}.relay-bridge.models.json`)) configureDroid(["--settings", paths.settings, "--revert"], { HOME: deps.home });
+    rmSync(paths.plist, { force: true });
+    rmSync(paths.state, { recursive: true });
+    return { installed: false, changed: [paths.settings, `${paths.settings}.relay-bridge.bak`, `${paths.settings}.relay-bridge.bak.absent`, `${paths.settings}.relay-bridge.models.json`, paths.plist, paths.state] };
+  }
+  if (action === "restart") {
+    const install = readInstallation(deps);
+    if (!existsSync(join(install.repo, "dist/index.js"))) throw new Error(caveat);
+    syncModels(deps, install); // Validate before stopping a working service.
+    bootout(deps);
+    checkedRun(deps, "launchctl", ["bootstrap", domain, paths.plist]);
+    return { restarted: true, changed: [paths.settings, `${paths.settings}.relay-bridge.models.json`, paths.models], caveat };
+  }
+  const port = Number(options[1] ?? 18787);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error("--port must be 1..65535.");
+  if (existsSync(paths.state) || existsSync(paths.plist) || existsSync(`${paths.settings}.relay-bridge.models.json`) || existsSync(`${paths.settings}.relay-bridge.bak`) || existsSync(`${paths.settings}.relay-bridge.bak.absent`)) throw new Error("Existing desktop or managed-model state found. Use status/restart, or revert the previous configure-droid installation first.");
+  const install: Installation = { version: 1, port, repo: realpathSync(deps.repo), node: realpathSync(deps.node), path: deps.path };
+  assertClaudeCredential(readClaudeConfig({ HOME: deps.home, PATH: deps.path }, `127.0.0.1:${port}`));
+  checkedRun(deps, deps.node, [join(deps.repo, "node_modules/typescript/bin/tsc"), "-p", join(deps.repo, "tsconfig.build.json")]);
+  if (!existsSync(join(install.repo, "dist/index.js"))) throw new Error("Missing built dist/index.js. Run npm run build.");
+  await deps.assertPortFree(port);
+  mkdirSync(paths.state, { recursive: true, mode: 0o700 });
+  chmodSync(paths.state, 0o700);
+  let configured = false;
+  try {
+    mkdirSync(paths.data, { mode: 0o700 });
+    for (const path of [paths.token, paths.admin, paths.hook]) privateFile(path, randomBytes(32).toString("hex") + "\n");
+    for (const name of ["stdout.log", "stderr.log"]) privateFile(join(paths.state, name), "");
+    const result = syncModels(deps, install);
+    configured = true;
+    privateFile(paths.manifest, JSON.stringify(install, null, 2) + "\n");
+    mkdirSync(dirname(paths.plist), { recursive: true });
+    privateFile(paths.plist, desktopPlist(deps, install));
+    checkedRun(deps, "launchctl", ["bootstrap", domain, paths.plist]);
+    return { installed: true, port, changed: [paths.state, paths.data, paths.token, paths.admin, paths.hook,
+      join(paths.state, "stdout.log"), join(paths.state, "stderr.log"), paths.manifest, paths.models, paths.settings,
+      result.backup && existsSync(String(result.backup)) ? result.backup : `${paths.settings}.relay-bridge.bak.absent`, result.metadataPath, paths.plist],
+      uninstall: "npm run desktop -- uninstall", caveat };
+  } catch (error) {
+    if (configured || existsSync(`${paths.settings}.relay-bridge.models.json`)) configureDroid(["--settings", paths.settings, "--revert"], { HOME: deps.home });
+    rmSync(paths.plist, { force: true });
+    rmSync(paths.state, { recursive: true });
+    throw error;
+  }
+}
+export async function assertDesktopPortFree(port: number): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const server = createServer();
+    server.once("error", () => reject(new Error(`Cannot bind 127.0.0.1:${port}. Choose --port explicitly or stop its owner; no other ports or processes were inspected.`)));
+    server.listen(port, "127.0.0.1", () => server.close((error) => error ? reject(error) : resolve()));
+  });
+}
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+  desktop(process.argv.slice(2), {
+    home: homedir(), repo: resolve(dirname(fileURLToPath(import.meta.url)), ".."), node: process.execPath,
+    path: process.env.PATH ?? "/usr/bin:/bin", uid: process.getuid!(), platform: process.platform,
+    run: (command, args) => { const result = spawnSync(command, args, { encoding: "utf8", env: { HOME: homedir(), PATH: process.env.PATH }, stdio: ["ignore", "pipe", "pipe"] }); return { status: result.status ?? 1, stdout: result.stdout }; },
+    assertPortFree: assertDesktopPortFree,
+    health: async (port) => { try { const result = await fetch(`http://127.0.0.1:${port}/healthz`, { signal: AbortSignal.timeout(2000), redirect: "error" }); const body: unknown = await result.json(); return result.ok && z.object({ ok: z.literal(true), mode: z.literal("sdk") }).safeParse(body).success; } catch { return false; } },
+  }).then((result) => console.log(JSON.stringify(result, null, 2))).catch((error: unknown) => { console.error(error instanceof Error ? error.message : "Desktop operation failed."); process.exitCode = 1; });
+}

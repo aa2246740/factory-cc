@@ -40,7 +40,8 @@
     "verify:native-schema": "tsx scripts/verify-native-schema.ts",
     "verify:native-policy": "tsx scripts/verify-native-tool-policy.ts",
     "verify:auxiliary": "tsx scripts/verify-auxiliary.ts",
-    "verify:mission": "tsx scripts/verify-mission-final.ts"
+    "verify:mission": "tsx scripts/verify-mission-final.ts",
+    "desktop": "tsx scripts/desktop.ts"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "0.3.300",
