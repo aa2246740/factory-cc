@@ -9,7 +9,7 @@ import { parseMessagesRequest } from "../protocol/validate.js";
 import { apiError } from "../protocol/messages.js";
 import { explicitSessionId, historyMessageHashes, historyPrefixHash, resolveSession, roleFromHeaders, sessionContextHash } from "../sessions/correlate.js";
 import { isEnded } from "../sessions/state.js";
-import { MISSION_SPAWN_TOOLS } from "../runtime/mission-tools.js";
+import { MISSION_SPAWN_TOOLS, MISSION_WORKER_END_TOOL } from "../runtime/mission-tools.js";
 import { SessionStore } from "../sessions/store.js";
 import { createRuntime } from "../runtime/factory.js";
 import type { RuntimeTurn, StreamSink } from "../runtime/types.js";
@@ -109,6 +109,46 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
     });
     logger.info("session_reclaimed", { sessionId, idleMs });
     return true;
+  }
+
+  /**
+   * Droid ends a Mission worker as soon as its EndFeatureRun succeeds, records
+   * the call as cancelled and never returns it, so that worker's native process
+   * would wait for a result forever. An EndFeatureRun that fails comes back
+   * within seconds and the worker carries on, which clears this timer. Only a
+   * session waiting on nothing but EndFeatureRun, with no request attached, no
+   * approval outstanding and no live Factory host (whose end event releases it),
+   * is released. Its late result then gets the 409 of any interrupted session.
+   */
+  const workerEndTimers = new Map<string, { generation: number; timer: ReturnType<typeof setTimeout> }>();
+  let workerEndGeneration = 0;
+  function clearWorkerEnd(sessionId: string): void {
+    const armed = workerEndTimers.get(sessionId);
+    if (armed) clearTimeout(armed.timer);
+    workerEndTimers.delete(sessionId);
+  }
+  function scheduleWorkerEnd(sessionId: string, pendingToolIds: string[]): void {
+    clearWorkerEnd(sessionId);
+    const calls = runtime.pendingHostCalls?.(sessionId);
+    if (!calls?.length || !calls.every((call) => call.toolName === MISSION_WORKER_END_TOOL)) return;
+    const generation = ++workerEndGeneration;
+    const timer = setTimeout(() => {
+      // A later turn replaced this timer: never act on an earlier generation.
+      if (workerEndTimers.get(sessionId)?.generation !== generation) return;
+      workerEndTimers.delete(sessionId);
+      const session = store.get(sessionId);
+      if (closing || !session || session.state !== "WAITING_DROID_TOOL" || activeRequests.has(sessionId)) return;
+      if (session.pendingToolIds.join("\n") !== pendingToolIds.join("\n") || control.hasLiveHost(sessionId) || control.hasApprovals(sessionId)) return;
+      const waiting = runtime.pendingHostCalls?.(sessionId);
+      if (!waiting?.length || !waiting.every((call) => call.toolName === MISSION_WORKER_END_TOOL)) return;
+      store.interrupt(sessionId, "mission-worker-ended");
+      void runtime.cancel(sessionId, "mission-worker-ended").catch(() => {
+        logger.error("runtime_cancel_failed", { sessionId, reason: "mission-worker-ended" });
+      });
+      logger.info("mission_worker_released", { sessionId, toolUseIds: pendingToolIds, graceMs: config.workerEndGraceMs, generation });
+    }, config.workerEndGraceMs);
+    timer.unref();
+    workerEndTimers.set(sessionId, { generation, timer });
   }
 
   const server = createServer(async (req, res) => {
@@ -288,6 +328,7 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
       // The state write can be refused (session limit); the binding cannot be
       // undone. So write the state first and bind last, and if only the bind is
       // refused give the session back exactly as it was.
+      clearWorkerEnd(sessionId);
       withSlot(() => store.setState(sessionId, session.state === "WAITING_DROID_TOOL" ? "RESUMING" : "GENERATING"));
       try {
         control.bind(prepared.binding, sessionId);
@@ -416,6 +457,7 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
         usage: { ...turn.response.usage, estimated: turn.response.usage.estimated ?? false },
       });
       store.setState(sessionId, turn.pendingToolIds.length ? "WAITING_DROID_TOOL" : "IDLE");
+      if (turn.pendingToolIds.length) scheduleWorkerEnd(sessionId, turn.pendingToolIds);
       appendLogLine(turnLog, JSON.stringify(redactJson({
         at: new Date().toISOString(),
         session: sessionId,
@@ -424,8 +466,8 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
         usage: turn.response.usage,
         sdkBillingUsage: turn.sdkBillingUsage,
         compactMetadata: turn.compactMetadata,
-        // Cancellation events carry only IDs and tool names, and show how a cancelled Droid tool was handled.
-        events: (turn.events ?? []).filter((event) => /usage|compact|cancelled_turn/i.test(event.type)),
+        // Cancellation and Task batch events carry only IDs and tool names: how a cancelled Droid tool was handled, which Task calls went to Droid together.
+        events: (turn.events ?? []).filter((event) => /usage|compact|cancelled_turn|task_batch/i.test(event.type)),
       })));
       completed = true;
       if (writer) writer.finish(turn.response);
@@ -543,6 +585,7 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
     close: () => {
       if (closePromise) return closePromise;
       closing = true;
+      for (const sessionId of [...workerEndTimers.keys()]) clearWorkerEnd(sessionId);
       flushRequestIndex();
       control.close();
       // Stop accepting before SDK cleanup begins. Handle both promises at once

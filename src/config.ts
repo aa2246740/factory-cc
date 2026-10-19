@@ -29,6 +29,8 @@ export interface BridgeConfig {
   toolWaitMs: number;
   /** How long a session parked on a Droid tool must be idle before it may be reclaimed once session slots run out. */
   toolWaitTimeoutMs: number;
+  /** Droid ends a Mission worker once its EndFeatureRun succeeds and never returns that result. After this long without one, release the worker's native process. */
+  workerEndGraceMs: number;
   /** Idle limit for one native turn. Any SDK message, delta or tool event restarts it; approvals pause it. */
   requestTimeoutMs: number;
   /** How long a human has to answer an approval on the Control page. */
@@ -170,6 +172,7 @@ export function loadConfig(overrides: Partial<BridgeConfig> = {}): BridgeConfig 
     maxTurns: overrides.maxTurns ?? intEnv("BRIDGE_MAX_TURNS", 64),
     toolWaitMs: overrides.toolWaitMs ?? intEnv("BRIDGE_TOOL_WAIT_MS", 8 * 60 * 60 * 1000),
     toolWaitTimeoutMs: overrides.toolWaitTimeoutMs ?? intEnv("BRIDGE_TOOL_WAIT_TIMEOUT_MS", 30 * 60 * 1000),
+    workerEndGraceMs: overrides.workerEndGraceMs ?? intEnv("BRIDGE_WORKER_END_GRACE_MS", 2 * 60 * 1000),
     requestTimeoutMs: overrides.requestTimeoutMs ?? intEnv("BRIDGE_REQUEST_TIMEOUT_MS", 10 * 60 * 1000),
     approvalTimeoutMs: overrides.approvalTimeoutMs ?? intEnv("BRIDGE_APPROVAL_TIMEOUT_MS", 30 * 60 * 1000),
     turnMaxMs: overrides.turnMaxMs ?? intEnv("BRIDGE_TURN_MAX_MS", 2 * 60 * 60 * 1000),

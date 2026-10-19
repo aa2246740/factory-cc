@@ -77,6 +77,10 @@ export class ControlBroker implements RuntimeControl {
       : { behavior: "deny", message: typeof decision.message === "string" ? decision.message : "Denied by the local controller." });
   }
 
+  hasApprovals(sessionId: string): boolean {
+    return [...this.approvals.values()].some((pending) => pending.view.bridgeSessionId === sessionId);
+  }
+
   cancelApprovals(sessionId: string): void {
     for (const pending of this.approvals.values()) if (pending.view.bridgeSessionId === sessionId) {
       pending.finish({ behavior: "deny", message: "Session cancelled." });

@@ -1487,3 +1487,111 @@ it("sends a prompt that Droid follows with its own reminder message as part of t
   expect(text.indexOf(question)).toBeLessThan(text.indexOf("The active model changed"));
   expect(text).not.toContain("PELICAN-58");
 });
+
+describe("Task calls of one assistant message reach Droid together", () => {
+  const task = { name: "Task", input_schema: { type: "object" as const, properties: { description: { type: "string" }, prompt: { type: "string" } }, required: ["description", "prompt"] } };
+  type Guard = (hook: { tool_name: string; tool_use_id?: string }) => Promise<unknown>;
+  type Use = { id: string; name: string; input: Record<string, unknown> };
+  const taskUse = (id: string, input: Record<string, unknown> = { description: id, prompt: `run ${id}` }): Use => ({ id, name: "mcp__droid__Task", input });
+  const stream = (event: Record<string, unknown>) => ({ type: "stream_event", parent_tool_use_id: null, event });
+
+  /**
+   * Like Claude Code: each block arrives as it streams, the first tool starts while
+   * the message is still streaming, and its later tools run one after another.
+   */
+  function claudeCode(uses: Use[], seen: { results: Record<string, unknown>; guards: Record<string, unknown> }) {
+    return new FakeSdk(async function* (_input, index, fake) {
+      if (index > 0) return;
+      const guard = (fake.calls[0]!.options.hooks as { PreToolUse: Array<{ hooks: Guard[] }> }).PreToolUse[0]!.hooks[0]!;
+      const run = async (use: Use) => {
+        seen.guards[use.id] = await guard({ tool_name: use.name, tool_use_id: use.id });
+        const bare = use.name.replace(/^mcp__droid__/, "");
+        seen.results[use.id] = await fake.handlers.get(bare)!(use.input, { toolUseID: use.id });
+      };
+      yield stream({ type: "message_start", message: { id: "msg-batch" } });
+      let first: Promise<void> | undefined;
+      for (const [position, use] of uses.entries()) {
+        yield stream({ type: "content_block_start", index: position, content_block: { type: "tool_use", id: use.id, name: use.name, input: {} } });
+        yield { type: "assistant", message: { id: "msg-batch", content: [{ type: "tool_use", ...use }] } };
+        first ??= run(use);
+      }
+      yield stream({ type: "message_stop" });
+      await first;
+      for (const use of uses.slice(1)) await run(use);
+      yield success("all reported");
+    });
+  }
+  const resultsFor = (ids: string[], content: (id: string) => string = (id) => `result of ${id}`) =>
+    ids.map((id): ContentBlock => ({ type: "tool_result", tool_use_id: id, content: content(id) }));
+  const toolUseIds = (content: ContentBlock[]) => content.filter((block) => block.type === "tool_use").map((block) => (block as { id: string }).id);
+
+  it("sends consecutive Task calls in one response and gives each handler its own result", async () => {
+    const seen = { results: {} as Record<string, unknown>, guards: {} as Record<string, unknown> };
+    const uses = ["task-a", "task-b", "task-c"].map((id) => taskUse(id));
+    const sdk = claudeCode(uses, seen);
+    const { runtime } = create(sdk, { toolWaitMs: 5_000, requestTimeoutMs: 5_000 });
+    const s = session();
+    const first = await runtime.handle(request(s, "start three", { tools: [task] }));
+    expect(first.response.stop_reason).toBe("tool_use");
+    expect(toolUseIds(first.response.content)).toEqual(["task-a", "task-b", "task-c"]);
+    expect(first.response.content).toContainEqual({ type: "tool_use", id: "task-b", name: "Task", input: { description: "task-b", prompt: "run task-b" } });
+    expect(first.pendingToolIds).toEqual(["task-a", "task-b", "task-c"]);
+    expect(first.events).toContainEqual(expect.objectContaining({ type: "task_batch", data: { toolUseIds: ["task-a", "task-b", "task-c"] } }));
+
+    // Droid returns all three together, in its own order.
+    const done = await runtime.handle(request(s, resultsFor(["task-c", "task-a", "task-b"]), { tools: [task] }));
+    expect(done.response).toMatchObject({ stop_reason: "end_turn", content: [{ type: "text", text: "all reported" }] });
+    for (const id of ["task-a", "task-b", "task-c"]) {
+      expect(seen.guards[id]).toEqual({});
+      expect(seen.results[id]).toMatchObject({ isError: false, content: [{ type: "text", text: `result of ${id}` }] });
+    }
+    expect(done.pendingToolIds).toEqual([]);
+  });
+
+  it("asks Droid for all of the batch's results together", async () => {
+    const seen = { results: {} as Record<string, unknown>, guards: {} as Record<string, unknown> };
+    const { runtime } = create(claudeCode([taskUse("task-a"), taskUse("task-b")], seen), { toolWaitMs: 5_000, requestTimeoutMs: 5_000 });
+    const s = session();
+    await runtime.handle(request(s, "start two", { tools: [task] }));
+    await expect(runtime.handle(request(s, resultsFor(["task-a"]), { tools: [task] }))).rejects.toMatchObject({ code: "incomplete_tool_results", extra: { missing_tool_use_ids: ["task-b"] } });
+  });
+
+  it("stops the batch at another tool or at an input its handler would reject, keeping their order", async () => {
+    const seen = { results: {} as Record<string, unknown>, guards: {} as Record<string, unknown> };
+    const uses = [taskUse("task-a"), { id: "cmd", name: "mcp__droid__TaskOutput", input: {} }, taskUse("task-b"), taskUse("task-bad", { description: "no prompt" }), taskUse("task-c")];
+    const { runtime } = create(claudeCode(uses, seen), { toolWaitMs: 5_000, requestTimeoutMs: 5_000 });
+    const s = session();
+    const tools = [task, tool];
+    const first = await runtime.handle(request(s, "mixed", { tools }));
+    expect(toolUseIds(first.response.content)).toEqual(["task-a"]);
+    const second = await runtime.handle(request(s, resultsFor(["task-a"]), { tools }));
+    expect(toolUseIds(second.response.content)).toEqual(["cmd"]);
+    const third = await runtime.handle(request(s, resultsFor(["cmd"]), { tools }));
+    // task-bad fails validation, so it never goes to Droid with task-b.
+    expect(toolUseIds(third.response.content)).toEqual(["task-b"]);
+  });
+
+  it("returns Droid's own cancellations to batched Tasks rather than a denial", async () => {
+    const seen = { results: {} as Record<string, unknown>, guards: {} as Record<string, unknown> };
+    const { runtime } = create(claudeCode([taskUse("task-a"), taskUse("task-b")], seen), { toolWaitMs: 5_000, requestTimeoutMs: 5_000 });
+    const s = session();
+    await runtime.handle(request(s, "start two", { tools: [task] }));
+    const cancelled = (id: string): ContentBlock => ({ type: "tool_result", tool_use_id: id, content: "Error: Tool execution cancelled by user", is_error: true });
+    await runtime.handle(request(s, [cancelled("task-a"), cancelled("task-b")], { tools: [task] }));
+    expect(seen.guards["task-b"]).toEqual({});
+    for (const id of ["task-a", "task-b"]) {
+      expect(seen.results[id]).toMatchObject({ isError: true, content: [{ type: "text", text: "Error: Tool execution cancelled by user" }, { type: "text", text: expect.stringContaining("did not run") }] });
+    }
+  });
+
+  it("leaves other Droid tools one per response", async () => {
+    const seen = { results: {} as Record<string, unknown>, guards: {} as Record<string, unknown> };
+    const uses = ["cmd-a", "cmd-b"].map((id) => ({ id, name: "mcp__droid__TaskOutput", input: {} }));
+    const { runtime } = create(claudeCode(uses, seen), { toolWaitMs: 5_000, requestTimeoutMs: 5_000 });
+    const s = session();
+    const first = await runtime.handle(request(s, "two lookups", { tools: [tool] }));
+    expect(toolUseIds(first.response.content)).toEqual(["cmd-a"]);
+    const second = await runtime.handle(request(s, resultsFor(["cmd-a"]), { tools: [tool] }));
+    expect(toolUseIds(second.response.content)).toEqual(["cmd-b"]);
+  });
+});

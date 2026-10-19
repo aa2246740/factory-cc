@@ -193,6 +193,8 @@ npm run configure-hooks -- --hooks "$PROJECT/.factory/hooks.json" --config "$PWD
 
 `BRIDGE_REQUEST_TIMEOUT_MS`（默认 10 分钟）现在是**空闲**期限，不再是单次响应的绝对期限：每条 SDK 消息、文本增量或工具事件都会重新计时，只有持续没有进展才超时；等待控制页审批期间暂停计时，审批自己的期限是 `BRIDGE_APPROVAL_TIMEOUT_MS`（默认 30 分钟）。另有绝对上限 `BRIDGE_TURN_MAX_MS`（默认 2 小时）。超时先调用 SDK `interrupt()`：5 秒内收尾则会话回到 IDLE 并可续接，否则标记 FAILED 并终止进程。流式响应立即发送 `message_start`，之后每 15 秒发送一次 `event: ping`。注意：原生工具若长时间既不输出也不结束（例如跑超过 10 分钟的测试），同样算空闲，需要时调大该值。会话停在外部工具往返上（Droid 在跑长工具，或 Mission worker 在运行）时不会因空闲被停止，只受单个工具 8 小时的绝对上限约束（`BRIDGE_TOOL_WAIT_MS`）。只有名额用尽（`BRIDGE_MAX_SESSIONS`）、新请求本会得到 429 时，Bridge 才回收一个会话，并且它必须同时满足：停在工具上且没有请求在处理；自上次状态更新起空闲至少 `BRIDGE_TOOL_WAIT_TIMEOUT_MS`（默认 30 分钟）；没有绑定存活的 Factory 主机；不在等 `StartMissionRun`、`ProposeMission` 或 `Task`。符合条件的取最久未活动的一个，标记为中断；没有符合条件的就照常返回 429。被回收、被取消或 Bridge 重启后的会话，其工具调用不会重放：Droid 之后再回传同一个结果得到 409，新的文本消息则新建会话，并把此前历史作为参考导入。官方结束事件会提前释放会话，无需等计时器。
 
+Mission worker 用 `EndFeatureRun` 报告 feature 完成后，Droid 立即结束这个 worker，并把这次调用记为取消，不会再把结果回传。这样 worker 的 Claude Code 进程就会一直等着。所以会话只剩 `EndFeatureRun` 待返回、没有请求在处理、没有待决审批、也没有绑定存活的 Factory 主机时，过 `BRIDGE_WORKER_END_GRACE_MS`（默认 2 分钟）就释放进程，日志记为 `mission_worker_released`。`EndFeatureRun` 失败时 Droid 会在几秒内回传错误，worker 继续工作，计时随之取消。之后若 Droid 仍回传那个结果，得到的是和其它中断会话一样的 409。
+
 日志在数据目录的 `logs/`，文件权限 `0600`，单个文件超过 50 MB 时轮转为 `.1`（只保留一代）。请求日志默认只记录请求体的 SHA-256、字节数和工具名，不含消息或提示词；需要完整请求体（已脱敏）时设置 `BRIDGE_LOG_BODIES=1`。
 
 在目标项目安装自定义 Agent 生成入口：
@@ -220,6 +222,7 @@ npm run generate-droid -- --cwd "$PROJECT" --install-command
 - 进程重启后，尚未完成的 MCP 工具往返返回 409。没有 native session 的历史导入仅作为参考重建，不等于完整恢复 Claude Code 的内部状态。
 - 原生 PreToolUse 每次检查当前 Factory 工具权限，即使启用 bypass。只广告 Read 就不能用 Bash/Write；省略 tools、空列表或 tool_choice:none 不授予工具权限。工具权限可在同一会话增减；原生 Agent/Skill 不得绕开 Factory 的 Task/Skill。Spec 通过已认证 hooks 锁定只读，只有对应 ExitSpecMode 成功回执才解锁。
 - 对 Droid 传入的工具，仅明确的文件/命令等价工具由 Claude Code 执行：Read/Edit/Write/Create/LS/Grep/Glob/Execute/Bash/MultiEdit/NotebookEdit。Factory `Skill`、`Task`、`ToolSearch`、`ExitSpecMode`、Mission 控制及其它已声明的插件工具均经 `mcp__droid__*` 交回 Droid，保留 Factory 的 skill 注册表和任务 ID；它们与 Claude 原生 Skill/Agent 分开。
+- Claude Code 依次调用 `mcp__droid__*` 工具，因为它们都不是只读工具。原生 Agent 工具会同时启动子代理，Droid 也会并发执行同一响应里的多个 Task，所以 Bridge 在调用到 Task 时先等这条消息流完，再把它后面紧挨着的 Task 一起交给 Droid；中间夹着其它工具、或输入会被处理器拒绝的 Task，批次就到此为止。每个 Task 仍各自经过自己的处理器，按原顺序拿到 Droid 为它返回的结果。Droid 对一批 Task 先回“在后台启动”，子代理完成后再把各自的输出作为新消息送回，这是 Droid 自己的并行方式。turns 日志的 `task_batch` 事件列出一起交出的调用 ID。Task 不会因此被标为只读，Droid 的审批也不变。
 - Factory 提供非空 `system` 时完整保留其角色、skills 和流程指令，不从 header 猜测角色或追加角色模板；`X-Bridge-Role` 仅作为模型配置/session 标签，真实 Task 子 agent 会继承 orchestrator header。只有缺少 host 指令时才用角色辅助，orchestrator 辅助还要求实际存在 Mission 控制工具，`Task` 本身不够。生产 SDK 路径不合成 `StartMissionRun`，也不从残留目录复制 Mission 账本。
 
 ## 当前验证范围

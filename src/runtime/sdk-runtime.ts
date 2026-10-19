@@ -81,7 +81,7 @@ interface PendingTurn {
   resolve(turn: RuntimeTurn): void;
   reject(error: Error): void;
 }
-interface DroidCall { id: string; name: string; input: unknown; mcpName?: string }
+interface DroidCall { id: string; name: string; input: unknown; mcpName?: string; messageId?: string }
 interface HandlerArrival {
   name: string;
   mcpName?: string;
@@ -132,6 +132,12 @@ interface LiveSdk {
   blocks: ContentBlock[];
   pending: Map<string, DroidCall>;
   candidates: Map<string, DroidCall>;
+  /** The main thread's assistant message being streamed: its tool_use order and whether it has ended. */
+  assistantTurn?: { id: string; toolUses: Array<{ id: string; name: string }>; seen: Set<string>; stopped: boolean };
+  /** Task batches waiting for their assistant message to finish streaming. */
+  batchChecks: Set<() => void>;
+  /** Task calls already sent to Droid with an earlier Task of the same message, before their own handler. */
+  prefetched: Set<string>;
   handlerArrivals: Set<HandlerArrival>;
   retiredCandidates: Set<string>;
   claimedHandlers: Set<string>;
@@ -189,6 +195,8 @@ const CANCELLED_TURN_DENIAL = "BRIDGE_USER_CANCELLED: The user cancelled the pre
  * subagents at once has taken over 10s. Until it answers, no prompt is sent.
  */
 const SDK_START_TIMEOUT_MS = 60_000;
+/** Longest a Task waits for the rest of its message before it goes to Droid alone. */
+const TASK_BATCH_WAIT_MS = 30_000;
 
 /** Claude Code had not started in time; its account was never examined. */
 class SdkStartTimeout extends BridgeError {
@@ -490,7 +498,7 @@ export class SdkRuntime implements BridgeRuntime {
     return {
       mailbox: new ToolMailbox(), inputs: new InputQueue(), events: [], busy: false, active: false,
       sdkSessionId, outbox: [], usage: new UsageLedger(), streamed: "", blocks: [], pending: new Map(),
-      candidates: new Map(), handlerArrivals: new Set(), retiredCandidates: new Set(),
+      candidates: new Map(), handlerArrivals: new Set(), retiredCandidates: new Set(), batchChecks: new Set(), prefetched: new Set(),
       claimedHandlers: new Set(), resultFingerprints: new Map(), sentUserTurns: 0,
       hostResultConsumptions: new Map(), hostCompletionFingerprints: new Map(), approvals: new Set(),
       starting: false, queryEpoch: 0, lastTouched: Date.now(), backgroundTasks: new Set(),
@@ -682,12 +690,26 @@ export class SdkRuntime implements BridgeRuntime {
           if (live.terminal) throw live.terminal;
           if (live.retiredCandidates.has(call.id)) throw new BridgeError(409, "sdk_tool_rejected", "The native SDK already completed this tool invocation");
           if (!live.catalog?.has(original)) throw new BridgeError(409, "tool_not_advertised", `Droid no longer advertises ${original}`);
-          live.mailbox.registerCall({ callId: call.id, originalName: original, mcpName: mcpName ?? names.toMcp(original), input: call.input });
-          live.pending.set(call.id, call);
+          // Sent to Droid with an earlier Task of its message; Droid already ran it alongside.
+          const prefetched = live.prefetched.delete(call.id);
+          if (!prefetched) {
+            live.mailbox.registerCall({ callId: call.id, originalName: original, mcpName: mcpName ?? names.toMcp(original), input: call.input });
+            live.pending.set(call.id, call);
+          }
           let consumed!: () => void;
           live.hostResultConsumptions.set(call.id, { promise: new Promise<void>((resolve) => { consumed = resolve; }), resolve: () => consumed() });
+          const batch = !prefetched && original === "Task" ? await this.taskBatch(live, call) : [];
+          if (live.terminal) throw live.terminal;
           const waiting = live.mailbox.wait(call.id, this.config.toolWaitMs);
-          this.publish(live, this.makeTurn(live, [{ type: "tool_use", id: call.id, name: original, input: call.input as Json }], "tool_use"));
+          if (!prefetched) {
+            for (const sibling of batch) {
+              live.mailbox.registerCall({ callId: sibling.id, originalName: sibling.name, mcpName: sibling.mcpName ?? names.toMcp(sibling.name), input: sibling.input });
+              live.pending.set(sibling.id, sibling);
+              live.prefetched.add(sibling.id);
+            }
+            if (batch.length) live.events.push({ at: now(), type: "task_batch", data: { toolUseIds: [call.id, ...batch.map((sibling) => sibling.id)] } });
+            this.publish(live, this.makeTurn(live, [call, ...batch].map((item) => ({ type: "tool_use", id: item.id, name: item.name, input: item.input as Json })), "tool_use"));
+          }
           const result = await waiting;
           const response = { content: mcpContent(result.content), isError: Boolean(result.isError) };
           live.hostResultConsumptions.get(call.id)?.resolve();
@@ -759,12 +781,14 @@ export class SdkRuntime implements BridgeRuntime {
     options.hooks = { PreToolUse: [{ hooks: [async (hook: { tool_name?: string; tool_use_id?: string }) => {
         if (live.queryEpoch !== epoch) return { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: "This native query has been retired." } };
         if (live.terminal) return { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: "The host session has ended." } };
-        if (live.cancelledTurn) {
+        // Droid already ran a batched Task; its handler must return what Droid reported.
+        const prefetched = hook.tool_use_id !== undefined && live.prefetched.has(hook.tool_use_id);
+        if (live.cancelledTurn && !prefetched) {
           live.events.push({ at: now(), type: "cancelled_turn_tool_denied", data: { toolName: hook.tool_name, toolUseId: hook.tool_use_id } });
           return { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: CANCELLED_TURN_DENIAL } };
         }
         if (this.config.desktopProfile && hook.tool_name && !hook.tool_name.startsWith("mcp__droid__") && !["Read", "Glob", "Grep", "LS"].includes(hook.tool_name)) return { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: DESKTOP_APPROVAL_DENIAL } };
-        const denial = toolAccessDenial(live, hook.tool_name, this.control?.factoryPermissionMode?.(input.session.bridgeSessionId));
+        const denial = prefetched ? undefined : toolAccessDenial(live, hook.tool_name, this.control?.factoryPermissionMode?.(input.session.bridgeSessionId));
         if (!denial) return {};
         const data = { sessionId: input.session.bridgeSessionId, sdkSessionId: live.sdkSessionId, toolName: hook.tool_name, toolUseId: hook.tool_use_id, reason: denial };
         live.events.push({ at: now(), type: "host_tool_access_denied", data });
@@ -988,6 +1012,69 @@ export class SdkRuntime implements BridgeRuntime {
     }
   }
 
+  /**
+   * Claude Code runs Droid's MCP tools one after another, since none is read-only.
+   * Its own Agent tool starts subagents together, and Droid runs the Task calls
+   * of one response concurrently. So when a Task is invoked, wait for its message
+   * to finish streaming, then hand Droid the Task calls that follow it there
+   * without another tool between them. Each still reaches Claude Code through its
+   * own handler, in order, and gets the result Droid returned for it. A call this
+   * session would refuse, or whose input its handler would reject, ends the batch.
+   */
+  private taskBatch(live: LiveSdk, first: DroidCall): Promise<DroidCall[]> {
+    return new Promise((resolve) => {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const finish = (batch: DroidCall[]): void => {
+        if (timer) clearTimeout(timer);
+        live.batchChecks.delete(check);
+        resolve(batch);
+      };
+      const check = (): void => {
+        const turn = live.assistantTurn;
+        if (live.terminal || !first.messageId || turn?.id !== first.messageId) return finish([]);
+        if (!turn.stopped) return;
+        const index = turn.toolUses.findIndex((item) => item.id === first.id);
+        if (index < 0) return finish([]);
+        const batch: DroidCall[] = [];
+        for (const use of turn.toolUses.slice(index + 1)) {
+          if (!isDroidMcpName(use.name) || live.names?.toOriginal(use.name.replace(/^mcp__droid__/, "")) !== "Task") break;
+          // Each block also arrives as its own assistant message; wait for this one's input.
+          if (!turn.seen.has(use.id)) return;
+          const call = live.candidates.get(use.id);
+          if (!call || !this.mayPrefetch(live, call)) break;
+          batch.push(call);
+        }
+        finish(batch);
+      };
+      timer = setTimeout(() => finish([]), TASK_BATCH_WAIT_MS);
+      live.batchChecks.add(check);
+      check();
+    });
+  }
+
+  private mayPrefetch(live: LiveSdk, call: DroidCall): boolean {
+    return !live.cancelledTurn && !live.claimedHandlers.has(call.id) && !live.mailbox.hasCall(call.id)
+      && Boolean(live.catalog?.accepts(call.name, call.input))
+      && !toolAccessDenial(live, `mcp__droid__${call.mcpName}`, this.control?.factoryPermissionMode?.(live.current?.session.bridgeSessionId ?? ""));
+  }
+
+  private trackAssistantTurn(live: LiveSdk, message: Record<string, unknown>): void {
+    const event = message.event as { type?: string; message?: { id?: unknown }; content_block?: { type?: string; id?: unknown; name?: unknown } } | undefined;
+    if (event?.type === "message_start") {
+      live.assistantTurn = typeof event.message?.id === "string" ? { id: event.message.id, toolUses: [], seen: new Set(), stopped: false } : undefined;
+    } else if (event?.type === "content_block_start" && event.content_block?.type === "tool_use") {
+      const { id, name } = event.content_block;
+      if (live.assistantTurn && typeof id === "string" && typeof name === "string") live.assistantTurn.toolUses.push({ id, name });
+    } else if (event?.type === "message_stop" && live.assistantTurn) {
+      live.assistantTurn.stopped = true;
+      this.settleBatches(live);
+    }
+  }
+
+  private settleBatches(live: LiveSdk): void {
+    for (const check of [...live.batchChecks]) check();
+  }
+
   private retireNativeToolResults(live: LiveSdk, message: Record<string, unknown>): void {
     const body = message.message as { content?: unknown } | undefined;
     if (!Array.isArray(body?.content)) return;
@@ -996,6 +1083,7 @@ export class SdkRuntime implements BridgeRuntime {
       const id = block.tool_use_id;
       live.candidates.delete(id);
       live.retiredCandidates.add(id);
+      if (live.prefetched.delete(id)) live.events.push({ at: now(), type: "task_batch_unclaimed", data: { toolUseId: id } });
       for (const arrival of [...live.handlerArrivals]) {
         if (arrival.callId === id) arrival.reject(new BridgeError(409, "sdk_tool_rejected", "The native SDK rejected this tool invocation before handoff"));
       }
@@ -1038,6 +1126,7 @@ export class SdkRuntime implements BridgeRuntime {
         if (message.type === "system" && message.subtype === "task_notification" && typeof message.task_id === "string") live.backgroundTasks.delete(message.task_id);
         if (message.type === "stream_event") {
           if (message.parent_tool_use_id) continue;
+          this.trackAssistantTurn(live, message);
           // Separate text blocks (before and after a tool call, say) would otherwise
           // run together in the one text stream. Deltas of one block stay joined.
           if (startsTextBlock(message) && live.streamed) live.textBreak = true;
@@ -1053,6 +1142,8 @@ export class SdkRuntime implements BridgeRuntime {
         if (message.type === "user") this.retireNativeToolResults(live, message);
         if (message.type === "assistant") {
           const uses = extractToolUses(message);
+          const streaming = live.assistantTurn;
+          if (!message.parent_tool_use_id && streaming && streaming.id === messageIdOf(message)) for (const use of uses) streaming.seen.add(use.id);
           for (const use of uses) {
             if (isDroidMcpName(use.name)) {
               // The official MCP CallToolRequest parser drops this root key.
@@ -1069,7 +1160,7 @@ export class SdkRuntime implements BridgeRuntime {
               const published = live.mailbox.getCall(use.id);
               if (published && (published.originalName !== original || canonicalJson(published.input) !== canonicalJson(use.input))) throw new BridgeError(409, "conflicting_sdk_tool", "SDK reused a published tool id for different arguments");
               if (!live.claimedHandlers.has(use.id) && !live.retiredCandidates.has(use.id)) {
-                const call = { ...use, name: original, mcpName: bare };
+                const call = { ...use, name: original, mcpName: bare, messageId: messageIdOf(message) };
                 const previous = live.candidates.get(use.id);
                 if (previous && (previous.name !== call.name || canonicalJson(previous.input) !== canonicalJson(call.input))) throw new BridgeError(409, "conflicting_sdk_tool", "SDK reused a tool id for different arguments");
                 live.candidates.set(use.id, call);
@@ -1085,6 +1176,7 @@ export class SdkRuntime implements BridgeRuntime {
             if (!live.streamed) live.sink?.textDelta(text);
           }
           this.matchHandlers(live);
+          this.settleBatches(live);
         }
         if (message.type === "result") {
           if (message.parent_tool_use_id) continue;
@@ -1105,6 +1197,8 @@ export class SdkRuntime implements BridgeRuntime {
           if (live.pending.size || live.handlerArrivals.size) throw new BridgeError(502, "sdk_unfinished_tools", "SDK ended a turn while Droid tools were unresolved");
           for (const id of live.candidates.keys()) live.retiredCandidates.add(id);
           live.candidates.clear();
+          for (const id of live.prefetched) live.events.push({ at: now(), type: "task_batch_unclaimed", data: { toolUseId: id } });
+          live.prefetched.clear();
           const fallback = extractText(message);
           if (!live.streamed && !live.blocks.length && fallback) live.blocks.push({ type: "text", text: fallback });
           const cancelled = live.cancelledTurn;
@@ -1219,6 +1313,8 @@ export class SdkRuntime implements BridgeRuntime {
     live.hostResultConsumptions.clear();
     for (const arrival of [...live.handlerArrivals]) arrival.reject(error);
     live.candidates.clear();
+    live.prefetched.clear();
+    this.settleBatches(live);
     live.abort?.abort();
     // Do not await interrupt before close: a dead subprocess must not delay cancellation.
     try { void live.query?.interrupt?.().catch(() => undefined); } catch { /* best effort */ }
@@ -1316,6 +1412,10 @@ function extractText(message: Record<string, unknown>): string {
   if (typeof message.result === "string") return message.result;
   const content = (message.message as { content?: ContentBlock[] } | undefined)?.content ?? [];
   return content.filter((block) => block.type === "text").map((block) => (block as { text?: string }).text ?? "").join("\n\n");
+}
+function messageIdOf(message: Record<string, unknown>): string | undefined {
+  const id = (message.message as { id?: unknown } | undefined)?.id;
+  return typeof id === "string" ? id : undefined;
 }
 function startsTextBlock(message: Record<string, unknown>): boolean {
   const event = message.event as { type?: string; content_block?: { type?: string } } | undefined;
