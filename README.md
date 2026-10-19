@@ -1,38 +1,40 @@
 # Relay Bridge
 
-把 Factory Droid 的 BYOK 自定义模型接到**官方 Claude Agent SDK 和未修改的 Claude Code**。Claude Code 保留原生 system prompt、内置工具和会话；Droid 通过命名空间 MCP 执行自己的 skills、任务、插件工具与 Mission 生命周期操作。
+English | [简体中文](README.zh-CN.md)
 
-`sdk` 模式为每个会话保持一个持续的 streaming-input `query()`，后续只追加新输入；工具结果交回原 MCP callback。`BRIDGE_AUTH` 只能是 `byok`（server 默认）、`claude-config`（local 默认）、`subscription`、`anthropic-api`、`cloud`、`inherit`。Bridge 按这个声明组装 Claude Code 的环境，对不上就拒绝启动，错误里只有变量名。`subscription`、`anthropic-api`、`cloud` 都还没有用真实账号验证过。第一次先跑 `npm run doctor -- --auth subscription`，这条检查不发送 prompt。
+Connect Factory Droid's BYOK custom models to the **official Claude Agent SDK and unmodified Claude Code**. Claude Code retains its native system prompt, built-in tools, and sessions; Droid executes its own skills, tasks, plugin tools, and Mission lifecycle operations via namespaced MCP.
 
-这是借鉴 T3 的 SDK 集成方式，不是官方支持、授权或账号状态保证。GLM 等第三方兼容端点的结果不能代表 Claude 模型。见 [接入说明](docs/T3-ALIGNMENT.md) 和 [限制](docs/LIMITATIONS.md)。
+In `sdk` mode, a persistent streaming-input `query()` is maintained for each session, with subsequent turns appending only new inputs; tool results are returned directly to the original MCP callback. `BRIDGE_AUTH` must be one of `byok` (server default), `claude-config` (local default), `subscription`, `anthropic-api`, `cloud`, or `inherit`. Bridge assembles the Claude Code environment according to this declaration and refuses to start on any mismatch, reporting only variable names in errors. `subscription`, `anthropic-api`, and `cloud` have not yet been verified against live accounts. Run `npm run doctor -- --auth subscription` first; this check does not send any prompt.
+
+This is an SDK integration approach inspired by T3, not official support, authorization, or an account-status guarantee. Results from third-party compatible endpoints such as GLM do not represent Claude models. See [Integration Alignment](docs/T3-ALIGNMENT.md) and [Limitations](docs/LIMITATIONS.md).
 
 ## Droid desktop (always-on)
 
-在本仓库运行一次，需 Node.js 22+ 和已有可用的 Claude Code 配置：
+Run once in this repository (requires Node.js 22+ and an existing working Claude Code configuration):
 
 ```bash
 npm run desktop -- install
 ```
 
-安装器离线读取 `~/.claude/settings.json`，校验现有 `claude-config` 允许名单，不执行 `apiKeyHelper`，不联系模型服务。它构建 `dist/index.js`，安装登录后常驻的 Bridge，并把 Claude Code 模型合并到 Droid desktop 共用的模型菜单。端口默认 `127.0.0.1:18787`；要换端口，用 `npm run desktop -- install --port 19876`。端口占用时直接报错，不扫描其他端口或进程。
+The installer reads `~/.claude/settings.json` offline, validates the existing `claude-config` allowlist, does not execute `apiKeyHelper`, and does not contact model services. It builds `dist/index.js`, installs an always-on Bridge that runs after login, and merges Claude Code models into the shared model menu used by Droid desktop. The default address is `127.0.0.1:18787`; to change the port, run `npm run desktop -- install --port 19876`. If the port is in use, it fails immediately without scanning other ports or processes.
 
-安装会修改或创建这些路径，并在命令输出中列出绝对路径：
+Installation modifies or creates the following paths and prints their absolute paths in the command output:
 
-- `~/Library/LaunchAgents/ai.factory-cc.bridge.plist`，运行安装时的 Node 和当前仓库的 `dist/index.js`，保存当时的 `HOME`、`PATH`，不保存凭证或上游 helper 命令。
-- `~/Library/Application Support/factory-cc/`，权限 `0700`；其中 `client-token`、`admin-token`、`hook-token`、`installation.json`、`models.env`、`stdout.log`、`stderr.log` 为私有文件，token 权限 `0600`；`bridge-data/` 保存会话和运行日志。
-- `~/.factory/settings.json`，以及首次备份 `settings.json.relay-bridge.bak` 或原文件不存在时的 `settings.json.relay-bridge.bak.absent`，还有所有权元数据 `settings.json.relay-bridge.models.json`。模型条目的 `apiKey` 是 Bridge 的本地 client token（文件权限 0600），只能访问这台机器 127.0.0.1 上的 Bridge，不是模型供应商的密钥。这里不用 `apiKeyHelper`：Droid 会从 Mission worker 和 validator 加载的运行时设置中删除可执行的凭证命令（日志 `Stripped executable custom-model credential commands`），用 helper 时它们会全部 401。Mission 启动时会把这些条目连同 token 快照到该 Mission 目录的 `runtime-custom-models.json`（0600）。
+- `~/Library/LaunchAgents/ai.factory-cc.bridge.plist`, which runs the Node binary used at install time and `dist/index.js` from the current repository, saving the install-time `HOME` and `PATH` without storing credentials or upstream helper commands.
+- `~/Library/Application Support/factory-cc/` with `0700` permissions; inside it, `client-token`, `admin-token`, `hook-token`, `installation.json`, `models.env`, `stdout.log`, and `stderr.log` are private files with token permissions set to `0600`; `bridge-data/` stores sessions and runtime logs.
+- `~/.factory/settings.json`, along with the initial backup `settings.json.relay-bridge.bak` (or `settings.json.relay-bridge.bak.absent` if the original file did not exist) and ownership metadata `settings.json.relay-bridge.models.json`. Each model entry's `apiKey` is Bridge's local client token (file mode `0600`), which can only access the Bridge on `127.0.0.1` on this machine—it is not a model provider API key. `apiKeyHelper` is not used here: Droid strips executable credential commands from runtime settings loaded by Mission workers and validators (logged as `Stripped executable custom-model credential commands`), which would cause all of them to fail with 401 when using a helper. When a Mission starts, Droid snapshots these entries along with the token into `runtime-custom-models.json` (`0600`) inside that Mission's directory.
 
-不安装用户级或项目 hooks。工作目录取自最新一段 Droid `User system info` system-reminder 里的 `% pwd`。Droid 通常把它放在首条 user 消息开头；对话中换模型时，会把新的一段放到新问题之前；压缩后，它跟在 Droid 的摘要后面。只看 user 消息开头连续的 system-reminder，不看用户正文里粘贴的内容和工具结果。缺失、无效、根目录或 Bridge 状态目录会返回 400，请先在 Droid 打开项目文件夹；同一会话换目录会返回 409。不允许任何工具的请求（例如 Droid 压缩时生成摘要的请求）不需要项目目录，在 Bridge 状态目录下的空目录 `auxiliary-cwd` 运行，那里所有工具都会被拒绝。此来源限制依赖 Droid 的请求结构，不是对持有本地 token 的任意 API 客户端的身份认证。
+No user-level or project hooks are installed. The working directory is extracted from `% pwd` in the latest Droid `User system info` system-reminder. Droid typically places this at the start of the first user message; when switching models mid-conversation, it places a new block before the new question; after compaction, it follows Droid's summary. Only contiguous system-reminders at the very beginning of a user message are inspected—content pasted into the user body and tool results are ignored. A missing, invalid, root, or Bridge state directory returns 400 (open a project folder in Droid first); changing directories within the same session returns 409. Requests that disallow all tools (such as Droid's summary-generation request during compaction) do not require a project directory and run in an empty `auxiliary-cwd` directory under the Bridge state directory, where all tools are denied. This origin restriction relies on Droid's request structure and is not identity authentication against arbitrary API clients holding the local token.
 
-Droid desktop 的请求不带对话 ID。两个对话的已完成记录完全相同时（同一项目、同一角色和 thinking 配置，开场和回复一字不差），由其中最早的空闲会话继续，优先当前所选模型；继续后两者自然分开。正在生成、挂着工具或已取消的会话不会被接管。对话中换模型、压缩或在 Droid 中续接旧对话后，前缀对不上，Bridge 会新开 Claude Code 会话并把之前的历史作为参考导入：内容记得，但之前的工具细节以文字形式出现，也用不上原会话的提示缓存。
+Droid desktop requests do not carry a conversation ID. When two conversations have identical completed histories (same project, same role and thinking configuration, and word-for-word identical opening and replies), the earliest idle session continues, preferring the currently selected model; once continued, the two naturally diverge. Sessions that are currently generating, waiting on a tool, or canceled are never taken over. After switching models mid-conversation, compacting, or resuming an old conversation in Droid, the prefix no longer matches, so Bridge starts a new Claude Code session and imports the prior history as reference: the content is remembered, but prior tool details appear as text and the original session's prompt cache cannot be reused.
 
-Mission：编排模型跟随当前对话所选的模型。worker 和 validator 用 Droid 的 Mission Models 设置（Worker model / Validator model），这是全局设置；Droid 在 Mission 启动时把它快照到该 Mission 目录的 `model-settings.json`。要让 worker、validator 也走 Claude Code，需要在那里选择 `Claude Code · …` 模型。
+Mission: the orchestrator model follows the model selected in the current conversation. Workers and validators use Droid's Mission Models settings (`Worker model` / `Validator model`), which are global settings; Droid snapshots them into `model-settings.json` in the Mission directory when the Mission starts. To route workers and validators through Claude Code as well, select a `Claude Code · …` model there.
 
-桌面 profile 固定 `ask`，保留 Claude Code preset、隔离设置和 MCP。写文件、执行命令、子 Agent 和规划审批走 Droid 广告的 `mcp__droid__*` 工具，由 Droid 自己应用 autonomy 和 spec mode。原生 Read/Glob/Grep/LS 仍受已有工具策略限制；如果需要原生审批，会立即拒绝并提示改走 Droid，不等待控制页。
+The desktop profile fixes permissions to `ask` while preserving the Claude Code preset, isolated settings, and MCP. Writing files, executing commands, sub-agents, and plan approvals go through the `mcp__droid__*` tools advertised by Droid, letting Droid apply its own autonomy and spec mode. Native `Read`/`Glob`/`Grep`/`LS` remain governed by the active tool policy; if a native approval would be required, it is rejected immediately with a prompt to route through Droid instead of waiting on the control page.
 
-默认菜单跟随 `~/.claude/settings.json` 的别名映射（opus、sonnet、haiku、fable 各自指向的模型）。只想在 Droid 里固定几个模型、又不改 Claude Code 自己的设置时，用 `--models` 写实际模型 ID，例如 `npm run desktop -- install --models claude-opus-5-5,claude-sonnet-5-5,claude-haiku-5-5`，菜单显示为 `Claude Code · Opus 5.5 (claude-opus-5-5)` 等。已安装的可用 `npm run desktop -- restart --models ...` 改，之后不带 `--models` 的 restart 沿用这份列表。模型 ID 原样交给 Claude Code，网关不提供该模型时第一条消息会报错。Claude Code 自己的后台小任务仍按其设置里的 haiku 映射。
+By default, the menu follows the alias mappings in `~/.claude/settings.json` (the models pointed to by `opus`, `sonnet`, `haiku`, and `fable`). If you want to pin specific models in Droid without changing Claude Code's own settings, pass actual model IDs via `--models`, e.g., `npm run desktop -- install --models claude-opus-5-5,claude-sonnet-5-5,claude-haiku-5-5`, which displays menu items such as `Claude Code · Opus 5.5 (claude-opus-5-5)`. An existing installation can be updated via `npm run desktop -- restart --models ...`, and subsequent `restart` runs without `--models` will keep that list. Model IDs are passed as-is to Claude Code; if the upstream gateway does not serve a model, the first message will return an error. Claude Code's own small background tasks still follow the `haiku` mapping in its settings.
 
-编辑 `~/.claude/settings.json` 后，重启 Bridge 以重新读取认证 helper 和模型映射、同步菜单；运行中的对话会中断。安装器不会把当前 shell 的凭证或其它环境变量复制给 launchd。
+After editing `~/.claude/settings.json`, restart Bridge to reload the auth helper and model mappings and synchronize the menu; active conversations will be interrupted. The installer does not copy credentials or other environment variables from your current shell into `launchd`.
 
 ```bash
 npm run desktop -- status
@@ -40,90 +42,90 @@ npm run desktop -- restart
 npm run desktop -- uninstall
 ```
 
-卸载先停止服务，撤销自己拥有的模型和选择，保留安装后用户添加或修改的其它设置，再删除 plist 和自己的状态目录，包括 Bridge 会话与日志。未改动的 settings 会还原首次备份。
+Uninstalling stops the service first, removes only the models and selections owned by Bridge while preserving any other settings added or modified by the user after installation, and then deletes the plist and its own state directory, including Bridge sessions and logs. If settings were otherwise untouched, the initial backup is restored.
 
-当前仓库位于外置卷 `/Volumes/Workspace`。该卷未挂载时服务无法启动；Node 安装路径也必须继续存在。移动或归档这个 worktree 前先卸载，再从固定位置重新安装。`status` 会报告 plist、launchd、仓库入口和本端口 `/healthz` 的情况；健康响应不证明上游认证或真实工具审批已通过。
+The current repository resides on an external volume (`/Volumes/Workspace`). The service cannot start when this volume is unmounted, and the Node installation path must also remain present. Before moving or archiving this worktree, run `uninstall` first and then reinstall from a permanent location. `status` reports the state of the plist, `launchd`, the repository entrypoint, and `/healthz` on the configured port; a healthy response does not prove upstream authentication or live tool approvals have passed.
 
-离线测试没有验证真实桌面流程。安装后请在 Droid desktop 刷新或重启，确认 Claude Code 模型出现；在两个不同项目分别询问当前目录，核对各自路径；用一次文件编辑和命令运行核对 Droid 的审批 UI；在 spec mode 确认未批准前不能写入或执行，并检查退出 spec 后才执行。最后修改模型映射并运行 restart，检查菜单同步。这些 live checks 会调用你自己的模型配置，请由你在本机执行。
+Offline tests do not verify the live desktop workflow. After installation, refresh or restart Droid desktop and confirm that the Claude Code models appear; ask for the current directory in two different projects and verify each path; perform a file edit and a command execution to verify Droid's approval UI; in spec mode, confirm that writing or executing is blocked before approval and only proceeds after exiting spec mode. Finally, modify a model mapping, run `restart`, and verify that the menu synchronizes. These live checks invoke your own model configuration and should be run locally by you.
 
-## 已有 Claude Code 和 Droid：直接启动
+## Existing Claude Code and Droid: Direct Launch
 
-需要 Node.js 22+。两个 CLI 不用重装；在本仓库运行：
+Requires Node.js 22+. Neither CLI needs to be reinstalled; run in this repository:
 
 ```bash
 npm ci
-npm run local -- /你的项目路径
+npm run local -- /path/to/your/project
 ```
 
-默认跟随你的 Claude Code（`--auth claude-config`）。如果你自己的 `claude` 已能正常使用，直接运行上面的命令。Bridge 只读 `$CLAUDE_CONFIG_DIR/settings.json`，未设置该变量时读 `~/.claude/settings.json`，带入认证 helper、上游地址、模型映射和允许的代理、CA 环境变量。shell 中同名的地址、模型或凭证配置与 settings 不一致时拒绝启动，错误只列变量名；代理和 CA 变量与 Claude Code 一样以 settings 为准。云路由请使用手工 `BRIDGE_AUTH=cloud`。
+By default, this follows your Claude Code configuration (`--auth claude-config`). If your `claude` CLI already works, simply run the command above. Bridge reads only `$CLAUDE_CONFIG_DIR/settings.json` (or `~/.claude/settings.json` when unset), importing the auth helper, upstream URL, model mappings, and allowed proxy and CA environment variables. If same-named URL, model, or credential variables in your shell conflict with `settings.json`, startup is refused and the error lists only the variable names; proxy and CA variables follow `settings.json` just like Claude Code. For cloud routing, use manual `BRIDGE_AUTH=cloud`.
 
-每个新启动的 Claude Code 进程，Bridge 都先等它通过 `accountInfo()` 报告账户，校验通过才发送 prompt。这一步要等进程启动完成；Mission 同时拉起多个 worker 和 Task 时曾超过 10 秒，所以最多等 60 秒（不超过 `BRIDGE_REQUEST_TIMEOUT_MS`）。到时仍未启动返回 503 `sdk_start_timeout`，可重试，不算认证结果，日志事件是 `sdk_start_timeout`；账户校验失败或不符才返回 401 `auth_mode_mismatch`。成功的 `auth_verified` 日志带 `startupMs`。
+For every newly spawned Claude Code process, Bridge waits for it to report its account via `accountInfo()` and verifies it before sending any prompt. This step waits for process startup to finish; because Mission runs launching multiple workers and Tasks concurrently have taken over 10 seconds, Bridge waits up to 60 seconds (capped by `BRIDGE_REQUEST_TIMEOUT_MS`). If it still has not started when the timeout expires, Bridge returns 503 `sdk_start_timeout` (retryable, not treated as an authentication failure, logged as `sdk_start_timeout`); only an account verification failure or mismatch returns 401 `auth_mode_mismatch`. Successful `auth_verified` log entries include `startupMs`.
 
-用户 hooks、permissions、MCP servers、plugins、CLAUDE.md 和其它环境变量不会带入 Droid 会话。Bridge 保留自己的审批和 MCP 隔离。settings 中的 `ANTHROPIC_AUTH_TOKEN`、`ANTHROPIC_API_KEY` 字面量会被丢弃；有 `apiKeyHelper` 时由 Claude Code 原样运行 helper，否则启动时隐藏输入，或用 `--key-env NAME` 指定你自己的环境变量。密钥和 helper 命令不落盘、不显示在摘要中。为避免读取存储的 token 来比较，同一个凭证名同时出现在 shell 和 settings 时也会拒绝；清除 shell 中该名字后，用另一个专用变量配合 `--key-env`。
+User hooks, permissions, MCP servers, plugins, `CLAUDE.md`, and other environment variables are not carried into Droid sessions. Bridge maintains its own approval flow and MCP isolation. Literal `ANTHROPIC_AUTH_TOKEN` and `ANTHROPIC_API_KEY` values in `settings.json` are discarded; when `apiKeyHelper` is configured, Claude Code runs the helper as-is, otherwise you will be prompted for hidden input at startup or can specify your own environment variable with `--key-env NAME`. Keys and helper commands are never written to disk or shown in summaries. To avoid reading stored tokens for comparison, startup is also refused if the same credential variable name appears in both the shell and `settings.json`; unset that name in your shell and use a separate dedicated variable with `--key-env`.
 
-启动前会显示 settings 路径、目标主机、凭证来源、模型列表与默认模型，以及没有带入的配置名。Opus、Sonnet、Haiku、Fable 的映射显示真实 ID，请求仍用对应别名交给 Claude Code 解析。没有模型映射时使用 sonnet、opus、haiku。纯登录路径在首条 prompt 前必须确认订阅或 API 认证；未登录时先运行官方 `claude` 自行登录。
+Before starting, Bridge displays the settings path, target host, credential source, model list, default model, and any ignored configuration keys. Mappings for Opus, Sonnet, Haiku, and Fable display their resolved model IDs while requests still pass the corresponding alias for Claude Code to resolve. When no model mappings exist, `sonnet`, `opus`, and `haiku` are used. Login-only paths must confirm subscription or API authentication before the first prompt; if not logged in, run the official `claude` CLI first to log in.
 
-要使用独立 GLM/BYOK 配置，请明确指定：
+To use an isolated GLM/BYOK configuration, specify it explicitly:
 
 ```bash
-npm run local -- /你的项目路径 --auth byok
+npm run local -- /path/to/your/project --auth byok
 ```
 
-这个模式保留原来的地址、模型提问与 `provider.json` 偏好。国际 Z.AI 默认地址是 `https://api.z.ai/api/anthropic`，默认模型 `glm-5.2`；中国区智谱使用 `https://open.bigmodel.cn/api/anthropic`。Key 必须属于所选服务，输入不回显、不保存，下次启动重新输入。
+This mode preserves the interactive endpoint/model prompts and `provider.json` preferences. The default international Z.AI endpoint is `https://api.z.ai/api/anthropic` with default model `glm-5.2`; Zhipu China uses `https://open.bigmodel.cn/api/anthropic`. The API key must belong to the selected service; input is not echoed or saved to disk and must be re-entered on the next launch.
 
-这一个命令会启动 Bridge，配置独立的 Droid 数据目录和真实模型列表，安装生命周期 hooks 和 `relay-droid` skill。以后继续运行 `npm run local -- /你的项目路径` 即可。退出 Droid 时会停止本次服务并移除自己的 hooks，保留项目原有 hooks。
+This single command starts Bridge, configures an isolated Droid data directory and real model list, and installs lifecycle hooks and the `relay-droid` skill. On subsequent runs, simply execute `npm run local -- /path/to/your/project`. Exiting Droid stops the Bridge service for that run and removes its hooks while preserving any existing project hooks.
 
-`local` 入口由项目参数固定工作目录；Droid desktop 的全局安装和自动项目目录见上方 always-on 入口。
+The `local` entrypoint pins the working directory via the project path argument; for global installation and automatic per-project working directories in Droid desktop, see the always-on section above.
 
-`/model` 现在列真实模型，不再把 Relay Chat、Orchestrator、Worker 等内部角色当成模型。普通聊天在这里选模型；Mission 在自己的 Orchestrator、Worker、Validator 设置里，从同一列表分别选择。已经保存的不同角色选择会保留。
+`/model` now lists actual models instead of exposing internal roles like Relay Chat, Orchestrator, or Worker as models. Regular chat selects its model here; Mission selects from the same list independently for its Orchestrator, Worker, and Validator settings. Previously saved per-role selections are preserved.
 
-例如让同一个 BYOK 端点提供两个实际模型：
+For example, to expose two actual models from the same BYOK endpoint:
 
 ```bash
-npm run local -- /你的项目路径 --auth byok --models glm-5.2,glm-4.7 --model glm-5.2
+npm run local -- /path/to/your/project --auth byok --models glm-5.2,glm-4.7 --model glm-5.2
 ```
 
-菜单显示 GLM-5.2、GLM-4.7，请求实际进入相应模型。模型清单会记住，下次无需重复输入。空闲时可在同一对话切换，使用官方 Claude SDK 的 `resume` 保留原生会话；有未完成工具、审批或后台任务时先完成当前工作。更换模型可能不能复用前一个模型的推理缓存，不保证跨模型缓存命中。
+The menu displays `GLM-5.2` and `GLM-4.7`, and requests are routed to the corresponding model. The model list is remembered for future runs. When idle, you can switch models within the same conversation using the official Claude SDK's `resume` to preserve the native session; if there are pending tools, approvals, or background tasks, finish the current work first. Switching models may not reuse the previous model's prompt cache, and cross-model cache hits are not guaranteed.
 
-Claude 接入使用 `sonnet`、`opus`、`haiku` 或有权限的具体版本 ID。`subscription` 和 `anthropic-api` 的默认显示名是 Claude Sonnet、Claude Opus、Claude Haiku。模型清单是明确配置的选项，不是自动枚举账号权益。`npm run local -- /你的项目路径 --auth subscription` 或 `--auth anthropic-api` 会跳过端点和密钥提问，默认这三个别名，并且不隔离 `CLAUDE_CONFIG_DIR`。如果环境里的 `BRIDGE_AUTH` 和 `--auth` 不一致，启动直接失败，不会悄悄退回 BYOK。BYOK 密钥以 `sk-ant-` 开头、而上游主机不是 `anthropic.com` 时也会拒绝。
+Claude integrations use `sonnet`, `opus`, `haiku`, or specific version IDs your account can access. For `subscription` and `anthropic-api`, the default display names are `Claude Sonnet`, `Claude Opus`, and `Claude Haiku`. The model list is an explicitly configured set of options, not an automatic enumeration of account entitlements. Running `npm run local -- /path/to/your/project --auth subscription` or `--auth anthropic-api` skips the endpoint and key prompts, defaults to those three aliases, and does not isolate `CLAUDE_CONFIG_DIR`. If `BRIDGE_AUTH` in the environment conflicts with `--auth`, startup fails immediately rather than silently falling back to BYOK. A BYOK key starting with `sk-ant-` when the upstream host is not `anthropic.com` is also rejected.
 
-需要允许原生工具操作时，打开启动时显示的控制页；管理员令牌保存在同时显示的私有文件中。默认仍逐次审批。接口地址和模型可记住，上游 Key 不落盘；显式 BYOK 模式不会使用你的 Claude 订阅登录。
+When native tool operations require approval, open the control page URL printed at startup; the admin token is stored in the private file path printed alongside it. Approvals remain per-invocation by default. Endpoint URLs and models can be remembered, while upstream API keys are never written to disk; explicit BYOK mode never uses your Claude subscription login.
 
-更多参数见 `npm run local -- --help`。首次不需要手工修改下面的环境变量或 settings。
+See `npm run local -- --help` for more options. First-time users do not need to manually edit the environment variables or settings described below.
 
-[历史入口实测记录](evidence/local-entry-validation-2026-10-16-r2.json)：旧版角色菜单时期的真实 Linux PTY、GLM BYOK 对话和正常退出记录。当前模型选择设计已按上述方式替换。
+[Historical Local Entry Validation](evidence/local-entry-validation-2026-10-16-r2.json): real Linux PTY, GLM BYOK conversation, and clean exit records from the earlier role-menu design. The current model selection design has replaced it as described above.
 
-[查看当前模型选择设计与真实截图](docs/ACTUAL-MODEL-SELECTION.md)：真实模型菜单、同对话切换、Mission 各角色选择，以及保留的失败和修复记录。
+[Current Model Selection Design & Live Screenshots](docs/ACTUAL-MODEL-SELECTION.md): real model menus, in-session switching, per-role Mission selection, and preserved failure and fix records.
 
-[历史文件读写截图](docs/LOCAL-VISUAL-PROOF.md)：旧菜单时期的 Claude Code 原生 Write 审批、磁盘结果和实际 BYOK 上游。
+[Historical File Read/Write Screenshots](docs/LOCAL-VISUAL-PROOF.md): Claude Code native `Write` approval, on-disk results, and live BYOK upstream from the earlier menu design.
 
-## 手工运行与诊断
+## Manual Operation & Diagnostics
 
-需要 Node.js 22+；真实模式还需要已安装的官方 `claude` 和 `droid`。
+Requires Node.js 22+; live mode also requires the official `claude` and `droid` CLIs to be installed.
 
-检查默认跟随配置的路径，不发送 prompt：
+Check the default config-following path without sending a prompt:
 
 ```bash
 npm run doctor -- --auth claude-config
 ```
 
-它打印与 launcher 相同的脱敏摘要、`classification` 和 `promptSent: false`。doctor 不会提示输入密钥，settings 字面量需要先用 shell 凭证替代或改用 helper。这条命令会启动官方 SDK 并调用 `accountInfo()`，不属于纯静态检查。本功能只通过离线 fixture 测试，尚未验证真实登录、网关或 helper。
+This prints the same redacted summary as the launcher, along with `classification` and `promptSent: false`. `doctor` does not prompt for keys; literal keys in `settings.json` must first be replaced with shell credentials or an `apiKeyHelper`. This command starts the official SDK and calls `accountInfo()`, so it is not a purely static check. This feature has only been tested against offline fixtures and has not yet been verified with a live login, gateway, or helper.
 
-使用你自己的 Claude 订阅：先自行打开官方 `claude` CLI，按提示登录自己的 Pro 或 Max 账号；不要把登录凭据交给 Bridge。然后在本仓库检查认证，不发送 prompt：
+Using your own Claude subscription: first open the official `claude` CLI yourself and follow the prompts to log in to your Pro or Max account; never hand your login credentials to Bridge. Then verify authentication in this repository without sending a prompt:
 
 ```bash
 npm run doctor -- --auth subscription
 ```
 
-预期输出同时包含 `"ok": true`、`"classification": { "kind": "subscription", ... }` 和 `"promptSent": false`。只有三项都符合才继续：
+The expected output must include `"ok": true`, `"classification": { "kind": "subscription", ... }`, and `"promptSent": false`. Proceed only when all three match:
 
 ```bash
 npm run local -- /path/to/project --auth subscription
 ```
 
-如果报错列出 `ANTHROPIC_API_KEY`、`ANTHROPIC_BASE_URL`、`BRIDGE_UPSTREAM_*` 或云路由变量，说明当前 shell 残留了其他认证或端点配置。打开干净的 shell，或 `unset` 报错中的变量后重试。`classification.kind` 为 `unknown` 表示账号信息不足以确认订阅，首条 prompt 会被拒绝，不能只凭 `ok: true` 继续。未登录时，先回到官方 `claude` CLI 自行登录，再跑上述检查。真实订阅启动与对话尚未验证。
+If an error lists `ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL`, `BRIDGE_UPSTREAM_*`, or cloud routing variables, your current shell still has residual auth or endpoint variables set. Open a clean shell or `unset` the listed variables and retry. A `classification.kind` of `unknown` means account info is insufficient to confirm a subscription and the first prompt will be rejected—do not proceed based on `ok: true` alone. If not logged in, return to the official `claude` CLI to log in first, then re-run the check above. Live subscription startup and conversations have not yet been verified.
 
-先配置一个独立 Droid settings 文件，再启动零模型费用的协议模式：
+Configure an isolated Droid settings file first, then start the zero-cost protocol mock mode:
 
 ```bash
 npm ci
@@ -137,22 +139,22 @@ npm run configure-droid -- --settings "$PWD/tmp/relay-local/settings.json" --bas
 BRIDGE_MODE=mock BRIDGE_MODELS=glm-5.2 npm start
 ```
 
-脚本将 token 的**真实字面值**写入 JSON，不使用 `${BRIDGE_CLIENT_TOKEN}` 占位符。配置和备份权限为 `0600`，缺少 token 时拒绝修改。`BRIDGE_CLIENT_TOKEN`、`BRIDGE_ADMIN_TOKEN`、`BRIDGE_HOOK_TOKEN` 必须互不相同，否则启动直接失败。默认只监听回环地址（`127.0.0.1`、`localhost`、`::1` 或任意 `127.x.x.x`）。非 `subscription` 模式若要监听其他地址，必须另外设置 `BRIDGE_ALLOW_REMOTE=1`；这会把本进程的凭证提供给其他客户端，操作者自己负责服务条款。监听 `0.0.0.0` 或 `::` 时还必须用 `BRIDGE_ALLOWED_HOSTS`（逗号分隔的主机名或 IP，不含端口）列出客户端实际使用的名字，Host 与 Origin 校验才会放行它们，未设置则启动失败；该变量只在 `BRIDGE_ALLOW_REMOTE=1` 时生效。`subscription` 不允许暴露给其他机器或他人。`GET /healthz` 只返回 `{ "ok": true, "mode" }`；运行细节在带管理员令牌的 `GET /internal/runtime`。`POST /v1/messages` 接收 JSON 或 SSE 请求。未设置管理员令牌或 hook 令牌时，`sdk` 模式会把生成值写到数据目录的 `admin-token` 和 `hook-token`（权限 `0600`），启动日志只打印路径。
+The script writes the **literal token value** into the JSON rather than a `${BRIDGE_CLIENT_TOKEN}` placeholder. Configuration and backup files are created with mode `0600`, and modification is refused if any token is missing. `BRIDGE_CLIENT_TOKEN`, `BRIDGE_ADMIN_TOKEN`, and `BRIDGE_HOOK_TOKEN` must all be distinct or startup fails immediately. By default, Bridge listens only on loopback addresses (`127.0.0.1`, `localhost`, `::1`, or any `127.x.x.x`). To listen on non-loopback addresses in non-`subscription` modes, you must additionally set `BRIDGE_ALLOW_REMOTE=1`; this exposes the process's credentials to other clients, and the operator is solely responsible for terms-of-service compliance. When listening on `0.0.0.0` or `::`, you must also set `BRIDGE_ALLOWED_HOSTS` (comma-separated hostnames or IPs without ports) listing the exact hostnames clients will use so `Host` and `Origin` checks can validate them, otherwise startup fails; this variable takes effect only when `BRIDGE_ALLOW_REMOTE=1`. `subscription` mode may never be exposed to other machines or users. `GET /healthz` returns only `{ "ok": true, "mode" }`; runtime details require the admin token at `GET /internal/runtime`. `POST /v1/messages` accepts JSON or SSE requests. When admin or hook tokens are not provided in the environment, `sdk` mode writes generated values to `admin-token` and `hook-token` (`0600`) in the data directory and logs only their file paths at startup.
 
-另一个终端也先进入本仓库，加载同一份私有令牌文件，再使用该配置；`tmp/` 已被 Git 忽略。不要重新生成令牌或提交该文件：
+In a second terminal, enter this repository, source the same private token file, and run Droid against that configuration (`tmp/` is gitignored; do not regenerate tokens or commit the file):
 
 ```bash
 source tmp/relay-local/tokens.env
 FACTORY_AIRGAP_ENABLED=1 droid exec --settings "$PWD/tmp/relay-local/settings.json" -m glm-5.2 "RELAY_TEXT_PROBE"
 ```
 
-撤销配置：
+Revert the configuration:
 
 ```bash
 npm run configure-droid -- --settings "$PWD/tmp/relay-local/settings.json" --revert
 ```
 
-切换真实 BYOK 前，先在第一个终端用 Ctrl-C 停止 mock 服务。下面以已在环境中配置的中国区 `GLM_CN_API_KEY` 为例，明确固定上游；URL 必须是 Claude Code 可用的 **Anthropic 兼容端点**，不能指回 Bridge。Droid 直接连接模型时使用的 OpenAI-compatible URL 不能照搬到这里。
+Before switching to live BYOK, stop the mock server in the first terminal with `Ctrl-C`. The example below pins an upstream using `GLM_CN_API_KEY` already set in the environment; the URL must be an **Anthropic-compatible endpoint** supported by Claude Code and must not point back to Bridge. OpenAI-compatible URLs used when Droid connects directly to models cannot be used here.
 
 ```bash
 source tmp/relay-local/tokens.env
@@ -169,114 +171,114 @@ export BRIDGE_MODEL_ID=glm-5.2
 npm start
 ```
 
-BYOK 的 endpoint、model、key 变量必须全部明确配置；缺失或错误时直接失败，不探测其他环境密钥。除 `inherit` 外，Claude Code 子进程只拿到一份允许名单（`PATH`、`HOME`、代理、CA、locale 等），不再继承整个父进程环境。额外变量用 `BRIDGE_ENV_PASSTHROUGH=NAME1,NAME2`，但当前模式禁止的名字会直接报错。`subscription` 见到 `ANTHROPIC_API_KEY` 会建议改用 `anthropic-api`，见到 `CLAUDE_CODE_USE_*` 会建议改用 `cloud`。
+For BYOK, the endpoint, model, and key environment variable must all be explicitly configured; if any is missing or invalid, startup fails immediately without probing other environment keys. Except in `inherit` mode, Claude Code child processes receive only an allowlisted environment (`PATH`, `HOME`, proxy, CA, locale, etc.) rather than inheriting the entire parent environment. Additional variables can be passed via `BRIDGE_ENV_PASSTHROUGH=NAME1,NAME2`, but names forbidden by the active auth mode will cause an immediate error. In `subscription` mode, seeing `ANTHROPIC_API_KEY` suggests switching to `anthropic-api`, and seeing `CLAUDE_CODE_USE_*` suggests switching to `cloud`.
 
-手工配置时，`subscription` 和 `anthropic-api` 用 `BRIDGE_MODELS=sonnet,opus,haiku`。`cloud` 和 `byok` 必须自己写模型。`configure-droid --auth` 接受全部六种模式。这些路径只做过离线测试，没有用真实订阅、官方 API 或云厂商账号验证。先跑 `npm run doctor -- --auth subscription`。
+When configuring manually, `subscription` and `anthropic-api` use `BRIDGE_MODELS=sonnet,opus,haiku`. `cloud` and `byok` require explicit model names. `configure-droid --auth` accepts all six modes. These manual paths have only been tested offline and have not been verified with live subscriptions, official API keys, or cloud provider accounts. Run `npm run doctor -- --auth subscription` first.
 
-国际 Z.AI 对应 `https://api.z.ai/api/anthropic` 和 `ZAI_CODING_PLAN_KEY`；请同时更改端点和变量名，密钥必须属于对应服务。这里传给 `BRIDGE_UPSTREAM_TOKEN_ENV` 的是环境变量名，真实密钥留在该变量中。
+For international Z.AI, use `https://api.z.ai/api/anthropic` and `ZAI_CODING_PLAN_KEY`; change both the endpoint and variable name together, and ensure the key belongs to that service. `BRIDGE_UPSTREAM_TOKEN_ENV` takes the **name** of the environment variable while the actual secret stays in that variable.
 
-`ask` 是默认权限策略。需要审批的原生工具会暂停在 SDK `canUseTool` 回调；打开 `http://127.0.0.1:18787/control`，输入 `BRIDGE_ADMIN_TOKEN` 后查看准确参数并选择允许一次或拒绝。批准后由 Claude Code 执行。CLI 也可用 `npm run control -- approvals`、`approve <id>`、`deny <id>` 和 `cancel <sessionId>`。过期、取消、旧会话或重复审批均不能重新执行工具。`BRIDGE_PERMISSION=bypass` 仍须显式设置。
+`ask` is the default permission policy. Native tools requiring approval pause inside the SDK `canUseTool` callback; open `http://127.0.0.1:18787/control`, enter `BRIDGE_ADMIN_TOKEN`, inspect the exact arguments, and choose allow-once or deny. Once approved, Claude Code executes the tool. From the CLI, you can also use `npm run control -- approvals`, `approve <id>`, `deny <id>`, and `cancel <sessionId>`. Expired, canceled, stale-session, or duplicate approvals cannot re-execute a tool. `BRIDGE_PERMISSION=bypass` must still be set explicitly.
 
-安装 Factory 官方生命周期 hooks，并从拥有取消权限的 wrapper 启动：
+Install official Factory lifecycle hooks and launch via the cancellation-aware wrapper:
 
 ```bash
-# 在第二个终端，从本仓库运行；PROJECT 与启动 Bridge 时相同。
+# In the second terminal, run from this repository; PROJECT must match the one used to start Bridge.
 source tmp/relay-local/tokens.env
 export PROJECT=/absolute/path/to/project
 npm run configure-hooks -- --hooks "$PROJECT/.factory/hooks.json" --config "$PWD/tmp/relay-local/hooks-control.json"
-npm run run-droid -- --cwd "$PROJECT" --airgap 1 -- exec --settings "$PWD/tmp/relay-local/settings.json" -m glm-5.2 "检查这个项目"
-# 撤销只删除本 Bridge 的 hook，不覆盖后来添加的用户 hook。
+npm run run-droid -- --cwd "$PROJECT" --airgap 1 -- exec --settings "$PWD/tmp/relay-local/settings.json" -m glm-5.2 "Inspect this project"
+# Removing only deletes hooks owned by this Bridge without overwriting user hooks added later.
 npm run configure-hooks -- --hooks "$PROJECT/.factory/hooks.json" --config "$PWD/tmp/relay-local/hooks-control.json" --remove
 ```
 
-`configure-hooks` 读取 `BRIDGE_HOOK_TOKEN`，它必须和正在运行的 Bridge 一致，用法和 `BRIDGE_ADMIN_TOKEN` 相同。这个令牌只接受 `POST /internal/host-events`；其他 `/internal/*` 只接受管理员令牌。Bridge 与 wrapper 需共享同一组 `BRIDGE_ADMIN_TOKEN` / `BRIDGE_CLIENT_TOKEN` / `BRIDGE_HOOK_TOKEN`，并把 `BRIDGE_SDK_CWD` 指向目标项目。wrapper 保留 `HOME`，通过 `FACTORY_HOME_OVERRIDE` 隔离 Factory 数据；退出或取消时只清理本次启动拥有的会话。交互启动请使用 wrapper：Factory UI 的退出 hook 无法继承 Agent 进程里的会话绑定，需要本次启动的身份才能准确结束对应会话。进程被强制杀死、来不及发送结束事件时，应使用控制页取消遗留会话。
+`configure-hooks` reads `BRIDGE_HOOK_TOKEN`, which must match the running Bridge and follows the same handling rules as `BRIDGE_ADMIN_TOKEN`. This token is accepted only by `POST /internal/host-events`; all other `/internal/*` endpoints require the admin token. Bridge and the wrapper must share the same `BRIDGE_ADMIN_TOKEN` / `BRIDGE_CLIENT_TOKEN` / `BRIDGE_HOOK_TOKEN` set and point `BRIDGE_SDK_CWD` to the target project. The wrapper preserves `HOME` and isolates Factory data via `FACTORY_HOME_OVERRIDE`; on exit or cancellation, it cleans up only the sessions owned by that launch. Use the wrapper for interactive launches: Factory UI's exit hook cannot inherit session bindings from inside the Agent process and needs the launch identity to terminate the corresponding session accurately. If a process is force-killed before it can send a termination event, use the control page to cancel any lingering session.
 
-`BRIDGE_REQUEST_TIMEOUT_MS`（默认 10 分钟）现在是**空闲**期限，不再是单次响应的绝对期限：每条 SDK 消息、文本增量或工具事件都会重新计时，只有持续没有进展才超时；等待控制页审批期间暂停计时，审批自己的期限是 `BRIDGE_APPROVAL_TIMEOUT_MS`（默认 30 分钟）。另有绝对上限 `BRIDGE_TURN_MAX_MS`（默认 2 小时）。超时先调用 SDK `interrupt()`：5 秒内收尾则会话回到 IDLE 并可续接，否则标记 FAILED 并终止进程。流式响应立即发送 `message_start`，之后每 15 秒发送一次 `event: ping`。注意：原生工具若长时间既不输出也不结束（例如跑超过 10 分钟的测试），同样算空闲，需要时调大该值。会话停在外部工具往返上（Droid 在跑长工具，或 Mission worker 在运行）时不会因空闲被停止，只受单个工具 14 天的绝对上限约束（`BRIDGE_TOOL_WAIT_MS`）。只有名额用尽（`BRIDGE_MAX_SESSIONS`，默认 32）、新请求本会得到 429 时，Bridge 才回收一个会话，并且它必须同时满足：停在工具上且没有请求在处理；自上次状态更新起空闲至少 `BRIDGE_TOOL_WAIT_TIMEOUT_MS`（默认 12 小时）；没有绑定存活的 Factory 主机；不在等 `StartMissionRun`、`ProposeMission`、`Task`，也不在等人回答的 `AskUser`。符合条件的取最久未活动的一个，标记为中断；没有符合条件的就照常返回 429。被回收、被取消或 Bridge 重启后的会话，其工具调用不会重放：Droid 之后再回传同一个结果得到 409，新的文本消息则新建会话，并把此前历史作为参考导入。官方结束事件会提前释放会话，无需等计时器。
+`BRIDGE_REQUEST_TIMEOUT_MS` (default 10 minutes) is now an **idle** timeout rather than an absolute deadline for a single response: every SDK message, text delta, or tool event resets the timer, so it times out only when there is sustained lack of progress; the timer pauses while waiting for control-page approval, which has its own deadline `BRIDGE_APPROVAL_TIMEOUT_MS` (default 30 minutes). There is also an absolute turn cap `BRIDGE_TURN_MAX_MS` (default 2 hours). On timeout, Bridge first calls SDK `interrupt()`: if the turn winds down within 5 seconds, the session returns to `IDLE` and remains resumable; otherwise it is marked `FAILED` and the process is terminated. Streaming responses immediately emit `message_start` followed by `event: ping` every 15 seconds. Note: if a native tool produces no output and does not finish for a long time (e.g., a test suite running for over 10 minutes), that also counts as idle—increase `BRIDGE_REQUEST_TIMEOUT_MS` if needed. When a session is parked on an external tool round-trip (Droid running a long tool or a Mission worker executing), it is not stopped for idleness and is bounded only by the 14-day absolute per-tool limit (`BRIDGE_TOOL_WAIT_MS`). Bridge reclaims a session only when session capacity (`BRIDGE_MAX_SESSIONS`, default 32) is exhausted and a new request would otherwise receive 429, and only if the candidate simultaneously satisfies all of the following: parked on a tool with no request currently in flight; idle since its last state update for at least `BRIDGE_TOOL_WAIT_TIMEOUT_MS` (default 12 hours); not bound to a live Factory host; and not waiting on `StartMissionRun`, `ProposeMission`, `Task`, or human input via `AskUser`. Among eligible sessions, the least-recently-active one is marked interrupted; if none qualifies, Bridge returns 429 as usual. Tool calls from reclaimed, canceled, or post-restart sessions are never replayed: if Droid later posts back the same tool result, it receives 409, whereas a new text message starts a fresh session and imports the prior history as reference. Official termination events release sessions immediately without waiting for timers.
 
-这些默认值按以往 Droid Mission 的实际数据放宽：worker 做一个 feature 最多调用模型 342 次（42% 超过 64 次），orchestrator 在 `StartMissionRun` 上最长等了 4.7 小时、在 `AskUser` 上等了 5.2 小时，一个 orchestrator 会话前后跨了 238 小时并压缩了 14 次。所以 `BRIDGE_MAX_TURNS` 默认 0，即不限制 Claude Code 每条消息的模型调用次数；设为正数才启用上限。
+These defaults were relaxed based on empirical Droid Mission telemetry: a worker invoked the model up to 342 times for a single feature (42% exceeded 64 turns), an orchestrator waited up to 4.7 hours on `StartMissionRun` and 5.2 hours on `AskUser`, and one orchestrator session spanned 238 hours with 14 compactions. Accordingly, `BRIDGE_MAX_TURNS` defaults to `0` (no limit on Claude Code model turns per message); set a positive integer to enable a cap.
 
-Droid 压缩长对话时，先把对话以文本交给不带工具的摘要请求，再以“A previous instance of Droid has summarized…”开头、引用该摘要的新首条消息继续。在 Bridge 看来这是一个新对话，旧对话正在等的工具结果已经写进摘要，旧会话会一直占着进程和名额，而等 `StartMissionRun` 的会话从不被回收。所以摘要请求里最后一个已回答的 `TOOL_CALL` 恰好对应一个停在同一调用上的会话时，Bridge 记下这份摘要；等 Droid 带着这份摘要继续时，释放旧会话，日志记为 `compacted_session_released`。对应不上、对应到多个会话，或者 Droid 没有继续时，都不释放。
+When Droid compacts a long conversation, it first sends the conversation as text to a toolless summary request and then continues in a new first message starting with `"A previous instance of Droid has summarized…"` that embeds that summary. From Bridge's perspective, this looks like a brand-new conversation while the old session's pending tool result has already been folded into the summary—leaving the old session holding onto its process and slot forever (especially since sessions waiting on `StartMissionRun` are never evicted by timeout). Therefore, when the last answered `TOOL_CALL` in a summary request uniquely matches a session parked on that exact call, Bridge records the summary; once Droid continues with a message carrying that summary, Bridge releases the old session and logs `compacted_session_released`. If there is no match, multiple sessions match, or Droid does not continue, nothing is released.
 
-Mission worker 用 `EndFeatureRun` 报告 feature 完成后，Droid 立即结束这个 worker，并把这次调用记为取消，不会再把结果回传。这样 worker 的 Claude Code 进程就会一直等着。所以会话只剩 `EndFeatureRun` 待返回、没有请求在处理、没有待决审批、也没有绑定存活的 Factory 主机时，过 `BRIDGE_WORKER_END_GRACE_MS`（默认 2 分钟）就释放进程，日志记为 `mission_worker_released`。`EndFeatureRun` 失败时 Droid 会在几秒内回传错误，worker 继续工作，计时随之取消。之后若 Droid 仍回传那个结果，得到的是和其它中断会话一样的 409。
+After a Mission worker reports feature completion via `EndFeatureRun`, Droid immediately terminates that worker and marks the tool call as canceled without ever sending the tool result back. That would otherwise leave the worker's Claude Code process waiting indefinitely. Therefore, when a session has only `EndFeatureRun` pending, no request in flight, no pending approval, and no live bound Factory host, Bridge releases the process after `BRIDGE_WORKER_END_GRACE_MS` (default 2 minutes) and logs `mission_worker_released`. If `EndFeatureRun` fails, Droid returns the error within a few seconds, the worker continues working, and the grace timer is canceled. If Droid somehow returns that result after release, it receives 409 just like any other interrupted session.
 
-日志在数据目录的 `logs/`，文件权限 `0600`，单个文件超过 50 MB 时轮转为 `.1`（只保留一代）。请求日志默认只记录请求体的 SHA-256、字节数和工具名，不含消息或提示词；需要完整请求体（已脱敏）时设置 `BRIDGE_LOG_BODIES=1`。
+Logs are written under `logs/` in the data directory with file mode `0600` and rotate to `.1` (keeping one generation) once a file exceeds 50 MB. By default, request logs record only the request body's SHA-256, byte length, and tool names without messages or prompts; set `BRIDGE_LOG_BODIES=1` to log full (redacted) request bodies.
 
-在目标项目安装自定义 Agent 生成入口：
+Install the custom Agent generator entrypoint in a target project:
 
 ```bash
 npm run generate-droid -- --cwd "$PROJECT" --install-command
 ```
 
-这会同时安装 `/relay-droid` 命令和 Factory 可发现的 `relay-droid` skill。重启 Droid 后，可以直接说“帮我创建一个只读的 JSON 检查子 Agent，名字叫 json-auditor”，由 Droid 根据 skill 描述选择本地 BYOK 生成器。生成配置后停止；需要执行时再单独提出要求，已有 Agent 继续通过 Factory `Task` 调用。普通对话、Mission、Agent Readiness 不需要先创建 Agent。
+This installs both the `/relay-droid` command and the Factory-discoverable `relay-droid` skill. After restarting Droid, you can ask in natural language—e.g., `"Create a read-only JSON auditing sub-agent named json-auditor"`—and Droid will select the local BYOK generator based on the skill description. It stops after generating the configuration; issue a separate request when you want to execute it, and existing Agents continue to be invoked via Factory `Task`. Regular chat, Missions, and Agent Readiness do not require creating an Agent first.
 
-安装器可重复运行，也能为此前只安装了命令的项目补上 skill；不同内容的已有文件或符号链接会报错，不覆盖用户配置。命令引用当前仓库的位置，移动仓库后需检查安装路径。Factory 自带 `/droids` 管理菜单保持原样，手动进入其中的托管生成仍需要 Factory 授权；skill 不拦截该菜单。显式 `/relay-droid --name json-auditor --description "Read JSON fixtures"` 仍可使用。
+The installer is idempotent and can also backfill the skill for projects that previously installed only the command; existing files or symlinks with different content cause an error rather than overwriting user configuration. The installed command references the current repository path, so check the installation path if you move the repository. Factory's built-in `/droids` management menu remains untouched, and manually entering its hosted generation flow still requires Factory authorization; the skill does not intercept that menu. Explicit `/relay-droid --name json-auditor --description "Read JSON fixtures"` remains available.
 
-自然语言 skill 通过原生 Bash 调用生成器时，使用当前会话的实际模型。Factory 显式 `/relay-droid` shell 命令继承启动时的 `BRIDGE_MODEL_ID`，不会跟随之后的 `/model` 变化；手工 wrapper 启动也应在第二个终端设置该变量。生成器的 `--model` 参数指定的是新建 Agent 的模型，默认 `inherit`，不是生成本次定义所用的模型。
+When the natural-language skill invokes the generator via native `Bash`, it uses the current session's active model. Factory's explicit `/relay-droid` shell command inherits the startup `BRIDGE_MODEL_ID` and does not track subsequent `/model` changes; manual wrapper launches should also export that variable in the second terminal. The generator's `--model` flag specifies the model for the newly created Agent (default `inherit`), not the model used to generate the definition itself.
 
-[自然语言入口验收](evidence/relay-droid-discovery-validation-2026-10-16.json)记录了真实 Droid 无命令提示的创建、后续独立 Task 调用、普通聊天负例及正常退出；只使用隔离 BYOK，保留失败记录和修复后的证据。
+[Natural-Language Entry Validation](evidence/relay-droid-discovery-validation-2026-10-16.json) records live commandless Droid creation, subsequent independent `Task` invocation, negative regular-chat cases, and clean exit using only isolated BYOK, preserving both initial failure records and post-fix evidence.
 
-## 会话与工具
+## Sessions & Tools
 
-- 优先使用响应中的 `X-Bridge-Session`；也接受 `X-Session-Id` 或 metadata 的 `session_id` / `sessionId`。`user_id` 不作为会话 ID。
-- 未提供 ID 时，续接唯一完整历史前缀或所属 pending tool。Factory 压缩改写前缀时，还允许已认证的同一 Factory 会话、同一工作目录、无 pending 工具且最后完整 user/assistant 回合精确匹配的续接；重复短提示不会合并会话。
-- 配置 `BRIDGE_MODELS` 或使用 `local` 时，空闲会话支持真实模型切换：关闭旧 query、等待其消费循环退出，再用同一个 SDK session ID 恢复；只追加新输入，不回放完整历史。关闭持久化、缺少 checkpoint 或存在未完成工作时明确拒绝切换，旧会话可继续；无法安全关闭旧 query 则终止。未配置 catalog 的旧手工接入保留固定模型行为，`GET /v1/models` 不宣称其支持模型切换。
-- 角色配置标签、工作目录或执行策略改变仍返回 409，需新建会话。工具目录不属于会话身份：保留同一个 SDK MCP server 实例，按请求动态增删工具和更新 schema，并发送 `tools/list_changed`；等待 SDK `mcpServerStatus` 确认工具名称列表后再继续。schema 或描述改变时使用带版本的 MCP 名称，因此名称确认也确认了本次 schema 版本；JSON Schema 的完整约束经公开 MCP 接口提供，并由 Ajv 校验而不改写参数。真实 BYOK 同名 schema 更新后首次调用已通过。未变化的定义和恢复后的目录保持名称稳定，避免无谓破坏缓存；实际目录变化仍可能造成缓存 miss。
-- Droid host context 的变化进入 user input，不改写原生 system prefix。若请求同时带 `tool_result` 和补充文本/base64 图片，补充内容以 host continuation 标记并附入本批首个新工具结果，交还真实 MCP callback，不伪造额外用户轮次。混入 document 或其它不支持的 MCP 内容在提交前返回 422，不消耗 pending 工具结果。
-- 空闲 CLI 进程按 LRU 有界回收，保留官方 SDK session ID；有持久化 transcript 时使用 SDK `resume`。忙碌会话不会为腾位置而被驱逐。
-- 进程重启后，尚未完成的 MCP 工具往返返回 409。没有 native session 的历史导入仅作为参考重建，不等于完整恢复 Claude Code 的内部状态。
-- 原生 PreToolUse 每次检查当前 Factory 工具权限，即使启用 bypass。只广告 Read 就不能用 Bash/Write；省略 tools、空列表或 tool_choice:none 不授予工具权限。工具权限可在同一会话增减；原生 Agent/Skill 不得绕开 Factory 的 Task/Skill。Spec 通过已认证 hooks 锁定只读，只有对应 ExitSpecMode 成功回执才解锁。
-- 对 Droid 传入的工具，仅明确的文件/命令等价工具由 Claude Code 执行：Read/Edit/Write/Create/LS/Grep/Glob/Execute/Bash/MultiEdit/NotebookEdit。Factory `Skill`、`Task`、`ToolSearch`、`ExitSpecMode`、Mission 控制及其它已声明的插件工具均经 `mcp__droid__*` 交回 Droid，保留 Factory 的 skill 注册表和任务 ID；它们与 Claude 原生 Skill/Agent 分开。
-- Claude Code 依次调用 `mcp__droid__*` 工具，因为它们都不是只读工具。原生 Agent 工具会同时启动子代理，Droid 也会并发执行同一响应里的多个 Task，所以 Bridge 在调用到 Task 时先等这条消息流完，再把它后面紧挨着的 Task 一起交给 Droid；中间夹着其它工具、或输入会被处理器拒绝的 Task，批次就到此为止。每个 Task 仍各自经过自己的处理器，按原顺序拿到 Droid 为它返回的结果。Droid 对一批 Task 先回“在后台启动”，子代理完成后再把各自的输出作为新消息送回，这是 Droid 自己的并行方式。turns 日志的 `task_batch` 事件列出一起交出的调用 ID。Task 不会因此被标为只读，Droid 的审批也不变。
-- Factory 提供非空 `system` 时完整保留其角色、skills 和流程指令，不从 header 猜测角色或追加角色模板；`X-Bridge-Role` 仅作为模型配置/session 标签，真实 Task 子 agent 会继承 orchestrator header。只有缺少 host 指令时才用角色辅助，orchestrator 辅助还要求实际存在 Mission 控制工具，`Task` 本身不够。生产 SDK 路径不合成 `StartMissionRun`，也不从残留目录复制 Mission 账本。
+- Prefers `X-Bridge-Session` from responses; also accepts `X-Session-Id` or `session_id` / `sessionId` in metadata. `user_id` is never used as a session ID.
+- When no ID is provided, resumes the unique complete history prefix or owning pending tool. When Factory compaction rewrites the prefix, resumption is also permitted for an authenticated session belonging to the same Factory session and working directory with no pending tools whose last complete user/assistant turn matches exactly; repeated short prompts will not merge sessions.
+- When `BRIDGE_MODELS` is configured or `local` is used, idle sessions support live model switching: Bridge closes the old query, waits for its consumption loop to exit, and resumes with the same SDK session ID—appending only the new input without replaying full history. Switching is explicitly rejected if persistence is disabled, a checkpoint is missing, or work is still in flight, leaving the existing session usable; if the old query cannot be closed safely, the session is terminated. Legacy manual setups without a configured catalog retain fixed-model behavior, and `GET /v1/models` does not advertise model-switching support for them.
+- Changing the role configuration tag, working directory, or execution policy still returns 409 and requires a new session. The tool catalog is not part of session identity: Bridge keeps the same SDK MCP server instance, dynamically adds/removes tools and updates schemas per request, emits `tools/list_changed`, and waits for SDK `mcpServerStatus` to confirm the tool name list before proceeding. When a schema or description changes, a versioned MCP name is used so name confirmation also confirms the active schema version; full JSON Schema constraints are exposed through the public MCP interface and validated by Ajv without rewriting arguments. Live BYOK first-call execution after a same-name schema update has been verified. Unchanged definitions and restored catalogs keep stable names to avoid unnecessary cache invalidation, though actual catalog changes can still cause cache misses.
+- Changes in Droid host context are injected into user input without mutating the native system prefix. If a request carries both `tool_result` and supplementary text or base64 images, the supplementary content is tagged as a host continuation and attached to the first new tool result in that batch before returning to the real MCP callback, without fabricating extra user turns. Mixing in `document` blocks or other unsupported MCP content returns 422 before submission without consuming pending tool results.
+- Idle CLI processes are bounded and reclaimed via LRU while preserving their official SDK session IDs, using SDK `resume` when a persistent transcript exists. Busy sessions are never evicted to make room.
+- Across process restarts, in-flight MCP tool round-trips return 409. Importing history without a native session reconstructs context for reference only and is not equivalent to restoring Claude Code's full internal state.
+- Native `PreToolUse` checks current Factory tool permissions on every invocation, even when `bypass` is enabled. Advertising only `Read` forbids `Bash`/`Write`; omitting `tools`, passing an empty list, or setting `tool_choice: none` grants no tool permissions. Tool permissions can expand or shrink within the same session, and native `Agent`/`Skill` cannot bypass Factory's `Task`/`Skill`. Spec mode locks sessions to read-only via authenticated hooks and unlocks only upon a matching successful `ExitSpecMode` receipt.
+- Among tools passed by Droid, only explicit file/command equivalents are executed natively by Claude Code: `Read`/`Edit`/`Write`/`Create`/`LS`/`Grep`/`Glob`/`Execute`/`Bash`/`MultiEdit`/`NotebookEdit`. Factory `Skill`, `Task`, `ToolSearch`, `ExitSpecMode`, Mission controls, and any other declared plugin tools are delegated back to Droid via `mcp__droid__*`, preserving Factory's skill registry and task IDs; they remain separate from Claude's native `Skill`/`Agent`.
+- Claude Code invokes `mcp__droid__*` tools sequentially because none of them is marked read-only. Since native `Agent` tools launch sub-agents concurrently and Droid also executes multiple `Task` calls from the same response concurrently, when Bridge encounters a `Task` call it waits for the current assistant message stream to finish and batches any immediately contiguous `Task` calls to hand back to Droid together; the batch stops at any non-`Task` tool or any `Task` whose input would be rejected by its handler. Each `Task` still passes through its own handler and receives its corresponding result from Droid in original order. Droid responds to a `Task` batch with `"started in background"` first and delivers each sub-agent's output as a new message once finished—this is Droid's native parallelism model. The `task_batch` event in the turns log records the call IDs delivered together. `Task` is not marked read-only as a result, and Droid's approval behavior is unchanged.
+- When Factory supplies a non-empty `system` prompt, Bridge preserves its role, skills, and workflow instructions verbatim without guessing roles from headers or appending role templates; `X-Bridge-Role` serves only as a model-config/session tag, as real `Task` sub-agents inherit the orchestrator header. Role fallbacks are used only when host instructions are absent, and the orchestrator fallback additionally requires Mission control tools to be present (`Task` alone is insufficient). The production SDK path never synthesizes `StartMissionRun` or copies Mission ledgers from leftover directories.
 
-## 当前验证范围
+## Current Verification Scope
 
-2026-10-16 新增真实路径和修复见[本轮入口验收](docs/FACTORY-SURFACES.md)：Factory 自身压缩与 handoff、Spec 只读及退出、自定义 Droid、交互 review、工具权限收回、schema 更新与缓存均有独立证据。所有线上验证仍只使用隔离 GLM BYOK。
+See [Factory Surfaces Validation](docs/FACTORY-SURFACES.md) for the live paths and fixes added on 2026-10-16: Factory native compaction and handoff, Spec read-only lock and exit, custom Droids, interactive review, tool permission revocation, schema updates, and prompt caching all have independent evidence. All live validations exclusively use isolated GLM BYOK.
 
-本轮[全新 Mission](evidence/mission-final-validation-2026-10-16-r3.json)已连续通过：18 分 46 秒，实际实施、scrutiny、user-testing 三个 feature 完成，5/5 验证通过，原测试和 package.json 保持不变，零运行错误、零遗留进程。它记录了运行时源码指纹；随后三处独立修正及最终验证范围见[汇总](evidence/final-validation-2026-10-16.json)。此前主动中断与环境断连记录仍保留。
+The latest [Fresh Mission Run](evidence/mission-final-validation-2026-10-16-r3.json) passed continuously in a single run: 18 minutes 46 seconds, completing implementation, scrutiny, and user-testing across three features with 5/5 verification checks passing, original tests and `package.json` preserved intact, zero runtime errors, and zero lingering processes. It records the runtime source fingerprint; three subsequent targeted fixes and the final verification scope are summarized in [Final Validation Summary](evidence/final-validation-2026-10-16.json). Earlier records of manual interruptions and environment disconnects are preserved.
 
-2026-10-15 的 GLM-5.2 BYOK 验证包括：Droid → Bridge → Claude Code 普通回答成功；原生 SDK 与 Bridge 各三轮对话保持上下文；原生 Read 与流式痕迹，以及无显式 ID 的完整历史续接保持同一会话和记忆；真实 SDK MCP `TaskOutput` 往返成功，但该项外部工具结果是本地 fixture。Bridge 的原生手动 `/compact` 产生 `compact_boundary`，压缩后的下一轮仍能回忆先前约定的信息。[原生会话验证摘要](evidence/native-session-validation-2026-10-15.json) 保留该轮测量和离线检查结果。
+The 2026-10-15 GLM-5.2 BYOK validation covers: successful regular replies across Droid → Bridge → Claude Code; three-turn context retention in both native SDK and Bridge; native `Read` and streaming traces, plus full-history resumption without an explicit session ID preserving the same session and memory; and a live SDK MCP `TaskOutput` round-trip (using a local fixture for the external tool result). Bridge's native manual `/compact` produces a `compact_boundary` and recalls information agreed upon prior to compaction on the next turn. [Native Session Validation Summary](evidence/native-session-validation-2026-10-15.json) preserves the measurements and offline check results from that run.
 
-后续[Factory host 验证](evidence/factory-host-validation-2026-10-15.json) 确认了新工具在首次续推可用、真实 `Skill` 完整正文传递、`Task` 子 agent 和 Mission 启动。过程中发现并修复了工具校验前过早转交、标题辅助请求越权执行工具、worker 结束后原生回调悬挂等问题；失败记录仍保留。
+Subsequent [Factory Host Validation](evidence/factory-host-validation-2026-10-15.json) confirmed that newly discovered tools become available on the first continuation turn, full `Skill` bodies are delivered intact, and `Task` sub-agents and Missions launch properly. Issues discovered and fixed during testing—such as premature handoff before tool validation, title-helper requests executing tools without authorization, and hanging native callbacks after worker termination—remain documented alongside their failure records.
 
-历史[完整 Mission 验收](evidence/mission-validation-2026-10-15.json) 为 **PASS_WITH_RECOVERY**：从没有预置 Mission 产物的缺陷项目开始，真实 orchestrator / worker / validator 完成 3 个 feature、5 个验证断言，原始测试和 package.json 保持不变且测试通过。首次达到旧的 20 分钟测试上限后，使用官方 `droid exec --session-id` 续接同一个 Mission，约 130 秒完成收尾；这不是一次连续运行通过。完成时原生运行、待处理工具、审批和 Bridge 错误均为零，所属进程清理完成。新验收脚本默认总期限为 1 小时；不会合成启动或复制账本来制造完成状态。
+The historical [Full Mission Validation](evidence/mission-validation-2026-10-15.json) recorded **PASS_WITH_RECOVERY**: starting from a defective project with no pre-existing Mission artifacts, a live orchestrator, worker, and validator completed 3 features and 5 verification assertions while keeping original tests and `package.json` intact and passing. After hitting the old 20-minute test harness timeout on the first run, the same Mission was resumed via official `droid exec --session-id` and finished in ~130 seconds; this was not a single uninterrupted run. At completion, active native runs, pending tools, pending approvals, and Bridge errors were all zero, and all child processes were cleaned up. The updated verification script defaults to a 1-hour total deadline and never synthesizes startup events or copies ledgers to fabricate completion.
 
-Factory 生命周期已通过官方 [hooks](https://docs.factory.com/harness/hooks) 接入独立控制通道。`SessionStart` 注册随机 generation 标识，经官方环境文件传给后续 hooks；该标识在进入 Claude 原生提示前移除。`PostToolUse` 保存实际收到的结果，`SessionEnd` 确认结束后释放原生等待；若 Factory 提前结束而跳过 PostToolUse，则中断等待，不伪造成功结果；普通工具仍等下次 HTTP 续接，保证 ToolSearch 新目录和附加内容同时交付。正常会话结束可从原生 checkpoint 恢复，已结束的 worker 不再接受迟到结果。
+Factory lifecycle events are connected to an independent control channel via official [hooks](https://docs.factory.com/harness/hooks). `SessionStart` registers a random generation ID and passes it to subsequent hooks through the official environment file; the tag is stripped before reaching Claude's native prompt. `PostToolUse` records the actual result received, and `SessionEnd` releases native waits once termination is confirmed; if Factory exits early and skips `PostToolUse`, the wait is interrupted rather than fabricating a successful result, while regular tools still wait for the next HTTP continuation so `ToolSearch` catalog updates and supplementary content are delivered together. Clean session exits can resume from native checkpoints, and terminated workers reject late-arriving results.
 
-[控制通道实测](evidence/control-validation-2026-10-15.json) 还确认：原生工具拒绝后无写入，批准后仅执行一次，取消待审批后旧批准返回 409。带 hooks 的正常退出及恢复保留同一原生会话，恢复轮 Claude Code 侧记录 `input_tokens=278`、`cache_read_input_tokens=21760`；旧 generation 的结束事件被拒绝且不影响新会话。真实 Claude 订阅仍未使用。
+[Control Channel Validation](evidence/control-validation-2026-10-15.json) further confirmed: denying a native tool performs no write, approving executes it exactly once, and canceling a pending approval causes subsequent approval attempts to return 409. Clean exit and resumption with hooks preserves the same native session, with Claude Code recording `input_tokens=278` and `cache_read_input_tokens=21760` on the resumed turn; termination events from stale generations are rejected without affecting the new session. A live Claude subscription has still not been used.
 
-[自动压缩实测](evidence/auto-compaction-validation-2026-10-15.json) 也已通过：只在独立测试进程中用官方配置降低触发阈值，未发送 `/compact`，原生返回 `trigger: auto`、90,038 → 2,245 tokens，同一会话随后两次正确回忆之前的信息。该测试验证自动压缩链路，不代表默认阈值或真实 Claude 订阅的消耗表现。
+[Auto-Compaction Validation](evidence/auto-compaction-validation-2026-10-15.json) also passed: lowering the trigger threshold via official configuration inside an isolated test process (without sending `/compact`) produced a native `trigger: auto` compaction from 90,038 → 2,245 tokens, and the same session accurately recalled prior facts across two subsequent turns. This test verifies the auto-compaction pipeline and does not represent default thresholds or token consumption on a live Claude subscription.
 
-上述缓存原始响应中，原生路径后两轮 `input_tokens` 为 211 / 108，`cache_read_input_tokens` 为 21,056 / 21,248；Bridge 为 74 / 98 与 21,248 / 21,312。两条路径各自三轮的 system/tools hash 稳定，工具 schema 相同；当时 Bridge 的稳定 append 多 546 字符。当前 append 和工具目录已经扩展，这些数值保留为该轮测量。上游没有返回 `cache_creation_input_tokens`，因此不报告精确总命中率；SDK `costUSD` 是估算，不是真实账单。详见 [缓存与压缩证据](docs/T3-ALIGNMENT.md#缓存与压缩验证)。
+In the raw cache responses from the comparison above, the native path recorded `input_tokens` of 211 / 108 and `cache_read_input_tokens` of 21,056 / 21,248 across turns 2 and 3, while Bridge recorded 74 / 98 and 21,248 / 21,312. Both paths maintained stable system/tools hashes across all three turns with identical tool schemas; at the time, Bridge's stable append added 546 characters. Because the append and tool catalog have since expanded, those numbers are retained as point-in-time measurements from that run. The upstream endpoint did not return `cache_creation_input_tokens`, so an exact overall cache hit rate is not reported; SDK `costUSD` is an estimate rather than a billing statement. See [Cache & Compaction Evidence](docs/T3-ALIGNMENT.md#缓存与压缩验证) for details.
 
-历史 `REPORT.md` 和 `evidence/` 中的 MiniMax Mission PASS 属于旧实现，不能为当前版本的 Mission 背书。旧版混合 usage 账本的命中率也不作为当前准确统计。
+Earlier MiniMax Mission `PASS` records in historical `REPORT.md` and `evidence/` belong to a previous implementation and do not endorse the current Mission architecture. Cache hit rates computed from legacy mixed-usage ledgers are likewise not used as current statistics.
 
-## 测试
+## Testing
 
-仓库专用验证入口是 `npm run verify:relay -- --feature chat`。它按[验证 skill](.cursor/skills/verify-relay-bridge/SKILL.md)启动隔离实例、运行只读 doctor，再通过真实 Droid 验证文件读写和同会话恢复，最后清理进程与私有配置并保留脱敏证据。先按 skill 设置明确的 BYOK 上游；`--offline-check` 只检查本地前提，不调用模型。
+The repository's primary verification entrypoint is `npm run verify:relay -- --feature chat`. Following the [verification skill](.cursor/skills/verify-relay-bridge/SKILL.md), it starts an isolated instance, runs a read-only `doctor`, verifies file read/write and same-session resumption through the real Droid CLI, and finally cleans up processes and private configs while preserving redacted evidence. Configure an explicit BYOK upstream per the skill first; `--offline-check` validates local prerequisites only without invoking any model.
 
-[本轮 skill 执行记录](evidence/verification-skill-validation-2026-10-16-r2.json)记录最后 BYOK 隔离修正后的真实 chat/resume 结果；独立场景的验证入口和范围见[入口验收](docs/FACTORY-SURFACES.md)。历史误判和失败记录仍保留。
+[Verification Skill Execution Record](evidence/verification-skill-validation-2026-10-16-r2.json) captures the live chat/resume results after the final BYOK isolation fixes; see [Factory Surfaces Validation](docs/FACTORY-SURFACES.md) for scenario-specific entrypoints and coverage. Historical false positives and failure records remain preserved.
 
-**不能把固定 BYOK 当成 Factory 全部托管模型能力。** [最新入口验收](docs/FACTORY-SURFACES.md)区分实测修复、可用替代入口与独立服务前提；[早期静态清单](evidence/factory-model-surface-2026-10-15.json)不是当前运行通过清单。REA 文件检查不等于完整调用图，隐藏和服务端入口的总数仍未知。
+**A pinned BYOK setup must not be mistaken for full coverage of Factory's hosted model capabilities.** [Factory Surfaces Validation](docs/FACTORY-SURFACES.md) distinguishes verified fixes, available alternative entrypoints, and standalone service prerequisites; the [Early Static Surface Inventory](evidence/factory-model-surface-2026-10-15.json) is not a list of currently passing runtime flows. Static binary/file inspection (REA) is not a complete call graph, and the total number of hidden or server-side entrypoints remains unknown.
 
-| 命令 | 范围 | 是否调用真实模型 |
+| Command | Scope | Invokes Live Model? |
 |---|---|---|
-| `npm test` | unit、protocol、fake relay、SDK adapter 注入事件、resilience | 否 |
-| `npm run test:protocol` | Messages、SSE、错误和鉴权 | 否 |
-| `npm run test:sdk-probes` | fake runtime 跨请求工具接力 | 否 |
-| `npx vitest run tests/sdk-runtime` | 真实 adapter 代码配合注入 SDK 事件；不是在线模型验收 | 否 |
-| `npm run test:resilience` | 重试、取消、图片 | 否 |
-| `npm run tiny-tasks:test` | Tiny Tasks 参考夹具 | 否 |
-| `npm run doctor` | 脱敏诊断 | 否 |
-| `npm run verify:relay -- --feature chat` | 真实 CLI 文件操作、会话恢复与清理证据 | 是，隔离 BYOK |
-| `npm run verify:spec -- --adversarial-spec` | Spec 只读、真实退出后写入 | 是，隔离 BYOK |
-| `npm run verify:custom -- --read-only-custom` | 自定义 Droid、模型选择和工具限制 | 是，隔离 BYOK |
-| `npm run verify:context -- --auto` | Factory 压缩、handoff、恢复与自动触发 | 是，隔离 BYOK |
-| `npm run verify:native-schema` / `npm run verify:native-policy` | 同会话 schema 版本与工具权限变更 | 是，隔离 BYOK |
-| `npm run verify:auxiliary` | 辅助入口可达性和能力拒绝检查 | 是，隔离 BYOK |
-| `npm run verify:mission -- --summary evidence/new-mission.json` | 独立新 Mission 验收，不覆盖旧证据 | 是，隔离 BYOK |
-| `npm run test:g0` | 安装版本的 Droid airgap 行为 | 以具体探针为准 |
-| `npm run probe:upstream` | BYOK 上游工具调用探针 | 是 |
-| `npm run test:e2e:chat` / `npm run test:e2e:mission` | 在线对话 / Mission 验收 | 是，另行执行并记录结果 |
+| `npm test` | Unit, protocol, fake relay, SDK adapter injected events, resilience | No |
+| `npm run test:protocol` | Messages, SSE, errors, and authentication | No |
+| `npm run test:sdk-probes` | Cross-request tool relay against fake runtime | No |
+| `npx vitest run tests/sdk-runtime` | Real adapter code with injected SDK events; not live model validation | No |
+| `npm run test:resilience` | Retries, cancellation, images | No |
+| `npm run tiny-tasks:test` | Tiny Tasks reference fixture | No |
+| `npm run doctor` | Redacted diagnostics | No |
+| `npm run verify:relay -- --feature chat` | Live CLI file operations, session resumption, and cleanup evidence | Yes, isolated BYOK |
+| `npm run verify:spec -- --adversarial-spec` | Spec read-only enforcement and write after real exit | Yes, isolated BYOK |
+| `npm run verify:custom -- --read-only-custom` | Custom Droid, model selection, and tool restrictions | Yes, isolated BYOK |
+| `npm run verify:context -- --auto` | Factory compaction, handoff, resumption, and auto-trigger | Yes, isolated BYOK |
+| `npm run verify:native-schema` / `npm run verify:native-policy` | In-session schema versioning and tool permission changes | Yes, isolated BYOK |
+| `npm run verify:auxiliary` | Auxiliary entrypoint reachability and capability denial checks | Yes, isolated BYOK |
+| `npm run verify:mission -- --summary evidence/new-mission.json` | Independent fresh Mission validation without overwriting old evidence | Yes, isolated BYOK |
+| `npm run test:g0` | Installed Droid airgap behavior | Depends on probe |
+| `npm run probe:upstream` | BYOK upstream tool-calling probe | Yes |
+| `npm run test:e2e:chat` / `npm run test:e2e:mission` | Live chat / Mission validation | Yes, run separately and record results |
 
-更多协议边界见 [Compatibility](docs/COMPATIBILITY.md)。公共 CLI 的 `FACTORY_AIRGAP_ENABLED=1` 是已观察到的技术行为，不等于官方授权声明。
+See [Compatibility](docs/COMPATIBILITY.md) for additional protocol boundaries. `FACTORY_AIRGAP_ENABLED=1` in the public CLI is an observed technical behavior, not an official authorization statement.
