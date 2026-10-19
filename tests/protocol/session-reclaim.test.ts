@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as runtimeFactory from "../../src/runtime/factory.js";
 import { assistantMessage } from "../../src/protocol/messages.js";
-import { MISSION_SPAWN_TOOLS } from "../../src/runtime/mission-tools.js";
+import { HUMAN_WAIT_TOOLS, MISSION_SPAWN_TOOLS } from "../../src/runtime/mission-tools.js";
 import type { BridgeRuntime, RuntimeHostCall, RuntimeTurn } from "../../src/runtime/types.js";
 import type { BridgeApp } from "../../src/http/app.js";
 import { postMessages, startTestBridge } from "../helpers/server.js";
@@ -79,7 +79,7 @@ const returnResult = (label: string) => ({
 describe("a parked session is reclaimed only when its slot is needed", () => {
   it("is left alone while slots are free, however long it has been idle, and still takes its result", async () => {
     const { app, token } = await bridge({ maxSessions: 4 });
-    const parked = await park(app, token, "a", { idleMs: 5 * HOUR });
+    const parked = await park(app, token, "a", { idleMs: 29 * HOUR });
     expect((await postMessages(app.url, token, fresh())).status).toBe(200);
     expect(runtime.cancel).not.toHaveBeenCalled();
     expect(app.store.require(parked.sessionId)).toMatchObject({ state: "WAITING_DROID_TOOL", pendingToolIds: [parked.toolUseId] });
@@ -92,8 +92,8 @@ describe("a parked session is reclaimed only when its slot is needed", () => {
 
   it("gives up the least recently active eligible session, one per refused request, and admits the new one", async () => {
     const { app, token, config } = await bridge({ maxSessions: 2 });
-    const oldest = await park(app, token, "a", { idleMs: 3 * HOUR });
-    const older = await park(app, token, "b", { idleMs: 2 * HOUR });
+    const oldest = await park(app, token, "a", { idleMs: 27 * HOUR });
+    const older = await park(app, token, "b", { idleMs: 26 * HOUR });
     expect((await postMessages(app.url, token, fresh())).status).toBe(200);
 
     expect(app.store.require(oldest.sessionId)).toMatchObject({
@@ -105,7 +105,7 @@ describe("a parked session is reclaimed only when its slot is needed", () => {
     const reclaimed = logged.filter((entry) => entry.event === "session_reclaimed");
     expect(reclaimed).toHaveLength(1);
     expect(reclaimed[0]!.data).toMatchObject({ sessionId: oldest.sessionId });
-    expect(reclaimed[0]!.data!.idleMs).toBeGreaterThanOrEqual(3 * HOUR);
+    expect(reclaimed[0]!.data!.idleMs).toBeGreaterThanOrEqual(27 * HOUR);
 
     // Another parked conversation now fills the slot again. The next refusal skips
     // the one that has only just parked and takes the one that has been idle.
@@ -120,7 +120,7 @@ describe("a parked session is reclaimed only when its slot is needed", () => {
     const { app, token } = await bridge({ maxSessions: 1 });
     const resumed = await postMessages(app.url, token, request("first turn"), { "x-bridge-session": "idle-conversation" });
     expect(app.store.require(resumed.session!).state).toBe("IDLE");
-    const parked = await park(app, token, "parked", { idleMs: 2 * HOUR });
+    const parked = await park(app, token, "parked", { idleMs: 26 * HOUR });
     const again = await postMessages(app.url, token, request("second turn"), { "x-bridge-session": "idle-conversation" });
     expect(again.status).toBe(200);
     expect(again.session).toBe(resumed.session);
@@ -129,7 +129,7 @@ describe("a parked session is reclaimed only when its slot is needed", () => {
 
   it("answers the result Droid later returns for a reclaimed session with the clear 409, without replaying the tool", async () => {
     const { app, token } = await bridge({ maxSessions: 1 });
-    const parked = await park(app, token, "a", { idleMs: 2 * HOUR });
+    const parked = await park(app, token, "a", { idleMs: 26 * HOUR });
     expect((await postMessages(app.url, token, fresh())).status).toBe(200);
     const handled = vi.mocked(runtime.handle).mock.calls.length;
     const late = await postMessages(app.url, token, returnResult("a"));
@@ -162,7 +162,7 @@ describe("a session that is still in use is never reclaimed; the request gets th
 
   it("measures idleness from its last activity, so a recent result keeps it", async () => {
     const { app, token } = await bridge({ maxSessions: 1, toolWaitTimeoutMs: 60_000 });
-    const parked = await park(app, token, "a", { idleMs: 5 * HOUR });
+    const parked = await park(app, token, "a", { idleMs: 29 * HOUR });
     vi.mocked(runtime.handle).mockResolvedValueOnce(toolTurn("toolu_a2", "TaskOutput"));
     // Droid answers the first tool and the session parks on the next one: that is activity.
     expect((await postMessages(app.url, token, returnResult("a"))).status).toBe(200);
@@ -170,15 +170,15 @@ describe("a session that is still in use is never reclaimed; the request gets th
     await expectRefused(app, token, parked.sessionId);
   });
 
-  it.each(MISSION_SPAWN_TOOLS)("is waiting on %s, whose Mission workers can run for hours", async (tool) => {
+  it.each([...MISSION_SPAWN_TOOLS, ...HUMAN_WAIT_TOOLS])("is waiting on %s, whose Mission workers or person can take days", async (tool) => {
     const { app, token } = await bridge({ maxSessions: 1 });
-    const parked = await park(app, token, "mission", { idleMs: 6 * HOUR, tool });
+    const parked = await park(app, token, "mission", { idleMs: 30 * HOUR, tool });
     await expectRefused(app, token, parked.sessionId);
   });
 
   it("is waiting on a Mission tool among several pending tools", async () => {
     const { app, token } = await bridge({ maxSessions: 1 });
-    const parked = await park(app, token, "mixed", { idleMs: 6 * HOUR });
+    const parked = await park(app, token, "mixed", { idleMs: 30 * HOUR });
     calls.set(parked.sessionId, [
       { toolUseId: "toolu_other", toolName: "Execute", input: {} },
       { toolUseId: parked.toolUseId, toolName: "StartMissionRun", input: {} },
@@ -194,14 +194,14 @@ describe("a session that is still in use is never reclaimed; the request gets th
       body: JSON.stringify({ eventId: "reclaim-start", event: { hook_event_name: "SessionStart", session_id: "factory-live", cwd, source: "startup" } }),
     });
     const marker = ((await started.json()) as { additionalContext: string }).additionalContext;
-    const parked = await park(app, token, "bound", { idleMs: 6 * HOUR, content: `${marker} start bound` });
+    const parked = await park(app, token, "bound", { idleMs: 30 * HOUR, content: `${marker} start bound` });
     expect(app.store.require(parked.sessionId).factorySessionId).toBe("factory-live");
     await expectRefused(app, token, parked.sessionId);
   });
 
   it("has a request in flight, even though it was parked and long idle", async () => {
     const { app, token } = await bridge({ maxSessions: 1 });
-    const parked = await park(app, token, "a", { idleMs: 6 * HOUR });
+    const parked = await park(app, token, "a", { idleMs: 30 * HOUR });
     const release = deferred<RuntimeTurn>();
     const started = deferred<void>();
     vi.mocked(runtime.handle).mockImplementationOnce(async () => { started.resolve(); return release.promise; });
@@ -216,7 +216,7 @@ describe("a session that is still in use is never reclaimed; the request gets th
   it("belongs to a runtime that cannot say what it is waiting on", async () => {
     delete runtime.pendingHostCalls;
     const { app, token } = await bridge({ maxSessions: 1 });
-    const parked = await park(app, token, "a", { idleMs: 6 * HOUR });
+    const parked = await park(app, token, "a", { idleMs: 30 * HOUR });
     await expectRefused(app, token, parked.sessionId);
   });
 
@@ -228,7 +228,7 @@ describe("a session that is still in use is never reclaimed; the request gets th
     const generating = postMessages(app.url, token, request("long answer"), { "x-bridge-session": "busy" });
     await started.promise;
     const [busy] = app.store.list();
-    busy!.updatedAt = new Date(Date.now() - 6 * HOUR).toISOString();
+    busy!.updatedAt = new Date(Date.now() - 30 * HOUR).toISOString();
     await expectRefused(app, token, busy!.bridgeSessionId, "GENERATING");
     release.resolve(textTurn());
     expect((await generating).status).toBe(200);

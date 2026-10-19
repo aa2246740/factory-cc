@@ -109,6 +109,15 @@ describe("official SDK streaming-input lifecycle (injected offline SDK)", () => 
     expect(sdk.close).not.toHaveBeenCalled();
   });
 
+  it("sets no turn limit unless BRIDGE_MAX_TURNS asks for one", async () => {
+    const unlimited = new FakeSdk(async function* () { yield success("ok"); });
+    await create(unlimited).runtime.handle(request(session(), "go"));
+    expect(unlimited.calls[0]!.options).not.toHaveProperty("maxTurns");
+    const limited = new FakeSdk(async function* () { yield success("ok"); });
+    await create(limited, { maxTurns: 500 }).runtime.handle(request(session({ bridgeSessionId: "limited" }), "go"));
+    expect(limited.calls[0]!.options.maxTurns).toBe(500);
+  });
+
   it("routes concurrent catalog selections to their actual models with independent BYOK environments", async () => {
     const sdk = new FakeSdk(async function* () { yield success("ok"); });
     const { runtime } = create(sdk, { models: modelCatalog });

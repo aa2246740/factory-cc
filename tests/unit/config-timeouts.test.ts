@@ -29,12 +29,20 @@ describe("timeout settings", () => {
     expect(load({ requestTimeoutMs: 1, approvalTimeoutMs: 2, turnMaxMs: 3 })).toMatchObject({ requestTimeoutMs: 1, approvalTimeoutMs: 2, turnMaxMs: 3 });
   });
 
-  it("lets a parked session be reclaimed after 30 idle minutes unless configured", () => {
-    expect(load().toolWaitTimeoutMs).toBe(30 * 60 * 1000);
+  it("lets a parked session be reclaimed after 12 idle hours unless configured", () => {
+    expect(load().toolWaitTimeoutMs).toBe(12 * 60 * 60 * 1000);
     vi.stubEnv("BRIDGE_TOOL_WAIT_TIMEOUT_MS", "90000");
     expect(load().toolWaitTimeoutMs).toBe(90_000);
     expect(load({ toolWaitTimeoutMs: 5 }).toolWaitTimeoutMs).toBe(5);
     vi.stubEnv("BRIDGE_TOOL_WAIT_TIMEOUT_MS", "soon");
-    expect(load().toolWaitTimeoutMs).toBe(30 * 60 * 1000);
+    expect(load().toolWaitTimeoutMs).toBe(12 * 60 * 60 * 1000);
+  });
+
+  it("is lenient enough for Missions that run for days", () => {
+    // Past Droid Missions: workers made up to 342 model calls on one feature, an
+    // orchestrator waited 4.7 hours on StartMissionRun and 5.2 on AskUser.
+    expect(load()).toMatchObject({ maxTurns: 0, toolWaitMs: 14 * 24 * 60 * 60 * 1000, maxSessions: 32, workerEndGraceMs: 2 * 60 * 1000 });
+    vi.stubEnv("BRIDGE_MAX_TURNS", "500");
+    expect(load().maxTurns).toBe(500);
   });
 });

@@ -168,10 +168,12 @@ export function loadConfig(overrides: Partial<BridgeConfig> = {}): BridgeConfig 
     logDir,
     sandboxDir: resolve(dataDir, "sandbox"),
     maxBodyBytes: overrides.maxBodyBytes ?? intEnv("BRIDGE_MAX_BODY_BYTES", 8 * 1024 * 1024),
-    maxSessions: overrides.maxSessions ?? intEnv("BRIDGE_MAX_SESSIONS", 16),
-    maxTurns: overrides.maxTurns ?? intEnv("BRIDGE_MAX_TURNS", 64),
-    toolWaitMs: overrides.toolWaitMs ?? intEnv("BRIDGE_TOOL_WAIT_MS", 8 * 60 * 60 * 1000),
-    toolWaitTimeoutMs: overrides.toolWaitTimeoutMs ?? intEnv("BRIDGE_TOOL_WAIT_TIMEOUT_MS", 30 * 60 * 1000),
+    maxSessions: overrides.maxSessions ?? intEnv("BRIDGE_MAX_SESSIONS", 32),
+    // 0: no limit. Droid Mission workers have made over 300 model calls on one feature.
+    maxTurns: overrides.maxTurns ?? intEnv("BRIDGE_MAX_TURNS", 0),
+    // A Mission orchestrator can wait hours on StartMissionRun, and AskUser on a person overnight.
+    toolWaitMs: overrides.toolWaitMs ?? intEnv("BRIDGE_TOOL_WAIT_MS", 14 * 24 * 60 * 60 * 1000),
+    toolWaitTimeoutMs: overrides.toolWaitTimeoutMs ?? intEnv("BRIDGE_TOOL_WAIT_TIMEOUT_MS", 12 * 60 * 60 * 1000),
     workerEndGraceMs: overrides.workerEndGraceMs ?? intEnv("BRIDGE_WORKER_END_GRACE_MS", 2 * 60 * 1000),
     requestTimeoutMs: overrides.requestTimeoutMs ?? intEnv("BRIDGE_REQUEST_TIMEOUT_MS", 10 * 60 * 1000),
     approvalTimeoutMs: overrides.approvalTimeoutMs ?? intEnv("BRIDGE_APPROVAL_TIMEOUT_MS", 30 * 60 * 1000),

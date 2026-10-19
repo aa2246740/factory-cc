@@ -9,7 +9,9 @@ import { parseMessagesRequest } from "../protocol/validate.js";
 import { apiError } from "../protocol/messages.js";
 import { explicitSessionId, historyMessageHashes, historyPrefixHash, resolveSession, roleFromHeaders, sessionContextHash } from "../sessions/correlate.js";
 import { isEnded } from "../sessions/state.js";
-import { MISSION_SPAWN_TOOLS, MISSION_WORKER_END_TOOL } from "../runtime/mission-tools.js";
+import { HUMAN_WAIT_TOOLS, MISSION_SPAWN_TOOLS, MISSION_WORKER_END_TOOL } from "../runtime/mission-tools.js";
+import { compactedSummaryText, lastSummarizedToolCall, sameToolInput, summaryQuote } from "../sessions/compaction.js";
+import { hostAllowsAnyTools } from "../runtime/native-tool-policy.js";
 import { SessionStore } from "../sessions/store.js";
 import { createRuntime } from "../runtime/factory.js";
 import type { RuntimeTurn, StreamSink } from "../runtime/types.js";
@@ -17,7 +19,7 @@ import { TurnWatchdog, type TurnTimeout } from "../runtime/turn-watchdog.js";
 import { header, requireAdminOrHookToken, requireAdminToken, requireClientToken } from "../security/auth.js";
 import { assertBodySize } from "../security/limits.js";
 import { redactHeaders, redactJson } from "../security/redact.js";
-import { BridgeError, type RedactedRequestRecord } from "../types.js";
+import { BridgeError, type MessagesRequest, type RedactedRequestRecord } from "../types.js";
 import { SseWriter } from "./sse-stream.js";
 import { statusPageHtml } from "./status-page.js";
 import { messageId } from "../protocol/messages.js";
@@ -84,7 +86,8 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
    * parked on Droid tools with no request attached; its last store update (when it
    * parked, or when it last received a result) is at least toolWaitTimeoutMs old;
    * it is not bound to a live Factory host, whose own end event releases it; and
-   * it is not waiting on a Mission spawn tool, whose workers can run for hours.
+   * it is not waiting on a Mission spawn tool, whose workers can run for hours, or
+   * on AskUser, whose answer comes from a person.
    */
   function reclaimParkedSession(): boolean {
     const now = Date.now();
@@ -96,7 +99,7 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
       if (!(idleMs >= config.toolWaitTimeoutMs) || control.hasLiveHost(sessionId)) continue;
       // A runtime that cannot say what the session waits on gets the benefit of the doubt.
       const calls = runtime.pendingHostCalls?.(sessionId);
-      if (!calls || calls.some((call) => (MISSION_SPAWN_TOOLS as readonly string[]).includes(call.toolName))) continue;
+      if (!calls || calls.some((call) => ([...MISSION_SPAWN_TOOLS, ...HUMAN_WAIT_TOOLS] as readonly string[]).includes(call.toolName))) continue;
       if (!oldest || idleMs > oldest.idleMs) oldest = { sessionId, idleMs };
     }
     if (!oldest) return false;
@@ -149,6 +152,53 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
     }, config.workerEndGraceMs);
     timer.unref();
     workerEndTimers.set(sessionId, { generation, timer });
+  }
+
+  /**
+   * Droid compacts a long conversation with a tool-free summarizer and continues
+   * with a new first message that quotes the summary, which here is a new
+   * conversation. The tool the old one was waiting on was answered inside that
+   * summary, so it would hold its process and session slot for good (sessions
+   * waiting on StartMissionRun are never reclaimed). Link a summarizer to the one
+   * parked session waiting on exactly the last tool call it shows answered, and
+   * release that session only once Droid continues with the summary this Bridge
+   * produced. Anything ambiguous or unmatched releases nothing.
+   */
+  const compactions = new Map<string, { sessionId: string; pendingToolIds: string; at: number }>();
+  const COMPACTION_LINK_MS = 60 * 60 * 1000;
+  function summarizedSession(request: MessagesRequest): { sessionId: string; pendingToolIds: string } | undefined {
+    if (hostAllowsAnyTools(request)) return undefined;
+    const call = lastSummarizedToolCall(request);
+    if (!call) return undefined;
+    const parked = store.list().filter((session) => session.state === "WAITING_DROID_TOOL" && !activeRequests.has(session.bridgeSessionId)
+      && (runtime.pendingHostCalls?.(session.bridgeSessionId) ?? []).some((pending) => pending.toolName === call.name && sameToolInput(pending.input, call.input)));
+    return parked.length === 1 ? { sessionId: parked[0]!.bridgeSessionId, pendingToolIds: parked[0]!.pendingToolIds.join("\n") } : undefined;
+  }
+  function rememberCompaction(link: { sessionId: string; pendingToolIds: string }, summary: string): void {
+    const quote = summaryQuote(summary);
+    // A short reply is not a summary Droid would continue from.
+    if (quote.length < 200) return;
+    const now = Date.now();
+    for (const [key, entry] of compactions) if (now - entry.at > COMPACTION_LINK_MS) compactions.delete(key);
+    compactions.set(quote, { ...link, at: now });
+  }
+  function releaseCompacted(request: MessagesRequest): void {
+    const text = compactedSummaryText(request);
+    if (!text) return;
+    for (const [quote, entry] of compactions) {
+      if (!text.includes(quote)) continue;
+      compactions.delete(quote);
+      const session = store.get(entry.sessionId);
+      if (!session || session.state !== "WAITING_DROID_TOOL" || activeRequests.has(entry.sessionId) || session.pendingToolIds.join("\n") !== entry.pendingToolIds) return;
+      const toolUseIds = [...session.pendingToolIds];
+      clearWorkerEnd(entry.sessionId);
+      store.interrupt(entry.sessionId, "compacted-by-droid");
+      void runtime.cancel(entry.sessionId, "compacted-by-droid").catch(() => {
+        logger.error("runtime_cancel_failed", { sessionId: entry.sessionId, reason: "compacted-by-droid" });
+      });
+      logger.info("compacted_session_released", { sessionId: entry.sessionId, toolUseIds });
+      return;
+    }
   }
 
   const server = createServer(async (req, res) => {
@@ -297,6 +347,9 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
     const cwd = resolveRequestCwd(headers, parsed, config);
     const prepared = control.prepareRequest(parsed, cwd);
     const request = prepared.request;
+    // Before this conversation takes a slot, free the one it replaces.
+    releaseCompacted(request);
+    const summarized = summarizedSession(request);
     const contextHash = sessionContextHash(headers, request, cwd);
     const resolved = resolveSession(store.list(), headers, request, {
       cwd, hostSessionId: control.hostSessionId(prepared.binding), allowModelSwitch: config.models !== undefined,
@@ -458,6 +511,7 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
       });
       store.setState(sessionId, turn.pendingToolIds.length ? "WAITING_DROID_TOOL" : "IDLE");
       if (turn.pendingToolIds.length) scheduleWorkerEnd(sessionId, turn.pendingToolIds);
+      if (summarized) rememberCompaction(summarized, turn.response.content.map((block) => (block.type === "text" && typeof block.text === "string" ? block.text : "")).join("\n"));
       appendLogLine(turnLog, JSON.stringify(redactJson({
         at: new Date().toISOString(),
         session: sessionId,

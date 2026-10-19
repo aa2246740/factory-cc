@@ -22,7 +22,7 @@ export function canonicalWorkspacePath(path: string): string {
 
 
 /** Droid opens a compacted conversation with this summary, then its environment reminder. */
-const COMPACTION_SUMMARY = "A previous instance of Droid has summarized the conversation thus far as follows:\n";
+export const COMPACTION_SUMMARY = "A previous instance of Droid has summarized the conversation thus far as follows:\n";
 
 /** The host's latest environment reminder owns cwd. Droid sends it leading the
  * first user message; a model switch moves a fresh one before the new prompt,

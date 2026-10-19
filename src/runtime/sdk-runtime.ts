@@ -749,7 +749,7 @@ export class SdkRuntime implements BridgeRuntime {
     const options: Record<string, unknown> = {
       tools: { type: "preset", preset: "claude_code" }, includePartialMessages: true,
       cwd: resolveCwd(input, this.config), persistSession: this.config.persistSessions,
-      maxTurns: this.config.maxTurns, mcpServers: { droid: server },
+      ...(this.config.maxTurns > 0 ? { maxTurns: this.config.maxTurns } : {}), mcpServers: { droid: server },
       // Permit the dynamic host namespace only. Droid executes these operations
       // with its own permissions; native Claude Code builtins are not covered.
       allowedTools: ["mcp__droid__*"],
