@@ -77,6 +77,10 @@ export class ControlBroker implements RuntimeControl {
       : { behavior: "deny", message: typeof decision.message === "string" ? decision.message : "Denied by the local controller." });
   }
 
+  hasApprovals(sessionId: string): boolean {
+    return [...this.approvals.values()].some((pending) => pending.view.bridgeSessionId === sessionId);
+  }
+
   cancelApprovals(sessionId: string): void {
     for (const pending of this.approvals.values()) if (pending.view.bridgeSessionId === sessionId) {
       pending.finish({ behavior: "deny", message: "Session cancelled." });
@@ -152,11 +156,20 @@ export class ControlBroker implements RuntimeControl {
 
   hostSessionId(token: string | undefined): string | undefined { return token ? this.tokens.get(token)?.sessionId : undefined; }
 
-  factoryPermissionMode(bridgeSessionId: string): string | undefined {
+  /** The live Factory host this native session is bound to, if any. */
+  private liveHost(bridgeSessionId: string): HostBinding | undefined {
     const session = this.store.get(bridgeSessionId);
     if (!session?.factorySessionId || !session.factoryCwd) return undefined;
     const host = this.hosts.get(`${session.factoryCwd}\0${session.factorySessionId}`);
-    if (!host || host.ended || !host.bridgeSessions.has(bridgeSessionId)) return undefined;
+    return host && !host.ended && host.bridgeSessions.has(bridgeSessionId) ? host : undefined;
+  }
+
+  /** A bound host's own SessionEnd or launch end releases the session, so it is never reclaimed for its slot. */
+  hasLiveHost(bridgeSessionId: string): boolean { return this.liveHost(bridgeSessionId) !== undefined; }
+
+  factoryPermissionMode(bridgeSessionId: string): string | undefined {
+    const host = this.liveHost(bridgeSessionId);
+    if (!host) return undefined;
     return host.specRestricted ? "spec" : host.permissionMode;
   }
 
@@ -208,6 +221,8 @@ export class ControlBroker implements RuntimeControl {
     }
     if (event.hook_event_name === "SessionStart") {
       const launch = typeof launchId === "string" ? this.launches.get(launchId) : undefined;
+      // Once the bridge is serving wrapper launches, a start with no launch is an unrelated Droid session in the same project.
+      if (launchId === undefined && this.launches.size > 0) throw new BridgeError(409, "invalid_host_launch", "Factory SessionStart needs a wrapper launch; this session was not started by run-droid or local.");
       if (launchId !== undefined && (!launch || launch.ended || launch.cwd !== cwd)) throw new BridgeError(409, "invalid_host_launch", "Factory launch is unknown, ended or uses another workspace.");
       if (host && !host.ended && launchId !== host.launchId) throw new BridgeError(409, "conflicting_host_launch", "Factory session is already owned by another launch.");
       // Official compact/handoff SessionStart identifies its predecessor. Retire

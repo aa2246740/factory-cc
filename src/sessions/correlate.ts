@@ -3,8 +3,8 @@ import { header } from "../security/auth.js";
 import { asBlocks, collectToolResults } from "../protocol/content.js";
 import type { ContentBlock, Message, MessagesRequest, RoleTag } from "../types.js";
 import { BridgeError } from "../types.js";
-import type { SessionRecord } from "./state.js";
-import { canonicalWorkspacePath } from "../workspace.js";
+import { isEnded, type SessionRecord } from "./state.js";
+import { canonicalWorkspacePath, resolveRequestCwd } from "../workspace.js";
 
 type Headers = Record<string, string | string[] | undefined>;
 
@@ -46,7 +46,7 @@ export function historyMessageHashes(messages: Message[]): string[] {
  * complete transcript prefix; host context and catalogs never identify a session.
  */
 export function sessionContextHash(headers: Headers, request: MessagesRequest, cwd?: string): string {
-  const workspace = cwd ?? process.env.BRIDGE_SDK_CWD ?? header(headers, "x-bridge-cwd");
+  const workspace = cwd ?? resolveRequestCwd(headers, request);
   return hash({
     model: request.model,
     role: roleFromHeaders(headers),
@@ -59,7 +59,7 @@ export function resolveSession(
   sessions: SessionRecord[],
   headers: Headers,
   request: MessagesRequest,
-  options: { cwd?: string; hostSessionId?: string; allowModelSwitch?: boolean } = {},
+  options: { cwd?: string; hostSessionId?: string; allowModelSwitch?: boolean; continueIdenticalTranscripts?: boolean } = {},
 ): { match?: SessionRecord; reason: string } {
   const explicit = explicitSessionId(headers, request);
   const contextHash = sessionContextHash(headers, request, options.cwd);
@@ -73,7 +73,7 @@ export function resolveSession(
   const assertSelectedContext = (session: SessionRecord, authenticatedThinkingChange = false): void => {
     if (!authenticatedThinkingChange) assertContext(session, compatibleContextHash(session), headers, request);
     if (!switchingModel(session)) return;
-    if (session.state === "FAILED" || session.state === "CANCELLED" || session.hostEnded === "terminal" || session.hostEnded === "interrupted") {
+    if (isEnded(session)) {
       throw new BridgeError(409, "session_unavailable", "This session has ended; start a new session.");
     }
     if (session.state !== "IDLE" || session.pendingToolIds.length > 0 || session.cancelRequested) {
@@ -81,7 +81,23 @@ export function resolveSession(
     }
   };
   const results = collectToolResults(request.messages);
-  const owners = sessions.filter((session) => results.some((result) => session.pendingToolIds.includes(result.tool_use_id)));
+  // Factory keeps old tool_results in its history. An ended session can no
+  // longer consume one, so it must not own the conversation they appear in.
+  const owners = sessions.filter((session) => !isEnded(session)
+    && results.some((result) => session.pendingToolIds.includes(result.tool_use_id)));
+  if (owners.length === 0) {
+    // Only a request that does nothing but return the abandoned tool's result is
+    // a retry. Any new user content makes it a new turn over imported history.
+    const latest = request.messages.at(-1);
+    const latestBlocks = latest?.role === "user" ? asBlocks(latest.content) : [];
+    if (latestBlocks.length > 0 && latestBlocks.every((block) => block.type === "tool_result")) {
+      const retried = collectToolResults([latest!]);
+      const held = (session: SessionRecord): string[] => [...(session.endedToolIds ?? []), ...session.pendingToolIds];
+      if (sessions.some((session) => isEnded(session) && retried.some((result) => held(session).includes(result.tool_use_id)))) {
+        throw new BridgeError(409, "session_unavailable", "This tool result belongs to a session that was cancelled, timed out or interrupted. Its tool call will not be replayed; send a new message to continue in a new session.");
+      }
+    }
+  }
   const incoming = historyMessageHashes(request.messages);
   const workspace = options.cwd ? canonicalWorkspacePath(options.cwd) : undefined;
   // Factory changes its request-side thinking default when a model is selected.
@@ -153,14 +169,16 @@ export function resolveSession(
 
   const candidates = sessions.filter((session) => {
     if (!inHostScope(session)) return false;
-    if (session.state === "CANCELLED" || session.state === "FAILED" || session.hostEnded === "terminal" || session.hostEnded === "interrupted") return false;
+    if (isEnded(session)) return false;
     if (!historyContextMatches(session)) return false;
     return hasCompleteHistory(session);
   });
-  if (candidates.length > 1) throw ambiguous("multiple transcripts match this history; supply X-Bridge-Session");
-  if (candidates[0]) {
-    assertSelectedContext(candidates[0], canChangeHostThinking(candidates[0]));
-    return { match: candidates[0], reason: "history-prefix" };
+  const chosen = candidates.length <= 1 ? candidates[0]
+    : options.continueIdenticalTranscripts ? identicalIdleTranscript(candidates, request.model) : undefined;
+  if (candidates.length > 1 && !chosen) throw ambiguous("multiple transcripts match this history; supply X-Bridge-Session");
+  if (chosen) {
+    assertSelectedContext(chosen, canChangeHostThinking(chosen));
+    return { match: chosen, reason: candidates.length > 1 ? "identical-history-prefix" : "history-prefix" };
   }
 
   // Factory compaction rewrites the prefix but retains the last complete turn.
@@ -173,8 +191,7 @@ export function resolveSession(
         // Identify a genuine model-switch continuation before rejecting busy
         // state; filtering it out would silently fork the native conversation.
         && (switchingModel(session) || (session.state === "IDLE" && !session.cancelRequested && session.pendingToolIds.length === 0))
-        && session.state !== "FAILED" && session.state !== "CANCELLED"
-        && session.hostEnded !== "terminal" && session.hostEnded !== "interrupted";
+        && !isEnded(session);
     });
   if (authenticatedTail.length > 1) throw ambiguous("multiple authenticated Factory transcripts match the retained turn; supply X-Bridge-Session");
   if (authenticatedTail[0]) {
@@ -195,6 +212,24 @@ export function resolveSession(
     throw ambiguous("identical concurrent prompts require X-Bridge-Session or distinct tool_use IDs");
   }
   return { reason: "new-session" };
+}
+
+/**
+ * Droid desktop sends no conversation ID. Conversations whose recorded transcripts
+ * are identical (two chats both opened with "hi" and got the same reply) are the
+ * same state, so any idle one may continue; the one chosen then diverges and the
+ * other conversation's next turn matches only the rest. Candidates already share
+ * workspace, role, thinking and every hashed message, including Droid tool
+ * results and native tool traces. Prefer the longest transcript, then the
+ * requested model; never pick a busy session or a shorter, abandoned fork.
+ */
+function identicalIdleTranscript(candidates: SessionRecord[], model: string): SessionRecord | undefined {
+  const longest = Math.max(...candidates.map((session) => session.historyMessageHashes!.length));
+  return candidates
+    .filter((session) => session.historyMessageHashes!.length === longest && session.state === "IDLE"
+      && !session.cancelRequested && session.pendingToolIds.length === 0)
+    .sort((left, right) => Number(left.model !== model) - Number(right.model !== model)
+      || left.createdAt.localeCompare(right.createdAt) || left.bridgeSessionId.localeCompare(right.bridgeSessionId))[0];
 }
 
 function assertContext(session: SessionRecord, contextHash: string, headers: Headers, request: MessagesRequest): void {

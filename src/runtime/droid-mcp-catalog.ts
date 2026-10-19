@@ -3,6 +3,7 @@ import type { Json, ToolDefinition } from "../types.js";
 import { BridgeError } from "../types.js";
 import type { ToolNameMap } from "../protocol/tool-names.js";
 import { ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
+import type { ZodTypeAny } from "zod";
 import { jsonSchemaToZod, toolJsonSchema, zodToolInputSchema } from "../protocol/schema-to-zod.js";
 
 export type DroidMcpHandler = (name: string, args: Record<string, unknown>, extra?: unknown, mcpName?: string) => Promise<unknown>;
@@ -16,7 +17,7 @@ interface PublicMcpServer {
   isConnected?(): boolean;
   server?: { sendToolListChanged(): Promise<void>; setRequestHandler(schema: typeof ListToolsRequestSchema, handler: () => unknown): void };
 }
-interface Entry { definition: ToolDefinition; registration: RegisteredTool; fingerprint: string; mcpName: string; advertisedSchema: Record<string, Json> }
+interface Entry { definition: ToolDefinition; registration: RegisteredTool; fingerprint: string; mcpName: string; advertisedSchema: Record<string, Json>; schema: ZodTypeAny }
 
 /** Names do not depend on the current catalog's order, additions or removals. */
 export class StableDroidToolNames implements ToolNameMap {
@@ -90,15 +91,17 @@ export class DroidMcpCatalog {
   has(original: string): boolean { return this.entries.has(original); }
   hasVersion(original: string, mcpName: string): boolean { return this.entries.get(original)?.mcpName === mcpName; }
   definitions(): ToolDefinition[] { return [...this.entries.values()].map((entry) => entry.definition); }
+  /** The validation this tool's MCP handler applies before it is called. */
+  accepts(original: string, input: unknown): boolean { return this.entries.get(original)?.schema.safeParse(input).success ?? false; }
 
   async update(definitions: ToolDefinition[]): Promise<boolean> {
-    const next = new Map<string, { definition: ToolDefinition; fingerprint: string; schema: unknown; mcpName: string; advertisedSchema: Record<string, Json> }>();
+    const next = new Map<string, { definition: ToolDefinition; fingerprint: string; schema?: ZodTypeAny; mcpName: string; advertisedSchema: Record<string, Json> }>();
     // Validate the complete replacement before altering the live namespace.
     for (const definition of definitions) {
       if (next.has(definition.name)) throw new BridgeError(422, "duplicate_tool_name", definition.name);
       const fingerprint = canonicalJson(definition);
       const previous = this.entries.get(definition.name);
-      let schema: unknown;
+      let schema: ZodTypeAny | undefined;
       let advertisedSchema = previous?.advertisedSchema;
       if (!previous || fingerprint !== previous.fingerprint) {
         try {
@@ -142,7 +145,7 @@ export class DroidMcpCatalog {
         });
         if (typeof registration?.remove !== "function" || typeof registration.update !== "function") throw new Error("RegisteredTool.update/remove are unavailable");
         this.names.activate(original, candidate.mcpName, candidate.fingerprint);
-        this.entries.set(original, { definition: candidate.definition, registration, fingerprint: candidate.fingerprint, mcpName: candidate.mcpName, advertisedSchema: candidate.advertisedSchema });
+        this.entries.set(original, { definition: candidate.definition, registration, fingerprint: candidate.fingerprint, mcpName: candidate.mcpName, advertisedSchema: candidate.advertisedSchema, schema: candidate.schema! });
         changed = true;
       }
       if (changed && this.instance.isConnected?.() !== false) {

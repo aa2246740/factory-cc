@@ -107,7 +107,7 @@ export async function startSdkBridge(port: number, dataDir: string, selection: U
     }, null, 2)}\n`, { mode: 0o600 });
     const hostHooks = installFactoryHooks({
       hooksPath: join(workspace, ".factory/hooks.json"), configPath: join(factoryHome, "relay-hooks.json"),
-      url: app.url, adminToken: config.adminToken,
+      url: app.url, hookToken: config.hookToken,
     });
     const activeApp = app;
     let closing: Promise<void> | undefined;

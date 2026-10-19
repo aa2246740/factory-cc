@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadConfig } from "../../src/config.js";
-import { modelsFromIds, parseModelIds, resolveRequestModel, validateModels } from "../../src/models.js";
+import { configuredModels, modelsFromIds, parseModelIds, resolveRequestModel, validateModels } from "../../src/models.js";
 
 const dirs: string[] = [];
 const directory = () => { const path = mkdtempSync(join(tmpdir(), "model-catalog-")); dirs.push(path); return path; };
@@ -12,6 +12,8 @@ afterEach(() => { vi.unstubAllEnvs(); dirs.splice(0).forEach((path) => rmSync(pa
 describe("actual inference models", () => {
   it("keeps Claude aliases and BYOK models distinct from Factory roles", () => {
     expect(modelsFromIds(["sonnet", "opus", "haiku"], "subscription").map((model) => model.displayName))
+      .toEqual(["Claude Sonnet", "Claude Opus", "Claude Haiku"]);
+    expect(modelsFromIds(["sonnet", "opus", "haiku"], "anthropic-api").map((model) => model.displayName))
       .toEqual(["Claude Sonnet", "Claude Opus", "Claude Haiku"]);
     expect(modelsFromIds(["glm-5.2", "glm-4.7"]).map((model) => model.displayName)).toEqual(["GLM-5.2", "GLM-4.7"]);
     expect(modelsFromIds(["sonnet"], "byok")[0]?.model).toBe("sonnet");
@@ -39,6 +41,14 @@ describe("actual inference models", () => {
     const config = loadConfig({ dataDir: directory(), authMode: "subscription", models: modelsFromIds(["sonnet", "haiku"], "subscription") });
     expect(resolveRequestModel(config, "haiku")).toMatchObject({ model: "haiku", selection: undefined });
     expect(process.env.ANTHROPIC_MODEL).toBe("user-setting");
+  });
+  it("gives anthropic-api the subscription catalog and leaves cloud empty without BRIDGE_MODELS", () => {
+    vi.stubEnv("BRIDGE_MODELS", "");
+    vi.stubEnv("BRIDGE_UPSTREAM_MODEL", "");
+    const anthropic = loadConfig({ dataDir: directory(), authMode: "anthropic-api" });
+    expect(anthropic.models).toBeUndefined();
+    expect(configuredModels(anthropic).map((model) => model.id)).toEqual(["sonnet", "opus", "haiku"]);
+    expect(configuredModels(loadConfig({ dataDir: directory(), authMode: "cloud" }))).toEqual([]);
   });
   it("loads an explicit environment catalog with the matching names", () => {
     vi.stubEnv("BRIDGE_MODELS", "sonnet,haiku");

@@ -22,6 +22,8 @@ export interface SessionRecord {
   createdAt: string;
   updatedAt: string;
   pendingToolIds: string[];
+  /** IDs that were pending when the session ended. Never matched as owners; kept so a retried result gets a clear 409. */
+  endedToolIds?: string[];
   cancelRequested: boolean;
   notes: string[];
   usage: {
@@ -29,6 +31,24 @@ export interface SessionRecord {
     output_tokens: number;
     estimated: boolean;
   };
+}
+
+/** A session in this condition can never resume or complete another tool round trip. */
+export function isEnded(session: Pick<SessionRecord, "state" | "hostEnded">): boolean {
+  return session.state === "CANCELLED" || session.state === "FAILED"
+    || session.hostEnded === "terminal" || session.hostEnded === "interrupted";
+}
+
+/**
+ * Release the tool IDs of an ended session. Factory keeps the matching
+ * tool_result in its history, so a pending ID left behind would route every
+ * later request of that conversation to a session that can only answer 409.
+ */
+export function retirePendingTools(record: SessionRecord): SessionRecord {
+  if (!isEnded(record) || record.pendingToolIds.length === 0) return record;
+  record.endedToolIds = [...new Set([...(record.endedToolIds ?? []), ...record.pendingToolIds])];
+  record.pendingToolIds = [];
+  return record;
 }
 
 export function transition(record: SessionRecord, next: SessionState): SessionRecord {
@@ -46,5 +66,5 @@ export function transition(record: SessionRecord, next: SessionState): SessionRe
   }
   record.state = next;
   record.updatedAt = new Date().toISOString();
-  return record;
+  return retirePendingTools(record);
 }

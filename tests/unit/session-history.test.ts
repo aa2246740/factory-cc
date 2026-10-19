@@ -91,6 +91,37 @@ describe("conversation continuity and isolation", () => {
       .toThrowError(expect.objectContaining({ status: 409, code: "ambiguous_session" }));
   });
 
+  it("lets Droid desktop continue one of several identical idle transcripts, which then diverge", () => {
+    // Droid desktop sends no conversation ID: two chats with the same opening and
+    // reply are the same state, so the earliest idle one continues.
+    const desktop = (sessions: SessionRecord[], request = continuation) => resolveSession(sessions, headers, request, { cwd, continueIdenticalTranscripts: true });
+    const older = session({ createdAt: "2026-10-19T00:00:00.000Z" });
+    const newer = session({ bridgeSessionId: "bridge-b", droidSessionId: "droid-b", createdAt: "2026-10-19T00:01:00.000Z" });
+    expect(desktop([newer, older])).toMatchObject({ match: older, reason: "identical-history-prefix" });
+    // After the chosen one records its new turn, the other chat's next turn matches only the rest.
+    const advanced = { ...older, historyMessageHashes: historyMessageHashes([...continuation.messages, { role: "assistant", content: "Pine." }]) };
+    const otherChat: MessagesRequest = { ...initial, messages: [...completed, { role: "user", content: "Spell it backwards." }] };
+    expect(desktop([advanced, newer], otherChat).match).toBe(newer);
+    // Busy or cancelled transcripts are never taken over; with none idle it stays ambiguous.
+    expect(desktop([session({ createdAt: "1", state: "GENERATING" }), newer]).match).toBe(newer);
+    expect(desktop([older, session({ bridgeSessionId: "bridge-b", createdAt: "2", pendingToolIds: ["t"] })]).match).toBe(older);
+    expect(() => desktop([session({ state: "GENERATING" }), session({ bridgeSessionId: "bridge-b", cancelRequested: true })]))
+      .toThrowError(expect.objectContaining({ status: 409, code: "ambiguous_session" }));
+    // A longer matching transcript is the live conversation, not an abandoned shorter fork.
+    const opening: Message[] = [{ role: "user", content: "Start." }, { role: "assistant", content: "Started." }];
+    const longer = session({ bridgeSessionId: "bridge-long", createdAt: "9", historyMessageHashes: historyMessageHashes([...opening, ...completed]) });
+    const shorter = session({ bridgeSessionId: "bridge-short", createdAt: "0", historyMessageHashes: historyMessageHashes(opening) });
+    const deep: MessagesRequest = { ...initial, messages: [...opening, ...completed, { role: "user", content: "Next." }] };
+    expect(desktop([shorter, longer], deep).match).toBe(longer);
+    // With model switching allowed, the conversation already on the requested model wins.
+    const switching = (sessions: SessionRecord[]) => resolveSession(sessions, headers, continuation, { cwd, continueIdenticalTranscripts: true, allowModelSwitch: true });
+    const otherModel = session({ bridgeSessionId: "bridge-other", createdAt: "0", model: "other-model" });
+    expect(switching([otherModel, newer]).match).toBe(newer);
+    // Another project never becomes a candidate.
+    const elsewhere = session({ bridgeSessionId: "bridge-elsewhere", createdAt: "0", contextHash: sessionContextHash(headers, initial, "/tmp/project-b") });
+    expect(desktop([elsewhere, newer]).match).toBe(newer);
+  });
+
   it("gives an explicit ID priority over an otherwise ambiguous transcript", () => {
     expect(resolve([session(), session({ bridgeSessionId: "bridge-b", droidSessionId: "droid-b" })], continuation, { "x-bridge-session": "droid-b" }).match?.bridgeSessionId).toBe("bridge-b");
   });
@@ -218,6 +249,40 @@ describe("conversation continuity and isolation", () => {
 
   it("does not resume a failed or cancelled transcript through history matching", () => {
     expect(resolve([session({ state: "FAILED" }), session({ bridgeSessionId: "bridge-b", state: "CANCELLED" })]).match).toBeUndefined();
+  });
+
+  describe("ended sessions and the tool results Factory keeps in its history", () => {
+    const toolUse: Message = { role: "assistant", content: [{ type: "tool_use", id: "tool-a", name: "Read", input: {} }] };
+    const toolResult = { type: "tool_result" as const, tool_use_id: "tool-a", content: "interrupted" };
+    const request = (...tail: Message[]): MessagesRequest => ({ ...initial, messages: [initial.messages[0]!, toolUse, ...tail] });
+    const retry = request({ role: "user", content: [toolResult] });
+    const merged = request({ role: "user", content: [toolResult, { type: "text", text: "Do something else instead." }] });
+    const consecutive = request({ role: "user", content: [toolResult] }, { role: "user", content: "Do something else instead." });
+    const endings: Array<Partial<SessionRecord>> = [{ state: "CANCELLED" }, { state: "FAILED" }, { hostEnded: "terminal" }, { hostEnded: "interrupted" }];
+
+    it.each(endings)("answers a retried tool result of an ended session with a clear 409: %j", (patch) => {
+      for (const held of [{ endedToolIds: ["tool-a"] }, { pendingToolIds: ["tool-a"] }]) {
+        expect(() => resolve([session({ ...patch, ...held })], retry))
+          .toThrowError(expect.objectContaining({ status: 409, code: "session_unavailable", message: expect.stringMatching(/will not be replayed.*new session/) }));
+      }
+    });
+
+    it.each(endings)("treats a new message after an ended tool wait as a new conversation: %j", (patch) => {
+      const record = session({ ...patch, pendingToolIds: ["tool-a"], endedToolIds: ["tool-a"] });
+      for (const next of [merged, consecutive]) expect(resolve([record], next)).toEqual({ reason: "new-session" });
+    });
+
+    it("lets a live session keep ownership of its own pending tool while an ended one is ignored", () => {
+      const live = session({ bridgeSessionId: "bridge-live", state: "WAITING_DROID_TOOL", pendingToolIds: ["tool-a"] });
+      const dead = session({ bridgeSessionId: "bridge-dead", state: "CANCELLED", endedToolIds: ["tool-a"] });
+      expect(resolve([dead, live], retry)).toMatchObject({ match: live, reason: "tool-use-id" });
+      expect(resolve([dead, live], merged)).toMatchObject({ match: live, reason: "tool-use-id" });
+    });
+
+    it("does not mistake an unknown tool result for a retry of an ended session", () => {
+      const ended = session({ state: "CANCELLED", endedToolIds: ["other-tool"] });
+      expect(resolve([ended], retry)).toEqual({ reason: "new-session" });
+    });
   });
 
   describe("optional model switching", () => {

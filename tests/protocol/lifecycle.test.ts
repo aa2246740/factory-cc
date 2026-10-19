@@ -5,6 +5,7 @@ import { request as httpRequest } from "node:http";
 import * as runtimeFactory from "../../src/runtime/factory.js";
 import { assistantMessage } from "../../src/protocol/messages.js";
 import { BridgeError } from "../../src/types.js";
+import { ControlBroker } from "../../src/control/broker.js";
 import type { BridgeRuntime, RuntimeTurn, StreamSink } from "../../src/runtime/types.js";
 import type { BridgeApp } from "../../src/http/app.js";
 import { postMessages, startTestBridge } from "../helpers/server.js";
@@ -189,6 +190,110 @@ describe("HTTP execution lifecycle", () => {
     expect((await first).status).toBe(200);
   });
 
+  it("does not bind a Factory host when the request is busy or the session has ended", async () => {
+    const pending = deferred<RuntimeTurn>();
+    const started = deferred<void>();
+    vi.mocked(runtime.handle).mockImplementation(async () => { started.resolve(); return pending.promise; });
+    const { app, token, config } = await startTestBridge();
+    apps.push(app);
+    const cwd = process.env.BRIDGE_SDK_CWD || config.sdkCwd;
+    const startedHost = await fetch(`${app.url}/internal/host-events`, {
+      method: "POST",
+      headers: { authorization: "Bearer admin-token", "content-type": "application/json" },
+      body: JSON.stringify({ eventId: "bind-start", event: { hook_event_name: "SessionStart", session_id: "factory-bind", cwd, source: "startup" } }),
+    });
+    expect(startedHost.status).toBe(200);
+    const hostBody = await startedHost.json() as { additionalContext: string };
+    const marker = hostBody.additionalContext;
+    const bound = () => (app.runtimeStatus().control as { boundNativeSessions: number }).boundNativeSessions;
+    expect(bound()).toBe(0);
+
+    const first = postMessages(app.url, token, body, { "x-bridge-session": "shared" });
+    await started.promise;
+    const busy = await postMessages(app.url, token, { ...body, messages: [{ role: "user", content: `${marker} conflicting` }] }, { "x-bridge-session": "shared" });
+    expect(busy.status).toBe(409);
+    expect(busy.json.error).toMatchObject({ type: "session_busy" });
+    expect(bound()).toBe(0);
+    pending.resolve(result());
+    const completed = await first;
+    expect(completed.status).toBe(200);
+
+    const cancel = await fetch(`${app.url}/internal/cancel`, {
+      method: "POST",
+      headers: { authorization: "Bearer admin-token", "content-type": "application/json" },
+      body: JSON.stringify({ sessionId: completed.session }),
+    });
+    expect(cancel.status).toBe(200);
+    const ended = await postMessages(app.url, token, { ...body, messages: [{ role: "user", content: `${marker} after end` }] }, { "x-bridge-session": "shared" });
+    expect(ended.status).toBe(409);
+    expect(ended.json.error).toMatchObject({ type: "session_unavailable" });
+    expect(bound()).toBe(0);
+
+    const accepted = await postMessages(app.url, token, { ...body, messages: [{ role: "user", content: `${marker} fresh` }] }, { "x-bridge-session": "fresh-bind" });
+    expect(accepted.status).toBe(200);
+    expect(bound()).toBe(1);
+  });
+
+  it("leaves the Factory binding untouched when the session limit refuses the state write", async () => {
+    const pending = deferred<RuntimeTurn>();
+    const started = deferred<void>();
+    const { app, token, config } = await startTestBridge({ maxSessions: 1 });
+    apps.push(app);
+    const cwd = process.env.BRIDGE_SDK_CWD || config.sdkCwd;
+    const startedHost = await fetch(`${app.url}/internal/host-events`, {
+      method: "POST",
+      headers: { authorization: "Bearer admin-token", "content-type": "application/json" },
+      body: JSON.stringify({ eventId: "bind-order", event: { hook_event_name: "SessionStart", session_id: "factory-order", cwd, source: "startup" } }),
+    });
+    const marker = ((await startedHost.json()) as { additionalContext: string }).additionalContext;
+    const bound = () => (app.runtimeStatus().control as { boundNativeSessions: number }).boundNativeSessions;
+
+    // One idle session, and another that occupies the only active slot.
+    const idle = await postMessages(app.url, token, body, { "x-bridge-session": "idle-a" });
+    expect(idle.status).toBe(200);
+    vi.mocked(runtime.handle).mockImplementationOnce(async () => { started.resolve(); return pending.promise; });
+    const holder = postMessages(app.url, token, body, { "x-bridge-session": "holder" });
+    await started.promise;
+
+    const resume = { ...body, messages: [{ role: "user", content: `${marker} resume the idle one` }] };
+    const refused = await postMessages(app.url, token, resume, { "x-bridge-session": idle.session! });
+    expect(refused.status).toBe(429);
+    expect(refused.json.error).toMatchObject({ type: "session_limit" });
+    expect(bound()).toBe(0);
+    expect(app.store.require(idle.session!).state).toBe("IDLE");
+    expect(app.store.require(idle.session!).factorySessionId).toBeUndefined();
+    expect(app.store.require(idle.session!).factoryCwd).toBeUndefined();
+
+    pending.resolve(result());
+    expect((await holder).status).toBe(200);
+    const accepted = await postMessages(app.url, token, resume, { "x-bridge-session": idle.session! });
+    expect(accepted.status).toBe(200);
+    expect(bound()).toBe(1);
+    expect(app.store.require(idle.session!)).toMatchObject({ factorySessionId: "factory-order" });
+  });
+
+  it("gives a session back as it was, and frees a new one, when only the host bind is refused", async () => {
+    const { app, token } = await startTestBridge({ maxSessions: 1 });
+    apps.push(app);
+    const idle = await postMessages(app.url, token, body, { "x-bridge-session": "idle-a" });
+    const refuse = vi.spyOn(ControlBroker.prototype, "bind").mockImplementation(() => {
+      throw new BridgeError(409, "conflicting_host_binding", "This native session belongs to another live Factory session.");
+    });
+    const resumed = await postMessages(app.url, token, body, { "x-bridge-session": idle.session! });
+    expect(resumed.status).toBe(409);
+    expect(resumed.json.error).toMatchObject({ type: "conflicting_host_binding" });
+    expect(app.store.require(idle.session!)).toMatchObject({ state: "IDLE", cancelRequested: false });
+
+    const fresh = await postMessages(app.url, token, body, { "x-bridge-session": "fresh-one" });
+    expect(fresh.status).toBe(409);
+    expect(app.store.list().find((session) => session.droidSessionId === "fresh-one")).toMatchObject({ state: "FAILED" });
+    expect(runtime.handle).toHaveBeenCalledTimes(1);
+
+    refuse.mockRestore();
+    // Neither refused request kept a slot: the limit of one still admits a conversation.
+    expect((await postMessages(app.url, token, body, { "x-bridge-session": "another" })).status).toBe(200);
+  });
+
   it("does not cancel the next turn when the previous stream finishes", async () => {
     const pending = deferred<RuntimeTurn>();
     const started = deferred<void>();
@@ -219,7 +324,11 @@ describe("HTTP execution lifecycle", () => {
     turn.events = [
       { at: "2026-10-15T00:00:00.000Z", type: "usage", data: { cacheRead: 900 } },
       { at: "2026-10-15T00:00:00.000Z", type: "compact_boundary", data: { before: 10000, after: 1000 } },
+      { at: "2026-10-15T00:00:00.000Z", type: "cancelled_turn_followup", data: { sdkSessionId: "official-sdk-session" } },
     ];
+    const unlogged = { at: "2026-10-15T00:00:00.000Z", type: "claude_code_tool", data: { name: "Read", id: "read-1" } };
+    const logged = turn.events;
+    turn.events = [...logged, unlogged];
     vi.mocked(runtime.handle).mockResolvedValue(turn);
     const { app, token, config } = await startTestBridge({ persistSessions: true });
     apps.push(app);
@@ -227,9 +336,9 @@ describe("HTTP execution lifecycle", () => {
     expect(response.status).toBe(200);
     expect(app.store.get(response.session!)?.sdkSessionId).toBe("official-sdk-session");
     expect(readFileSync(join(config.dataDir, "sessions", "sessions.jsonl"), "utf8")).toContain("official-sdk-session");
-    const logged = JSON.parse(readFileSync(join(config.logDir, "turns.jsonl"), "utf8").trim());
-    expect(logged.usage.cache_read_input_tokens).toBe(900);
-    expect(logged.events).toEqual(turn.events);
+    const entry = JSON.parse(readFileSync(join(config.logDir, "turns.jsonl"), "utf8").trim());
+    expect(entry.usage.cache_read_input_tokens).toBe(900);
+    expect(entry.events).toEqual(logged);
   });
 
   it("continues an unambiguous full transcript without an explicit session ID", async () => {

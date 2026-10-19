@@ -3,6 +3,10 @@ import { basename, join, resolve } from "node:path";
 import type { Json, RoleTag, ToolDefinition } from "../types.js";
 
 export const MISSION_SPAWN_TOOLS = ["StartMissionRun", "ProposeMission", "Task"] as const;
+/** Waits on a person, who may answer hours later. */
+export const HUMAN_WAIT_TOOLS = ["AskUser"] as const;
+/** A Mission worker reports its feature done with this; Droid then ends the worker. */
+export const MISSION_WORKER_END_TOOL = "EndFeatureRun";
 
 export function findMissionSpawnTool(tools: ToolDefinition[] | undefined): ToolDefinition | undefined {
   if (!tools?.length) return undefined;

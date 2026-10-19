@@ -1,4 +1,5 @@
 import { BridgeError } from "../types.js";
+import { buildChildEnv, isAnthropicHost, type AuthMode } from "./auth-env.js";
 
 export interface UpstreamProvider {
   id: "minimax" | "glm" | "openrouter";
@@ -271,11 +272,15 @@ export function selectionFromConfig(input: {
   if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(input.tokenEnv) || !tokenPresent(input.tokenEnv)) {
     throw new BridgeError(401, "blocked_auth", "The explicitly selected BYOK key environment variable is missing or empty; no other credential will be tried.");
   }
+  const token = process.env[input.tokenEnv] ?? "";
   let endpoint: URL;
   try { endpoint = new URL(input.baseUrl); }
   catch { throw new BridgeError(400, "invalid_upstream", "BRIDGE_UPSTREAM_BASE_URL must be an HTTP(S) URL."); }
   if (!["http:", "https:"].includes(endpoint.protocol) || endpoint.username || endpoint.password || endpoint.search || endpoint.hash) {
     throw new BridgeError(400, "invalid_upstream", "BRIDGE_UPSTREAM_BASE_URL must be an HTTP(S) URL without credentials, query or fragment.");
+  }
+  if (token.startsWith("sk-ant-") && !isAnthropicHost(endpoint.hostname)) {
+    throw new BridgeError(400, "anthropic_credential_to_third_party", "Refusing to send an Anthropic API key (sk-ant-) to a host outside anthropic.com. Use BRIDGE_AUTH=anthropic-api with https://api.anthropic.com, or use a key issued by the selected endpoint.");
   }
   const hostname = endpoint.hostname;
   const id: UpstreamProvider["id"] = /bigmodel|zhipu|glm/i.test(hostname) || /(?:^|\.)z\.ai$/i.test(hostname)
@@ -310,79 +315,9 @@ export function publicSelection(selection: UpstreamSelection): Record<string, st
 export function sdkEnv(
   selection: UpstreamSelection | undefined,
   bridgeListen: string,
-  authMode: "byok" | "subscription" = "byok",
+  authMode: AuthMode = "byok",
 ): Record<string, string> {
-  const env: Record<string, string> = {};
-  for (const [key, value] of Object.entries(process.env)) {
-    if (value === undefined) continue;
-    env[key] = value;
-  }
-  env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC ?? "1";
-  env.API_TIMEOUT_MS = env.API_TIMEOUT_MS ?? "600000";
-  env.CLAUDE_AGENT_SDK_CLIENT_APP = env.CLAUDE_AGENT_SDK_CLIENT_APP ?? "relay-bridge/0.1.0";
-
-  if (authMode === "subscription") {
-    // Leave ANTHROPIC_BASE_URL / AUTH_TOKEN / API_KEY exactly as the host
-    // process provided them so Claude Code can use its local login.
-    const existing = env.ANTHROPIC_BASE_URL ?? "";
-    if (existing.includes(bridgeListen) || /127\.0\.0\.1:1878/.test(existing)) {
-      throw new Error("refusing to point Claude Code ANTHROPIC_BASE_URL at Relay Bridge");
-    }
-    return env;
-  }
-
-  if (!selection) {
-    throw new Error("BYOK sdkEnv requires an upstream selection");
-  }
-  const token = process.env[selection.provider.tokenEnv] ?? "";
-  if (!token.trim()) throw new BridgeError(401, "blocked_auth", "The selected BYOK key is no longer available; refusing to start Claude Code with ambient credentials.");
-  // A fresh config directory does not override process-level backend/auth
-  // selectors. Clear only those selectors for explicit BYOK; preserve proxies,
-  // CA trust and the complete subscription environment in subscription mode.
-  for (const key of [
-    // Backend selectors (including newer SDK gateway/cloud backends).
-    "CLAUDE_CODE_USE_BEDROCK",
-    "CLAUDE_CODE_USE_VERTEX",
-    "CLAUDE_CODE_USE_FOUNDRY",
-    "CLAUDE_CODE_USE_ANTHROPIC_AWS",
-    "CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD",
-    "CLAUDE_CODE_USE_MANTLE",
-    "CLAUDE_CODE_USE_GATEWAY",
-    // Credential FD selectors: never let an ambient descriptor override BYOK.
-    "CLAUDE_CODE_OAUTH_TOKEN_FILE_DESCRIPTOR",
-    "CLAUDE_CODE_GATEWAY_TOKEN_FILE_DESCRIPTOR",
-    "CLAUDE_CODE_API_KEY_FILE_DESCRIPTOR",
-    "CLAUDE_CODE_WEBSOCKET_AUTH_FILE_DESCRIPTOR",
-    "CCR_AGENT_PROXY_TOKEN_FILE_DESCRIPTOR",
-    // Host / OAuth / gateway credential selectors.
-    "CLAUDE_CODE_OAUTH_TOKEN",
-    "CLAUDE_CODE_OAUTH_REFRESH_TOKEN",
-    "CLAUDE_CODE_SESSION_ACCESS_TOKEN",
-    "CLAUDE_CODE_HOST_SESSION_ID",
-    "CLAUDE_CODE_HOST_AUTH_ENV_VAR",
-    "CLAUDE_CODE_HOST_CREDS_FILE",
-    "CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST",
-    "CLAUDE_CODE_SDK_HAS_HOST_AUTH_REFRESH",
-    "CLAUDE_CODE_SDK_HAS_OAUTH_REFRESH",
-    "CLAUDE_CODE_GATEWAY_TOKEN",
-    "CLAUDE_CODE_HOST_GATEWAY_LINEAGE",
-    "AGENT_PROXY_AUTH_TOKEN",
-    // Endpoint transports override ANTHROPIC_BASE_URL, even with a fresh config.
-    "ANTHROPIC_CUSTOM_HEADERS",
-    "_CLAUDE_CODE_ASSUME_FIRST_PARTY_BASE_URL",
-    "ANTHROPIC_UNIX_SOCKET",
-    "_CLAUDE_CODE_AGENT_PROXY_HTTP_SOCKET",
-    "CLAUDE_CODE_API_BASE_URL",
-    // Ambient model-policy switches must not change the selected BYOK routing.
-    "CLAUDE_CODE_SUBAGENT_MODEL_FORCE",
-    "FALLBACK_FOR_ALL_PRIMARY_MODELS",
-  ]) delete env[key];
-  env.ANTHROPIC_BASE_URL = selection.provider.baseUrl;
-  env.ANTHROPIC_AUTH_TOKEN = token;
-  env.ANTHROPIC_API_KEY = "";
-  Object.assign(env, selection.modelSlots);
-  if (env.ANTHROPIC_BASE_URL.includes(bridgeListen) || /127\.0\.0\.1:1878/.test(env.ANTHROPIC_BASE_URL)) {
-    throw new Error("refusing to point Claude Code ANTHROPIC_BASE_URL at Relay Bridge");
-  }
-  return env;
+  // Selectors that used to be deleted after a full env copy are simply absent:
+  // buildChildEnv starts from the allowlist, then applies this mode's extras.
+  return buildChildEnv(authMode, process.env, selection, { bridgeListen });
 }

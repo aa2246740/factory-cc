@@ -2,6 +2,9 @@ import type { ServerResponse } from "node:http";
 import { BridgeError, type ContentBlock, type MessagesResponse, type Usage } from "../types.js";
 import { writeSseHeaders } from "./sse.js";
 
+/** Same cadence as the Anthropic API, so proxies and clients keep an idle stream open. */
+export const PING_INTERVAL_MS = 15_000;
+
 function event(res: ServerResponse, name: string, data: unknown): void {
   res.write(`event: ${name}\n`);
   res.write(`data: ${JSON.stringify(data)}\n\n`);
@@ -21,10 +24,12 @@ export class SseWriter {
   private contentComplete = false;
   private readonly wireContent: ContentBlock[] = [];
   private inputTokens = 0;
+  private pingTimer?: ReturnType<typeof setInterval>;
 
   constructor(
     private readonly res: ServerResponse,
     private readonly meta: { id: string; model: string },
+    private readonly pingMs = PING_INTERVAL_MS,
   ) {}
 
   get headersSent(): boolean {
@@ -49,6 +54,26 @@ export class SseWriter {
       },
     });
     this.started = true;
+    this.startPings();
+  }
+
+  /** Stop the keepalive. Called on every exit path; safe to call repeatedly. */
+  dispose = (): void => {
+    if (this.pingTimer) clearInterval(this.pingTimer);
+    this.pingTimer = undefined;
+    this.res.off("close", this.dispose);
+  };
+
+  private startPings(): void {
+    this.res.once("close", this.dispose);
+    this.pingTimer = setInterval(() => {
+      if (this.finished || this.res.destroyed || this.res.writableEnded) {
+        this.dispose();
+        return;
+      }
+      this.res.write('event: ping\ndata: {"type": "ping"}\n\n');
+    }, this.pingMs);
+    this.pingTimer.unref();
   }
 
   textDelta(text: string): void {
@@ -147,6 +172,7 @@ export class SseWriter {
     event(this.res, "message_stop", { type: "message_stop" });
     this.res.end();
     this.finished = true;
+    this.dispose();
     return content;
   }
 
@@ -159,5 +185,6 @@ export class SseWriter {
     event(this.res, "error", { type: "error", error: detail });
     this.finished = true;
     this.res.end();
+    this.dispose();
   }
 }

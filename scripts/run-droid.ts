@@ -129,13 +129,21 @@ interface RunDroidOptions {
   terminationGraceMs?: number;
 }
 
+/** The group is gone or nothing in it can be signalled. macOS reports EPERM, not
+ * ESRCH, for a group of our own (same user) whose members are all zombies that
+ * have not been reaped yet, which is the state right after a SIGKILL of the tree. */
+function groupGone(error: unknown): boolean {
+  const code = (error as NodeJS.ErrnoException).code;
+  return code === "ESRCH" || (code === "EPERM" && process.platform === "darwin");
+}
+
 function processGroupSignal(child: ChildProcess, signal: NodeJS.Signals): void {
   if (!child.pid) return;
   try {
     if (process.platform === "win32") child.kill(signal);
     else process.kill(-child.pid, signal);
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
+    if (!groupGone(error)) throw error;
   }
 }
 
@@ -144,7 +152,7 @@ function groupExists(child: ChildProcess): boolean {
   try {
     process.kill(process.platform === "win32" ? child.pid : -child.pid, 0);
     return true;
-  } catch (error) { return (error as NodeJS.ErrnoException).code !== "ESRCH"; }
+  } catch (error) { return !groupGone(error); }
 }
 
 async function finishOwnedProcessGroup(child: ChildProcess, graceMs: number): Promise<void> {
@@ -205,10 +213,13 @@ export async function runDroid(argv: string[], options: RunDroidOptions = {}): P
   };
   const onInterrupt = (): void => stop("SIGINT");
   const onTerminate = (): void => stop("SIGTERM");
+  // Closing the terminal sends SIGHUP; Droid runs in its own process group and would otherwise outlive us.
+  const onHangup = (): void => stop("SIGTERM");
   const onAbort = (): void => stop("SIGTERM");
   if (options.handleProcessSignals !== false) {
     process.on("SIGINT", onInterrupt);
     process.on("SIGTERM", onTerminate);
+    process.on("SIGHUP", onHangup);
   }
   options.signal?.addEventListener("abort", onAbort, { once: true });
 
@@ -272,6 +283,7 @@ export async function runDroid(argv: string[], options: RunDroidOptions = {}): P
     if (options.handleProcessSignals !== false) {
       process.off("SIGINT", onInterrupt);
       process.off("SIGTERM", onTerminate);
+      process.off("SIGHUP", onHangup);
     }
     options.signal?.removeEventListener("abort", onAbort);
     if (parsed.out) {

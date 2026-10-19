@@ -59,7 +59,7 @@ describe("verification harness acceptance boundaries", () => {
     const server: Server = createServer((req, res) => {
       requests.push(`${req.method} ${req.url}`);
       res.setHeader("Content-Type", "application/json");
-      if (req.url === "/healthz") res.end(JSON.stringify({ ok: true, mode: "sdk", sdk: true }));
+      if (req.url === "/healthz") res.end(JSON.stringify({ ok: true, mode: "sdk" }));
       else if (req.headers.authorization !== `Bearer ${token}`) { res.statusCode = 401; res.end("{}"); }
       else if (req.url === "/internal/runtime") res.end(JSON.stringify({ kind: "sdk", authMode: "byok", ...drained() }));
       else res.end(JSON.stringify({ sessions: [] }));

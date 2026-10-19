@@ -1,4 +1,4 @@
-import { collectToolResults, lastUserText, textFromBlocks } from "../protocol/content.js";
+import { collectLatestToolResults, lastUserText, textFromBlocks } from "../protocol/content.js";
 import { assistantMessage, estimatedUsage } from "../protocol/messages.js";
 import { toolUseId } from "../relay/ids.js";
 import { ToolMailbox } from "../relay/mailbox.js";
@@ -20,7 +20,7 @@ export class MockRuntime implements BridgeRuntime {
 
   async handle(input: RuntimeRequest): Promise<RuntimeTurn> {
     const mailbox = this.mailbox(input.session.bridgeSessionId);
-    const results = collectToolResults(input.request.messages);
+    const results = collectLatestToolResults(input.request.messages);
     if (results.length > 0) {
       const statuses: Array<"accepted" | "duplicate"> = [];
       for (const result of results) {

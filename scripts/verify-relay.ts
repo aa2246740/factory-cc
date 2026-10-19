@@ -121,7 +121,7 @@ export async function doctorInstance(manifestPath: string): Promise<Record<strin
   ]);
   const checkPrivate = (path: string) => { const info = lstatSync(path); return info.isFile() && !info.isSymbolicLink() && (info.mode & 0o077) === 0; };
   const checks = {
-    healthIsSdk: health.status === 200 && health.body.ok === true && health.body.mode === "sdk" && health.body.sdk === true,
+    healthIsSdk: health.status === 200 && health.body.ok === true && health.body.mode === "sdk" && health.body.sdk === undefined && health.body.upstream === undefined,
     authenticatedSdkByokRuntime: runtime.status === 200 && runtime.body.kind === "sdk" && runtime.body.authMode === "byok",
     adminReadWorks: sessions.status === 200 && Array.isArray(sessions.body.sessions),
     unauthenticatedAdminReadDenied: unauthorized.status === 401,

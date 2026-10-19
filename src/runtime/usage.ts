@@ -1,5 +1,6 @@
-import { appendFileSync, mkdirSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
+import { appendLogLine } from "../logging.js";
 import type { Usage } from "../types.js";
 
 export interface UsageSnapshot {
@@ -242,11 +243,11 @@ export function writeUsageEvent(
   context: { sessionId: string; provider?: string; model?: string; role?: string },
 ): void {
   mkdirSync(dirname(file), { recursive: true });
-  appendFileSync(file, `${JSON.stringify({
+  appendLogLine(file, JSON.stringify({
     at: new Date().toISOString(),
     context: Object.fromEntries(Object.entries(context).map(([key, value]) => [key, label(value)])),
     ...event,
-  })}\n`);
+  }));
 }
 
 export function emptyUsage(): UsageSnapshot {
@@ -343,13 +344,13 @@ export function writeUsageLine(
   row: UsageSnapshot & { sessionId: string; model?: string; provider?: string; role?: string },
 ): void {
   mkdirSync(dirname(file), { recursive: true });
-  appendFileSync(
+  appendLogLine(
     file,
-    `${JSON.stringify({
+    JSON.stringify({
       at: new Date().toISOString(),
       ...row,
       cache_hit_ratio: Number(cacheHitRatio(row).toFixed(4)),
-    })}\n`,
+    }),
   );
 }
 

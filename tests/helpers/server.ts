@@ -17,6 +17,7 @@ export async function startTestBridge(overrides: Partial<BridgeConfig> = {}): Pr
     port: 0,
     clientToken: token,
     adminToken: "admin-token",
+    hookToken: "hook-token",
     dataDir: mkdtempSync(join(tmpdir(), "relay-test-")),
     persistSessions: false,
     ...overrides,

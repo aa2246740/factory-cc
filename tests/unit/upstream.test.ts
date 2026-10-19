@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { buildChildEnv } from "../../src/upstream/auth-env.js";
 import { hasByokSecrets, listUsableProviders, modelSlots, publicSelection, sdkEnv, selectionFromConfig, selectUpstream } from "../../src/upstream/providers.js";
 
 describe("upstream selection helpers", () => {
@@ -16,10 +17,8 @@ describe("upstream selection helpers", () => {
       no_proxy: "127.0.0.1,localhost",
       NODE_EXTRA_CA_CERTS: "/tmp/test-ca.pem",
       SSL_CERT_FILE: "/tmp/test-ca.pem",
-      REQUESTS_CA_BUNDLE: "/tmp/test-ca.pem",
     };
-    for (const [key, value] of Object.entries(routing)) vi.stubEnv(key, value);
-    vi.stubEnv("TEST_UPSTREAM_KEY", "test-token");
+    const source = { ...routing, TEST_UPSTREAM_KEY: "test-token", PATH: "/usr/bin" };
     const selection = {
       provider: {
         id: "glm" as const, label: "test", baseUrl: "https://provider.test/anthropic",
@@ -27,8 +26,9 @@ describe("upstream selection helpers", () => {
       },
       modelSlots: modelSlots("test-model"),
     };
-    expect(sdkEnv(selection, "127.0.0.1:18787", "byok")).toMatchObject(routing);
-    expect(sdkEnv(undefined, "127.0.0.1:18787", "subscription")).toMatchObject(routing);
+    expect(buildChildEnv("byok", source, selection, { bridgeListen: "127.0.0.1:18787" })).toMatchObject(routing);
+    expect(buildChildEnv("subscription", source, undefined, { bridgeListen: "127.0.0.1:18787" })).toMatchObject(routing);
+    expect(buildChildEnv("subscription", { ...source, REQUESTS_CA_BUNDLE: "/tmp/test-ca.pem" }).REQUESTS_CA_BUNDLE).toBeUndefined();
   });
 
   it("fills every Claude Code model slot with the same BYOK model", () => {

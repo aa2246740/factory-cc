@@ -1,12 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { mkdtempSync, readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadConfig } from "../../src/config.js";
 import { SdkRuntime, type SdkHandle, type SdkUserInput } from "../../src/runtime/sdk-runtime.js";
+import { forbiddenNamesIn } from "../../src/upstream/auth-env.js";
 import type { RuntimeApprovalRequest, RuntimePermissionDecision, RuntimeRequest } from "../../src/runtime/types.js";
 import type { SessionRecord } from "../../src/sessions/state.js";
-import type { ContentBlock } from "../../src/types.js";
+import type { ContentBlock, Message } from "../../src/types.js";
+import { historyMessageHashes } from "../../src/sessions/correlate.js";
 
 const runtimes: SdkRuntime[] = [];
 const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
@@ -58,6 +60,7 @@ class FakeSdk implements SdkHandle {
       interrupt: this.interrupt,
       close: this.close,
       mcpServerStatus: this.mcpStatus,
+      accountInfo: async () => ({ subscriptionType: "max", apiKeySource: "none", email: "a@example.com" }),
       async *[Symbol.asyncIterator]() {
         for await (const input of args.prompt) {
           self.inputs.push(input);
@@ -104,6 +107,15 @@ describe("official SDK streaming-input lifecycle (injected offline SDK)", () => 
     expect(sdk.calls[0]!.options.tools).toEqual({ type: "preset", preset: "claude_code" });
     expect(sdk.calls[0]!.options.systemPrompt).toMatchObject({ type: "preset", preset: "claude_code" });
     expect(sdk.close).not.toHaveBeenCalled();
+  });
+
+  it("sets no turn limit unless BRIDGE_MAX_TURNS asks for one", async () => {
+    const unlimited = new FakeSdk(async function* () { yield success("ok"); });
+    await create(unlimited).runtime.handle(request(session(), "go"));
+    expect(unlimited.calls[0]!.options).not.toHaveProperty("maxTurns");
+    const limited = new FakeSdk(async function* () { yield success("ok"); });
+    await create(limited, { maxTurns: 500 }).runtime.handle(request(session({ bridgeSessionId: "limited" }), "go"));
+    expect(limited.calls[0]!.options.maxTurns).toBe(500);
   });
 
   it("routes concurrent catalog selections to their actual models with independent BYOK environments", async () => {
@@ -154,22 +166,35 @@ describe("official SDK streaming-input lifecycle (injected offline SDK)", () => 
     expect(sdk.calls).toHaveLength(2);
   });
 
-  it("switches subscription models through resume while preserving the original authentication environment", async () => {
-    vi.stubEnv("ANTHROPIC_BASE_URL", "https://subscription-offline.invalid");
-    vi.stubEnv("ANTHROPIC_AUTH_TOKEN", "synthetic-existing-auth-token");
-    vi.stubEnv("ANTHROPIC_API_KEY", "synthetic-existing-api-key");
+  it("switches subscription models through resume on an allowlisted environment", async () => {
+    const saved: Array<[string, string | undefined]> = [];
+    for (const name of forbiddenNamesIn("subscription", process.env)) {
+      saved.push([name, process.env[name]]);
+      delete process.env[name];
+    }
     vi.stubEnv("CLAUDE_CODE_OAUTH_TOKEN", "synthetic-existing-oauth-token");
-    const sdk = new FakeSdk(async function* () { yield success("ok"); });
-    const { runtime } = create(sdk, { authMode: "subscription", models: modelCatalog });
-    const s = session();
-    await runtime.handle(request(s, "first turn", { model: "first-model" }));
-    await runtime.handle(request(s, "second turn", { model: "second-model" }));
-    expect(sdk.calls[1]!.options).toMatchObject({ model: "native-model-b", resume: "native-sdk-session" });
-    for (const call of sdk.calls) expect(call.options.env).toMatchObject({
-      ANTHROPIC_BASE_URL: "https://subscription-offline.invalid", ANTHROPIC_AUTH_TOKEN: "synthetic-existing-auth-token",
-      ANTHROPIC_API_KEY: "synthetic-existing-api-key", CLAUDE_CODE_OAUTH_TOKEN: "synthetic-existing-oauth-token",
-    });
-    expect((sdk.calls[1]!.options.env as Record<string, string>).BRIDGE_MODEL_ID).toBe("second-model");
+    try {
+      const sdk = new FakeSdk(async function* () { yield success("ok"); });
+      const { runtime } = create(sdk, { authMode: "subscription", models: modelCatalog });
+      const s = session();
+      await runtime.handle(request(s, "first turn", { model: "first-model" }));
+      await runtime.handle(request(s, "second turn", { model: "second-model" }));
+      expect(sdk.calls[1]!.options).toMatchObject({ model: "native-model-b", resume: "native-sdk-session", settingSources: [], strictMcpConfig: true });
+      for (const call of sdk.calls) {
+        const env = call.options.env as Record<string, string>;
+        expect(env.CLAUDE_CODE_OAUTH_TOKEN).toBe("synthetic-existing-oauth-token");
+        expect(env.ANTHROPIC_BASE_URL).toBeUndefined();
+        expect(env.ANTHROPIC_AUTH_TOKEN).toBeUndefined();
+        expect(env.ANTHROPIC_API_KEY).toBeUndefined();
+      }
+      expect((sdk.calls[1]!.options.env as Record<string, string>).BRIDGE_MODEL_ID).toBe("second-model");
+      expect(JSON.stringify(runtime.describe().authVerification)).not.toContain("a@example.com");
+    } finally {
+      for (const [name, value] of saved) {
+        if (value === undefined) delete process.env[name];
+        else process.env[name] = value;
+      }
+    }
   });
 
   it("refuses to switch while a host tool is pending without breaking its original callback", async () => {
@@ -300,6 +325,32 @@ describe("official SDK streaming-input lifecycle (injected offline SDK)", () => 
     expect(final.response.stop_reason).toBe("end_turn");
     expect(received).toHaveLength(2);
     expect(sdk.inputs).toHaveLength(1);
+  });
+
+  it("never gives up on a parked Droid tool by itself, however long Droid takes, short of the absolute wait", async () => {
+    vi.useFakeTimers();
+    try {
+      let handlerResult: unknown;
+      const sdk = new FakeSdk(async function* (_input, _index, fake) {
+        yield { type: "assistant", message: { content: [{ type: "tool_use", id: "long-tool", name: "mcp__droid__TaskOutput", input: {} }] } };
+        handlerResult = await fake.handlers.get("TaskOutput")!({}, { toolUseID: "long-tool" });
+        yield success("long tool finished");
+      });
+      const { runtime } = create(sdk, { toolWaitMs: 8 * 60 * 60 * 1000, requestTimeoutMs: 10 * 60 * 1000 });
+      const s = session();
+      const first = await runtime.handle(request(s, "run a long tool", { tools: [tool] }));
+      expect(first.pendingToolIds).toEqual(["long-tool"]);
+      // Far past any idle threshold: nothing stops the native session on its own.
+      await vi.advanceTimersByTimeAsync(7 * 60 * 60 * 1000);
+      expect(sdk.close).not.toHaveBeenCalled();
+      expect(runtime.pendingHostCalls("session-a")).toHaveLength(1);
+      expect(runtime.describe()).toMatchObject({ activeNativeSessions: 1, pendingHostCalls: 1, fatalErrors: [] });
+      const done = await runtime.handle(request(s, [{ type: "tool_result", tool_use_id: "long-tool", content: "finally done" }]));
+      expect(done.response.stop_reason).toBe("end_turn");
+      expect(handlerResult).toEqual({ content: [{ type: "text", text: "finally done" }], isError: false });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("allows sequential native handlers from one assistant batch without waiting for later handlers", async () => {
@@ -668,14 +719,243 @@ describe("official SDK streaming-input lifecycle (injected offline SDK)", () => 
     expect(sdk.calls).toHaveLength(0);
   });
 
-  it("times out by aborting, interrupting and closing the underlying query", async () => {
-    const sdk = new FakeSdk(async function* (_input, _index, fake) { await fake.untilClosed; yield success("late"); });
-    const { runtime } = create(sdk, { requestTimeoutMs: 20 });
-    await expect(runtime.handle(request(session(), "wait forever"))).rejects.toMatchObject({ status: 504, code: "sdk_turn_timeout" });
-    expect((sdk.calls[0]!.options.abortController as AbortController).signal.aborted).toBe(true);
-    expect(sdk.interrupt).toHaveBeenCalledTimes(1);
-    expect(sdk.close).toHaveBeenCalledTimes(1);
-    await expect(runtime.handle(request(session(), "retry"))).rejects.toMatchObject({ code: "sdk_turn_timeout" });
+  it("imports an undelivered tool result as history when it arrives with a new user message", async () => {
+    const sdk = new FakeSdk(async function* () { yield success("fresh start"); });
+    const { runtime } = create(sdk);
+    const stale: ContentBlock = { type: "tool_result", tool_use_id: "abandoned-tool", content: "interrupted by the user" };
+    const messages = (last: ContentBlock[]) => [
+      user("old task"),
+      { role: "assistant" as const, content: [{ type: "tool_use", id: "abandoned-tool", name: "mcp__droid__TaskOutput", input: {} } as ContentBlock] },
+      user(last),
+    ];
+    const turn = await runtime.handle(request(session(), "unused", { messages: messages([stale, { type: "text", text: "new question" }]) }));
+    expect(turn.response.content).toEqual([{ type: "text", text: "fresh start" }]);
+    const imported = JSON.stringify(sdk.inputs[0]);
+    expect(imported).toContain("Historical tool result abandoned-tool:");
+    expect(imported).toContain("interrupted by the user");
+    expect(imported).toContain("new question");
+    // Nothing but a bare tool result has no new turn to run and no callback to answer.
+    const bare = create(new FakeSdk(async function* () { yield success("must not run"); })).runtime;
+    await expect(bare.handle(request(session(), "unused", { messages: messages([stale]) }))).rejects.toMatchObject({ status: 409, code: "unknown_tool_use_id" });
+  });
+
+  it("backstops callers without the HTTP layer: an idle turn is aborted, interrupted and closed", async () => {
+    vi.useFakeTimers();
+    try {
+      const sdk = new FakeSdk(async function* (_input, _index, fake) { await fake.untilClosed; yield success("late"); });
+      const { runtime } = create(sdk, { requestTimeoutMs: 20 });
+      const turn = runtime.handle(request(session(), "wait forever"));
+      const rejected = expect(turn).rejects.toMatchObject({ status: 504, code: "sdk_turn_timeout", message: expect.stringContaining("no progress") });
+      // The backstop waits out the HTTP layer's own limit and interrupt grace first.
+      await vi.advanceTimersByTimeAsync(20);
+      expect(sdk.close).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(6_000);
+      await rejected;
+      expect((sdk.calls[0]!.options.abortController as AbortController).signal.aborted).toBe(true);
+      expect(sdk.interrupt).toHaveBeenCalledTimes(1);
+      expect(sdk.close).toHaveBeenCalledTimes(1);
+      await expect(runtime.handle(request(session(), "retry"))).rejects.toMatchObject({ code: "sdk_turn_timeout" });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  describe("text blocks within one turn", () => {
+    const start = (index: number, block: Record<string, unknown>) => ({ type: "stream_event", event: { type: "content_block_start", index, content_block: block } });
+    const delta = (index: number, text: string) => ({ type: "stream_event", event: { type: "content_block_delta", index, delta: { type: "text_delta", text } } });
+
+    it("are separated by a blank line, while the deltas of one block stay joined", async () => {
+      const sdk = new FakeSdk(async function* () {
+        yield start(0, { type: "text", text: "" });
+        yield delta(0, "Let me ");
+        yield delta(0, "check.");
+        yield start(1, { type: "tool_use", id: "native-read", name: "Read", input: {} });
+        yield start(2, { type: "text", text: "" });
+        yield delta(2, "Found it.");
+        // A block that never carries text must not leave a stray separator.
+        yield start(3, { type: "text", text: "" });
+        yield start(4, { type: "text", text: "" });
+        yield delta(4, "All done.");
+        yield success("Let me check.\n\nFound it.\n\nAll done.");
+      });
+      const { runtime } = create(sdk);
+      const textDelta = vi.fn();
+      const turn = await runtime.handle(request(session(), "go"), { textDelta, toolTrace: vi.fn() });
+      expect(textDelta.mock.calls.map(([text]) => text)).toEqual(["Let me ", "check.", "\n\nFound it.", "\n\nAll done."]);
+      expect(turn.response.content).toEqual([{ type: "text", text: "Let me check.\n\nFound it.\n\nAll done." }]);
+    });
+
+    it("start the next turn clean, without a leading separator", async () => {
+      const sdk = new FakeSdk(async function* (_input, index) {
+        yield start(0, { type: "text", text: "" });
+        yield delta(0, `turn ${index}`);
+        yield success(`turn ${index}`);
+      });
+      const { runtime } = create(sdk);
+      const s = session();
+      await runtime.handle(request(s, "first"));
+      const second = await runtime.handle(request(s, "second"));
+      expect(second.response.content).toEqual([{ type: "text", text: "turn 1" }]);
+    });
+
+    it("are separated when the SDK reports a finished message without partial events", async () => {
+      const sdk = new FakeSdk(async function* () {
+        yield { type: "assistant", message: { content: [{ type: "text", text: "Before." }, { type: "tool_use", id: "native-read", name: "Read", input: {} }, { type: "text", text: "After." }] } };
+        yield success("");
+      });
+      const { runtime } = create(sdk);
+      const turn = await runtime.handle(request(session(), "go"));
+      expect(turn.response.content).toEqual([{ type: "text", text: "Before.\n\nAfter." }]);
+    });
+  });
+
+  it("treats a retried tool result as a duplicate even though host continuation text rode along the first time", async () => {
+    let handlerResult: unknown;
+    const sdk = new FakeSdk(async function* (_input, _index, fake) {
+      yield { type: "assistant", message: { content: [{ type: "tool_use", id: "continued-tool", name: "mcp__droid__TaskOutput", input: {} }] } };
+      handlerResult = await fake.handlers.get("TaskOutput")!({}, { toolUseID: "continued-tool" });
+      yield success("done");
+    });
+    const { runtime } = create(sdk);
+    const s = session();
+    await runtime.handle(request(s, "go", { tools: [tool] }));
+    await runtime.handle(request(s, [{ type: "tool_result", tool_use_id: "continued-tool", content: "result" }, { type: "text", text: "Extra context from Droid" }]));
+    expect(JSON.stringify(handlerResult)).toContain("Extra context from Droid");
+    expect(await runtime.deliverResults("session-a", [{ tool_use_id: "continued-tool", content: "result" }])).toEqual(["duplicate"]);
+    await expect(runtime.deliverResults("session-a", [{ tool_use_id: "continued-tool", content: "different" }])).rejects.toMatchObject({ code: "conflicting_tool_result" });
+  });
+
+  it("reports every SDK message to the HTTP layer as progress", async () => {
+    const sdk = new FakeSdk(async function* () {
+      yield { type: "stream_event", event: { type: "content_block_delta", delta: { type: "text_delta", text: "Hel" } } };
+      yield { type: "system", subtype: "task_started", task_id: "background-a" };
+      yield { type: "assistant", message: { content: [{ type: "text", text: "Hello" }] } };
+      yield success("Hello");
+    });
+    const { runtime } = create(sdk);
+    const activity = vi.fn();
+    await runtime.handle(request(session(), "go"), { textDelta: vi.fn(), toolTrace: vi.fn(), activity });
+    // The CLI's init message plus the four above.
+    expect(activity).toHaveBeenCalledTimes(5);
+  });
+
+  it("tells the HTTP layer how many approvals are pending, including ones left by an earlier request", async () => {
+    const sdk = new FakeSdk(async function* (_input, index) { yield success(`reply-${index}`); });
+    const { runtime } = create(sdk);
+    const decisions: Array<(decision: RuntimePermissionDecision) => void> = [];
+    runtime.setControl({ requestApproval: () => new Promise((resolve) => { decisions.push(resolve); }) });
+    const s = session();
+    const advertised = { tools: [{ name: "Execute", input_schema: { type: "object" as const } }] };
+    const first = { textDelta: vi.fn(), toolTrace: vi.fn(), approvalsPending: vi.fn() };
+    await runtime.handle(request(s, "start", advertised), first);
+    const check = sdk.calls[0]!.options.canUseTool as (name: string, input: unknown) => Promise<unknown>;
+    const pending = check("Bash", { command: "ls" });
+    await vi.waitFor(() => expect(decisions).toHaveLength(1));
+    // No request is attached now, so the first request's sink is not told.
+    expect(first.approvalsPending).not.toHaveBeenCalledWith(1);
+    const second = { textDelta: vi.fn(), toolTrace: vi.fn(), approvalsPending: vi.fn() };
+    await runtime.handle(request(s, "next", advertised), second);
+    expect(second.approvalsPending).toHaveBeenCalledWith(1);
+    decisions[0]!({ behavior: "allow" });
+    expect(await pending).toMatchObject({ behavior: "allow" });
+
+    const third = { textDelta: vi.fn(), toolTrace: vi.fn(), approvalsPending: vi.fn() };
+    const slow = new FakeSdk(async function* (_input, _index, fake) { await fake.untilClosed; yield success("late"); });
+    const live = create(slow);
+    live.runtime.setControl({ requestApproval: () => new Promise((resolve) => { decisions.push(resolve); }) });
+    const turn = live.runtime.handle(request(session(), "needs approval", advertised), third);
+    const ended = expect(turn).rejects.toMatchObject({ code: "cancelled" });
+    await vi.waitFor(() => expect(slow.calls).toHaveLength(1));
+    const decided = (slow.calls[0]!.options.canUseTool as (name: string, input: unknown) => Promise<unknown>)("Bash", {});
+    await vi.waitFor(() => expect(third.approvalsPending).toHaveBeenLastCalledWith(1));
+    decisions.at(-1)!({ behavior: "deny", message: "no" });
+    await decided;
+    expect(third.approvalsPending.mock.calls.map(([count]) => count)).toEqual([0, 1, 0]);
+    await live.runtime.cancel("session-a", "cleanup");
+    await ended;
+  });
+
+  describe("interrupting a turn", () => {
+    /** A CLI that ends the aborted turn with an error result once its interrupt arrives. */
+    function interruptible(options: { resumed?: boolean } = {}) {
+      let abort!: () => void;
+      const aborted = new Promise<void>((resolve) => { abort = resolve; });
+      const sdk = new FakeSdk(async function* (_input, index) {
+        if (index === 0) {
+          await aborted;
+          yield { type: "result", subtype: "error_during_execution", is_error: true, errors: ["interrupted by the user"], session_id: "native-sdk-session" };
+        } else if (options.resumed !== false) yield success("resumed");
+      });
+      sdk.interrupt.mockImplementation(async () => { abort(); });
+      return sdk;
+    }
+
+    it("waits for the turn to wind down, then retires the process and keeps a resumable checkpoint", async () => {
+      const sdk = interruptible();
+      const { runtime } = create(sdk);
+      const s = session();
+      const turn = runtime.handle(request(s, "long task"));
+      const ended = expect(turn).rejects.toMatchObject({ code: "host_session_ended" });
+      await vi.waitFor(() => expect(sdk.inputs).toHaveLength(1));
+      expect(await runtime.interrupt("session-a", "request-timeout")).toBe(true);
+      await ended;
+      expect(sdk.interrupt).toHaveBeenCalled();
+      expect(sdk.close).toHaveBeenCalledTimes(1);
+      expect(runtime.describe()).toMatchObject({ activeNativeSessions: 0, fatalErrors: [] });
+      const resumed = await runtime.handle(request(s, "continue after the interrupted turn"));
+      expect(resumed.response.content).toEqual([{ type: "text", text: "resumed" }]);
+      expect(sdk.calls).toHaveLength(2);
+      expect(sdk.calls[1]!.options.resume).toBe("native-sdk-session");
+    });
+
+    it("does not call a turn wound down when it ignores the interrupt for the whole grace period", async () => {
+      vi.useFakeTimers();
+      try {
+        const sdk = new FakeSdk(async function* (_input, _index, fake) { await fake.untilClosed; yield success("late"); });
+        const { runtime } = create(sdk);
+        const turn = runtime.handle(request(session(), "stuck"));
+        const ended = expect(turn).rejects.toMatchObject({ code: "cancelled" });
+        await vi.waitFor(() => expect(sdk.inputs).toHaveLength(1));
+        let settled: boolean | undefined;
+        void runtime.interrupt("session-a", "request-timeout").then((value) => { settled = value; });
+        await vi.advanceTimersByTimeAsync(4_999);
+        expect(sdk.interrupt).toHaveBeenCalledTimes(1);
+        expect(settled).toBeUndefined();
+        await vi.advanceTimersByTimeAsync(1);
+        expect(settled).toBe(false);
+        // The caller kills it; interrupt() itself never pretends the checkpoint is safe.
+        expect(sdk.close).not.toHaveBeenCalled();
+        await runtime.cancel("session-a", "request-timeout");
+        expect(sdk.close).toHaveBeenCalledTimes(1);
+        await ended;
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("is not resumable without a persisted native session, and is a no-op for unknown or non-interruptible queries", async () => {
+      const volatile = interruptible();
+      const { runtime } = create(volatile, { persistSessions: false });
+      const turn = runtime.handle(request(session(), "long task"));
+      const ended = expect(turn).rejects.toMatchObject({ code: "host_session_ended" });
+      await vi.waitFor(() => expect(volatile.inputs).toHaveLength(1));
+      expect(await runtime.interrupt("session-a", "request-timeout")).toBe(false);
+      await ended;
+      expect(volatile.close).toHaveBeenCalledTimes(1);
+      expect(await runtime.interrupt("never-seen", "request-timeout")).toBe(false);
+
+      const plain = new FakeSdk(async function* (_input, _index, fake) { await fake.untilClosed; yield success("late"); });
+      const original = plain.query.bind(plain);
+      plain.query = (args) => ({ ...original(args), interrupt: undefined }) as unknown as ReturnType<FakeSdk["query"]>;
+      const other = create(plain).runtime;
+      const parked = other.handle(request(session(), "stuck"));
+      const parkedEnded = expect(parked).rejects.toMatchObject({ code: "cancelled" });
+      await vi.waitFor(() => expect(plain.inputs).toHaveLength(1));
+      expect(await other.interrupt("session-a", "request-timeout")).toBe(false);
+      expect(plain.close).not.toHaveBeenCalled();
+      await other.cancel("session-a", "cleanup");
+      await parkedEnded;
+    });
   });
 
   it("does not turn SDK execution errors or max-turn errors into successful text", async () => {
@@ -766,7 +1046,7 @@ describe("official SDK streaming-input lifecycle (injected offline SDK)", () => 
 
   it("bounds disconnected approval waits and fails closed on controller errors", async () => {
     const sdk = new FakeSdk(async function* () { yield success("ready"); });
-    const { runtime } = create(sdk, { requestTimeoutMs: 30 });
+    const { runtime } = create(sdk, { approvalTimeoutMs: 30 });
     runtime.setControl({ requestApproval: () => new Promise(() => {}) });
     await runtime.handle(request(session(), "start", { tools: [{ name: "Execute", input_schema: { type: "object" } }] }));
     const check = sdk.calls[0]!.options.canUseTool as (name: string, input: unknown) => Promise<unknown>;
@@ -1047,5 +1327,280 @@ describe("official SDK streaming-input lifecycle (injected offline SDK)", () => 
     const log = readFileSync(join(config.logDir, "usage.jsonl"), "utf8");
     expect(log).toContain('"source":"provider_message"');
     expect(log).toContain('"source":"sdk_result"');
+  });
+});
+
+
+it("desktop profile blocks native side effects and denies approval immediately while retaining Droid MCP", async () => {
+  const sdk = new FakeSdk(async function* () { yield success("ok"); });
+  const dataDir = mkdtempSync(join(tmpdir(), "relay-desktop-sdk-"));
+  const project = realpathSync(mkdtempSync(join(tmpdir(), "relay-desktop-project-")));
+  const { runtime } = create(sdk, { desktopProfile: true, permissionMode: "ask", dataDir: join(dataDir, "bridge-data") });
+  const approval = vi.fn();
+  runtime.setControl({ requestApproval: approval });
+  const input = request(session(), [
+    { type: "text", text: `<system-reminder>\n\nUser system info (fixture)\n\n% pwd\n${project}\n</system-reminder>` },
+    { type: "text", text: "inspect" },
+  ], { tools: [{ name: "Execute", input_schema: { type: "object", properties: {} } }, { name: "Read", input_schema: { type: "object", properties: {} } }] });
+  await runtime.handle(input);
+  const options = sdk.calls[0]!.options;
+  expect(options).toMatchObject({ cwd: project, permissionMode: "default", allowDangerouslySkipPermissions: false,
+    settingSources: [], strictMcpConfig: true, allowedTools: ["mcp__droid__*"], tools: { type: "preset", preset: "claude_code" } });
+  expect(options.disallowedTools).toEqual(expect.arrayContaining(["Bash", "Write", "Edit", "MultiEdit", "NotebookEdit", "TaskStop", "TaskOutput", "KillShell", "Agent", "EnterWorktree", "ScheduleWakeup"]));
+  expect(options.disallowedTools).not.toEqual(expect.arrayContaining(["Read"]));
+  expect(options.systemPrompt).toMatchObject({ preset: "claude_code", append: expect.stringContaining("Droid owns approvals") });
+  const check = options.canUseTool as (name: string, input: object) => Promise<unknown>;
+  expect(await check("Read", {})).toEqual({ behavior: "deny", message: expect.stringContaining("Droid applies its current mode") });
+  // A read outside the project points at attached images and Droid's own commands, not a subagent detour.
+  expect(await check("Read", { file_path: "/Users/someone/.factory/temp/images/a.jpeg" })).toEqual({ behavior: "deny", message: expect.stringContaining("Images the user attached are already in the conversation") });
+  expect(await check("Bash", {})).toEqual({ behavior: "deny", message: expect.not.stringContaining("Images the user attached") });
+  expect(approval).not.toHaveBeenCalled();
+  const guard = (options.hooks as { PreToolUse: Array<{ hooks: Array<(hook: { tool_name: string }) => Promise<unknown>> }> }).PreToolUse[0]!.hooks[0]!;
+  expect(await guard({ tool_name: "Bash" })).toMatchObject({ hookSpecificOutput: { permissionDecision: "deny" } });
+  expect(await guard({ tool_name: "Read" })).toEqual({});
+});
+
+describe("Droid tool cancellation (desktop profile)", () => {
+  const createTool = { name: "Create", input_schema: { type: "object" as const, properties: {} } };
+  const execute = { name: "Execute", input_schema: { type: "object" as const, properties: {} } };
+  // Droid's session file stores the bare text; its API request adds "Error: ".
+  const cancellation = (id: string, text = "Tool execution cancelled by user"): ContentBlock =>
+    ({ type: "tool_result", tool_use_id: id, content: `Error: ${text}`, is_error: true });
+  type Guard = (hook: { tool_name: string; tool_use_id?: string }) => Promise<unknown>;
+
+  function setup(proposal: { id: string; input: Record<string, string> }, followupCommand: string) {
+    const project = realpathSync(mkdtempSync(join(tmpdir(), "relay-cancel-project-")));
+    const reminder: ContentBlock = { type: "text", text: `<system-reminder>\n\nUser system info (fixture)\n\n% pwd\n${project}\n</system-reminder>` };
+    const seen: { createResult?: unknown; windDownGuard?: unknown; followupGuard?: unknown; executeResult?: unknown } = {};
+    const sdk = new FakeSdk(async function* (_input, index, fake) {
+      const guard = (fake.calls[0]!.options.hooks as { PreToolUse: Array<{ hooks: Guard[] }> }).PreToolUse[0]!.hooks[0]!;
+      if (index === 0) {
+        yield { type: "assistant", message: { content: [{ type: "tool_use", id: proposal.id, name: "mcp__droid__Create", input: proposal.input }] } };
+        seen.createResult = await fake.handlers.get("Create")!(proposal.input, { toolUseID: proposal.id });
+        // A model that tries another way after the cancellation is stopped by the bridge.
+        seen.windDownGuard = await guard({ tool_name: "mcp__droid__Execute", tool_use_id: "retry" });
+        yield { type: "assistant", message: { content: [{ type: "text", text: "Cancelled; the file was not created." }] } };
+        yield success("Cancelled; the file was not created.");
+        return;
+      }
+      seen.followupGuard = await guard({ tool_name: "mcp__droid__Execute", tool_use_id: "execute-1" });
+      yield { type: "assistant", message: { content: [{ type: "tool_use", id: "execute-1", name: "mcp__droid__Execute", input: { command: followupCommand } }] } };
+      seen.executeResult = await fake.handlers.get("Execute")!({ command: followupCommand }, { toolUseID: "execute-1" });
+      yield success("done");
+    });
+    const dataDir = join(mkdtempSync(join(tmpdir(), "relay-cancel-sdk-")), "bridge-data");
+    const { runtime } = create(sdk, { desktopProfile: true, permissionMode: "ask", dataDir, toolWaitMs: 5_000, requestTimeoutMs: 5_000 });
+    const s = session();
+    const tools = [createTool, execute];
+    const opening = user([reminder, { type: "text", text: "Create the file" }]);
+    return { sdk, runtime, s, tools, opening, seen };
+  }
+
+  /** Drive one cancellation round trip and check every boundary of the follow-up turn. */
+  async function expectFollowupTurn(tail: (proposal: Message) => Message[], proposal: { id: string; input: Record<string, string> }, followupText: string, followupCommand: string) {
+    const { sdk, runtime, s, tools, opening, seen } = setup(proposal, followupCommand);
+    const first = await runtime.handle(request(s, "unused", { tools, messages: [opening] }));
+    expect(first.response.content).toContainEqual(expect.objectContaining({ type: "tool_use", id: proposal.id, name: "Create" }));
+    const assistant: Message = { role: "assistant", content: [{ type: "tool_use", id: proposal.id, name: "Create", input: proposal.input }] };
+    const history = [opening, ...tail(assistant)];
+
+    const second = await runtime.handle(request(s, "unused", { tools, messages: history }));
+    // The cancellation reaches Claude Code as Droid's own error result, with no user text inside it.
+    const createResult = JSON.stringify(seen.createResult);
+    expect(seen.createResult).toMatchObject({ isError: true, content: [{ type: "text", text: expect.stringMatching(/^Error: /) }, { type: "text", text: expect.stringContaining("did not run") }] });
+    expect(createResult).not.toContain(followupCommand);
+    expect(createResult).not.toContain("Host continuation context");
+    expect(seen.windDownGuard).toMatchObject({ hookSpecificOutput: { permissionDecision: "deny", permissionDecisionReason: expect.stringContaining("BRIDGE_USER_CANCELLED") } });
+    // The follow-up is a genuine user turn, and the same HTTP reply carries Droid's next approval.
+    expect(sdk.inputs).toHaveLength(2);
+    expect(sdk.inputs[1]!.message.role).toBe("user");
+    expect(sdk.inputs[1]!.message.content).toContainEqual({ type: "text", text: followupText });
+    expect(sdk.inputs[1]!.message.content.some((block) => block.type === "tool_result")).toBe(false);
+    expect(seen.followupGuard).toEqual({});
+    expect(second.response.stop_reason).toBe("tool_use");
+    expect(second.response.content).toEqual([
+      { type: "text", text: "Cancelled; the file was not created." },
+      expect.objectContaining({ type: "tool_use", id: "execute-1", name: "Execute", input: { command: followupCommand } }),
+    ]);
+
+    const executed: Message = { role: "assistant", content: second.response.content };
+    const done = await runtime.handle(request(s, "unused", { tools, messages: [...history, executed,
+      user([{ type: "tool_result", tool_use_id: "execute-1", content: "Command completed successfully\n\n[Process exited with code 0]" }])] }));
+    expect(done.response.stop_reason).toBe("end_turn");
+    expect(seen.executeResult).toMatchObject({ isError: false, content: [{ type: "text", text: expect.stringContaining("Command completed successfully") }] });
+    expect(sdk.calls).toHaveLength(1);
+  }
+
+  it("handles the exact messages Droid desktop sent after the GUI retest cancellation", async () => {
+    // Session a82e99fa (2026-10-19 00:07:36 +08:00): messages 12-14 of that request.
+    const proposal = { id: "toolu_01KsArp3sQXvV59NLsGFonHN", input: { file_path: "/Volumes/Workspace/Scratch/factory-cc-e2e-20261018/gui-a/reject-retest-20261019.txt", content: "no" } };
+    const followupText = "Run the shell command: touch cmd-retest-20261019.txt";
+    const tail = (assistant: Message): Message[] => [
+      assistant,
+      user([{ type: "tool_result", tool_use_id: proposal.id, content: "Error: Tool execution cancelled by user", is_error: true }]),
+      user([{ type: "text", text: followupText }]),
+    ];
+    // The running bridge recorded these fingerprints for that request; equal hashes prove this is its real input.
+    expect(historyMessageHashes(tail({ role: "assistant", content: [{ type: "tool_use", id: proposal.id, name: "Create", input: proposal.input }] }))).toEqual([
+      "e87a2cd5e4a4a55114ffcd021dffb22282ad0cecb3963d9e0848cab08e279d3c",
+      "9e4297bfd598d9c4c34f631ab2b2781c0fbdc6a81b341f9498967587f1227cc5",
+      "f28ac29df5909726717ca00774c975b491ace6048e7d83b288c685ac37509813",
+    ]);
+    await expectFollowupTurn(tail, proposal, followupText, "touch cmd-retest-20261019.txt");
+  });
+
+  it.each([
+    ["one user message", "Tool execution cancelled by user", true],
+    ["separate user messages", "工具执行已被用户取消", false],
+    ["separate user messages", "Tool execution was interrupted", false],
+  ])("starts the user's next message as its own turn after a cancellation (%s, %s)", async (_layout, text, merged) => {
+    const proposal = { id: "create-1", input: { file_path: "reject-me.txt" } };
+    const followupText = "Run the shell command: touch cmd-test.txt";
+    await expectFollowupTurn((assistant) => merged
+      ? [assistant, user([cancellation(proposal.id, text), { type: "text", text: followupText }])]
+      : [assistant, user([cancellation(proposal.id, text)]), user(followupText)], proposal, followupText, "touch cmd-test.txt");
+  });
+
+  it("keeps a failing tool's error and its host context as tool-result continuation", async () => {
+    let delivered: unknown;
+    const sdk = new FakeSdk(async function* (_input, _index, fake) {
+      yield { type: "assistant", message: { content: [{ type: "tool_use", id: "run-1", name: "mcp__droid__TaskOutput", input: {} }] } };
+      delivered = await fake.handlers.get("TaskOutput")!({}, { toolUseID: "run-1" });
+      yield success("handled");
+    });
+    const { runtime } = create(sdk);
+    const s = session();
+    await runtime.handle(request(s, "run", { tools: [tool] }));
+    await runtime.handle(request(s, [
+      { type: "tool_result", tool_use_id: "run-1", content: "Error: exit 1: Tool execution cancelled by user", is_error: true },
+      { type: "text", text: "<system-reminder>todo list unchanged</system-reminder>" },
+    ], { tools: [tool] }));
+    expect(JSON.stringify(delivered)).toContain("Host continuation context");
+    expect(JSON.stringify(delivered)).not.toContain("did not run");
+    expect(sdk.inputs).toHaveLength(1);
+  });
+});
+
+it("sends a prompt that Droid follows with its own reminder message as part of the new turn", async () => {
+  const sdk = new FakeSdk(async function* (_input, index) { yield success(`reply-${index}`); });
+  const { runtime } = create(sdk);
+  const s = session();
+  const opening = user("Remember the code word PELICAN-58. Reply with exactly: OK");
+  await runtime.handle(request(s, "unused", { messages: [opening] }));
+  const question = "What is your current working directory? Reply with only the absolute path.";
+  const reminder = "<system-reminder>The active model changed. Most tools are now available only inside Script.</system-reminder>";
+  await runtime.handle(request(s, "unused", { messages: [opening, { role: "assistant", content: "reply-0" }, user(question), user(reminder)] }));
+  expect(sdk.inputs).toHaveLength(2);
+  const text = JSON.stringify(sdk.inputs[1]!.message.content);
+  expect(text).toContain(question);
+  expect(text.indexOf(question)).toBeLessThan(text.indexOf("The active model changed"));
+  expect(text).not.toContain("PELICAN-58");
+});
+
+describe("Task calls of one assistant message reach Droid together", () => {
+  const task = { name: "Task", input_schema: { type: "object" as const, properties: { description: { type: "string" }, prompt: { type: "string" } }, required: ["description", "prompt"] } };
+  type Guard = (hook: { tool_name: string; tool_use_id?: string }) => Promise<unknown>;
+  type Use = { id: string; name: string; input: Record<string, unknown> };
+  const taskUse = (id: string, input: Record<string, unknown> = { description: id, prompt: `run ${id}` }): Use => ({ id, name: "mcp__droid__Task", input });
+  const stream = (event: Record<string, unknown>) => ({ type: "stream_event", parent_tool_use_id: null, event });
+
+  /**
+   * Like Claude Code: each block arrives as it streams, the first tool starts while
+   * the message is still streaming, and its later tools run one after another.
+   */
+  function claudeCode(uses: Use[], seen: { results: Record<string, unknown>; guards: Record<string, unknown> }) {
+    return new FakeSdk(async function* (_input, index, fake) {
+      if (index > 0) return;
+      const guard = (fake.calls[0]!.options.hooks as { PreToolUse: Array<{ hooks: Guard[] }> }).PreToolUse[0]!.hooks[0]!;
+      const run = async (use: Use) => {
+        seen.guards[use.id] = await guard({ tool_name: use.name, tool_use_id: use.id });
+        const bare = use.name.replace(/^mcp__droid__/, "");
+        seen.results[use.id] = await fake.handlers.get(bare)!(use.input, { toolUseID: use.id });
+      };
+      yield stream({ type: "message_start", message: { id: "msg-batch" } });
+      let first: Promise<void> | undefined;
+      for (const [position, use] of uses.entries()) {
+        yield stream({ type: "content_block_start", index: position, content_block: { type: "tool_use", id: use.id, name: use.name, input: {} } });
+        yield { type: "assistant", message: { id: "msg-batch", content: [{ type: "tool_use", ...use }] } };
+        first ??= run(use);
+      }
+      yield stream({ type: "message_stop" });
+      await first;
+      for (const use of uses.slice(1)) await run(use);
+      yield success("all reported");
+    });
+  }
+  const resultsFor = (ids: string[], content: (id: string) => string = (id) => `result of ${id}`) =>
+    ids.map((id): ContentBlock => ({ type: "tool_result", tool_use_id: id, content: content(id) }));
+  const toolUseIds = (content: ContentBlock[]) => content.filter((block) => block.type === "tool_use").map((block) => (block as { id: string }).id);
+
+  it("sends consecutive Task calls in one response and gives each handler its own result", async () => {
+    const seen = { results: {} as Record<string, unknown>, guards: {} as Record<string, unknown> };
+    const uses = ["task-a", "task-b", "task-c"].map((id) => taskUse(id));
+    const sdk = claudeCode(uses, seen);
+    const { runtime } = create(sdk, { toolWaitMs: 5_000, requestTimeoutMs: 5_000 });
+    const s = session();
+    const first = await runtime.handle(request(s, "start three", { tools: [task] }));
+    expect(first.response.stop_reason).toBe("tool_use");
+    expect(toolUseIds(first.response.content)).toEqual(["task-a", "task-b", "task-c"]);
+    expect(first.response.content).toContainEqual({ type: "tool_use", id: "task-b", name: "Task", input: { description: "task-b", prompt: "run task-b" } });
+    expect(first.pendingToolIds).toEqual(["task-a", "task-b", "task-c"]);
+    expect(first.events).toContainEqual(expect.objectContaining({ type: "task_batch", data: { toolUseIds: ["task-a", "task-b", "task-c"] } }));
+
+    // Droid returns all three together, in its own order.
+    const done = await runtime.handle(request(s, resultsFor(["task-c", "task-a", "task-b"]), { tools: [task] }));
+    expect(done.response).toMatchObject({ stop_reason: "end_turn", content: [{ type: "text", text: "all reported" }] });
+    for (const id of ["task-a", "task-b", "task-c"]) {
+      expect(seen.guards[id]).toEqual({});
+      expect(seen.results[id]).toMatchObject({ isError: false, content: [{ type: "text", text: `result of ${id}` }] });
+    }
+    expect(done.pendingToolIds).toEqual([]);
+  });
+
+  it("asks Droid for all of the batch's results together", async () => {
+    const seen = { results: {} as Record<string, unknown>, guards: {} as Record<string, unknown> };
+    const { runtime } = create(claudeCode([taskUse("task-a"), taskUse("task-b")], seen), { toolWaitMs: 5_000, requestTimeoutMs: 5_000 });
+    const s = session();
+    await runtime.handle(request(s, "start two", { tools: [task] }));
+    await expect(runtime.handle(request(s, resultsFor(["task-a"]), { tools: [task] }))).rejects.toMatchObject({ code: "incomplete_tool_results", extra: { missing_tool_use_ids: ["task-b"] } });
+  });
+
+  it("stops the batch at another tool or at an input its handler would reject, keeping their order", async () => {
+    const seen = { results: {} as Record<string, unknown>, guards: {} as Record<string, unknown> };
+    const uses = [taskUse("task-a"), { id: "cmd", name: "mcp__droid__TaskOutput", input: {} }, taskUse("task-b"), taskUse("task-bad", { description: "no prompt" }), taskUse("task-c")];
+    const { runtime } = create(claudeCode(uses, seen), { toolWaitMs: 5_000, requestTimeoutMs: 5_000 });
+    const s = session();
+    const tools = [task, tool];
+    const first = await runtime.handle(request(s, "mixed", { tools }));
+    expect(toolUseIds(first.response.content)).toEqual(["task-a"]);
+    const second = await runtime.handle(request(s, resultsFor(["task-a"]), { tools }));
+    expect(toolUseIds(second.response.content)).toEqual(["cmd"]);
+    const third = await runtime.handle(request(s, resultsFor(["cmd"]), { tools }));
+    // task-bad fails validation, so it never goes to Droid with task-b.
+    expect(toolUseIds(third.response.content)).toEqual(["task-b"]);
+  });
+
+  it("returns Droid's own cancellations to batched Tasks rather than a denial", async () => {
+    const seen = { results: {} as Record<string, unknown>, guards: {} as Record<string, unknown> };
+    const { runtime } = create(claudeCode([taskUse("task-a"), taskUse("task-b")], seen), { toolWaitMs: 5_000, requestTimeoutMs: 5_000 });
+    const s = session();
+    await runtime.handle(request(s, "start two", { tools: [task] }));
+    const cancelled = (id: string): ContentBlock => ({ type: "tool_result", tool_use_id: id, content: "Error: Tool execution cancelled by user", is_error: true });
+    await runtime.handle(request(s, [cancelled("task-a"), cancelled("task-b")], { tools: [task] }));
+    expect(seen.guards["task-b"]).toEqual({});
+    for (const id of ["task-a", "task-b"]) {
+      expect(seen.results[id]).toMatchObject({ isError: true, content: [{ type: "text", text: "Error: Tool execution cancelled by user" }, { type: "text", text: expect.stringContaining("did not run") }] });
+    }
+  });
+
+  it("leaves other Droid tools one per response", async () => {
+    const seen = { results: {} as Record<string, unknown>, guards: {} as Record<string, unknown> };
+    const uses = ["cmd-a", "cmd-b"].map((id) => ({ id, name: "mcp__droid__TaskOutput", input: {} }));
+    const { runtime } = create(claudeCode(uses, seen), { toolWaitMs: 5_000, requestTimeoutMs: 5_000 });
+    const s = session();
+    const first = await runtime.handle(request(s, "two lookups", { tools: [tool] }));
+    expect(toolUseIds(first.response.content)).toEqual(["cmd-a"]);
+    const second = await runtime.handle(request(s, resultsFor(["cmd-a"]), { tools: [tool] }));
+    expect(toolUseIds(second.response.content)).toEqual(["cmd-b"]);
   });
 });

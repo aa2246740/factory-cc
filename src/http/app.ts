@@ -1,18 +1,25 @@
+import { resolveRequestCwd } from "../workspace.js";
+import { createHash, randomUUID } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { BridgeConfig } from "../config.js";
-import type { Logger } from "../logging.js";
+import { appendLogLine, type Logger } from "../logging.js";
 import { parseMessagesRequest } from "../protocol/validate.js";
 import { apiError } from "../protocol/messages.js";
 import { explicitSessionId, historyMessageHashes, historyPrefixHash, resolveSession, roleFromHeaders, sessionContextHash } from "../sessions/correlate.js";
+import { isEnded } from "../sessions/state.js";
+import { HUMAN_WAIT_TOOLS, MISSION_SPAWN_TOOLS, MISSION_WORKER_END_TOOL } from "../runtime/mission-tools.js";
+import { compactedSummaryText, lastSummarizedToolCall, sameToolInput, summaryQuote } from "../sessions/compaction.js";
+import { hostAllowsAnyTools } from "../runtime/native-tool-policy.js";
 import { SessionStore } from "../sessions/store.js";
 import { createRuntime } from "../runtime/factory.js";
-import type { RuntimeTurn } from "../runtime/types.js";
-import { header, requireAdminToken, requireClientToken } from "../security/auth.js";
+import type { RuntimeTurn, StreamSink } from "../runtime/types.js";
+import { TurnWatchdog, type TurnTimeout } from "../runtime/turn-watchdog.js";
+import { header, requireAdminOrHookToken, requireAdminToken, requireClientToken } from "../security/auth.js";
 import { assertBodySize } from "../security/limits.js";
 import { redactHeaders, redactJson } from "../security/redact.js";
-import { BridgeError, type RedactedRequestRecord } from "../types.js";
+import { BridgeError, type MessagesRequest, type RedactedRequestRecord } from "../types.js";
 import { SseWriter } from "./sse-stream.js";
 import { statusPageHtml } from "./status-page.js";
 import { messageId } from "../protocol/messages.js";
@@ -24,23 +31,175 @@ export interface BridgeApp {
   server: Server;
   store: SessionStore;
   records: RedactedRequestRecord[];
+  readonly authFailureCount: number;
   url: string;
   runtimeStatus(): Record<string, unknown>;
   close(): Promise<void>;
 }
 
+const RECORD_LIMIT = 500;
+
+function formatListenHost(host: string): string {
+  const bare = host.replace(/^\[|\]$/g, "");
+  return bare.includes(":") ? `[${bare}]` : bare;
+}
+
+function listenUrl(host: string, port: number): string {
+  return `http://${formatListenHost(host)}:${port}`;
+}
+
 export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath: string): BridgeApp {
-  const store = new SessionStore(join(config.dataDir, "sessions"), config.persistSessions, config.maxSessions);
+  const store = new SessionStore(join(config.dataDir, "sessions"), config.persistSessions, config.maxSessions, logger);
   const runtime = createRuntime(config, logger, canaryPath);
-  const control = new ControlBroker(runtime, store, Math.min(config.toolWaitMs, config.requestTimeoutMs));
+  // Approvals wait on a person, so they get their own limit rather than the turn's idle limit.
+  const control = new ControlBroker(runtime, store, config.approvalTimeoutMs);
   runtime.setControl?.(control);
   const records: RedactedRequestRecord[] = [];
+  let authFailureCount = 0;
+  let indexTimer: ReturnType<typeof setTimeout> | undefined;
+  let indexDirty = false;
   mkdirSync(config.logDir, { recursive: true });
   const requestLog = join(config.logDir, "requests.jsonl");
   const turnLog = join(config.logDir, "turns.jsonl");
   const activeRequests = new Map<string, symbol>();
   let closing = false;
   let closePromise: Promise<void> | undefined;
+
+  /**
+   * Run a step that takes a session slot. At the limit, free one slot first by
+   * retiring a parked session whose Droid has evidently left, instead of
+   * refusing. The store throws before it changes anything, so retrying is safe.
+   */
+  function withSlot<T>(admit: () => T): T {
+    try {
+      return admit();
+    } catch (error) {
+      if (!(error instanceof BridgeError) || error.code !== "session_limit" || !reclaimParkedSession()) throw error;
+      return admit();
+    }
+  }
+
+  /**
+   * Nothing is stopped while slots are free: a parked session may just be waiting
+   * for a long tool or for Mission workers. Only when a slot is needed is the
+   * least recently active session that qualifies given up. It qualifies if it is
+   * parked on Droid tools with no request attached; its last store update (when it
+   * parked, or when it last received a result) is at least toolWaitTimeoutMs old;
+   * it is not bound to a live Factory host, whose own end event releases it; and
+   * it is not waiting on a Mission spawn tool, whose workers can run for hours, or
+   * on AskUser, whose answer comes from a person.
+   */
+  function reclaimParkedSession(): boolean {
+    const now = Date.now();
+    let oldest: { sessionId: string; idleMs: number } | undefined;
+    for (const session of store.list()) {
+      const sessionId = session.bridgeSessionId;
+      if (session.state !== "WAITING_DROID_TOOL" || activeRequests.has(sessionId)) continue;
+      const idleMs = now - Date.parse(session.updatedAt);
+      if (!(idleMs >= config.toolWaitTimeoutMs) || control.hasLiveHost(sessionId)) continue;
+      // A runtime that cannot say what the session waits on gets the benefit of the doubt.
+      const calls = runtime.pendingHostCalls?.(sessionId);
+      if (!calls || calls.some((call) => ([...MISSION_SPAWN_TOOLS, ...HUMAN_WAIT_TOOLS] as readonly string[]).includes(call.toolName))) continue;
+      if (!oldest || idleMs > oldest.idleMs) oldest = { sessionId, idleMs };
+    }
+    if (!oldest) return false;
+    const { sessionId, idleMs } = oldest;
+    control.cancelApprovals(sessionId);
+    // Marked interrupted, so its late tool_result gets the clear 409 and is never replayed.
+    store.interrupt(sessionId, "session-reclaimed");
+    void runtime.cancel(sessionId, "session-reclaimed").catch(() => {
+      logger.error("runtime_cancel_failed", { sessionId, reason: "session-reclaimed" });
+    });
+    logger.info("session_reclaimed", { sessionId, idleMs });
+    return true;
+  }
+
+  /**
+   * Droid ends a Mission worker as soon as its EndFeatureRun succeeds, records
+   * the call as cancelled and never returns it, so that worker's native process
+   * would wait for a result forever. An EndFeatureRun that fails comes back
+   * within seconds and the worker carries on, which clears this timer. Only a
+   * session waiting on nothing but EndFeatureRun, with no request attached, no
+   * approval outstanding and no live Factory host (whose end event releases it),
+   * is released. Its late result then gets the 409 of any interrupted session.
+   */
+  const workerEndTimers = new Map<string, { generation: number; timer: ReturnType<typeof setTimeout> }>();
+  let workerEndGeneration = 0;
+  function clearWorkerEnd(sessionId: string): void {
+    const armed = workerEndTimers.get(sessionId);
+    if (armed) clearTimeout(armed.timer);
+    workerEndTimers.delete(sessionId);
+  }
+  function scheduleWorkerEnd(sessionId: string, pendingToolIds: string[]): void {
+    clearWorkerEnd(sessionId);
+    const calls = runtime.pendingHostCalls?.(sessionId);
+    if (!calls?.length || !calls.every((call) => call.toolName === MISSION_WORKER_END_TOOL)) return;
+    const generation = ++workerEndGeneration;
+    const timer = setTimeout(() => {
+      // A later turn replaced this timer: never act on an earlier generation.
+      if (workerEndTimers.get(sessionId)?.generation !== generation) return;
+      workerEndTimers.delete(sessionId);
+      const session = store.get(sessionId);
+      if (closing || !session || session.state !== "WAITING_DROID_TOOL" || activeRequests.has(sessionId)) return;
+      if (session.pendingToolIds.join("\n") !== pendingToolIds.join("\n") || control.hasLiveHost(sessionId) || control.hasApprovals(sessionId)) return;
+      const waiting = runtime.pendingHostCalls?.(sessionId);
+      if (!waiting?.length || !waiting.every((call) => call.toolName === MISSION_WORKER_END_TOOL)) return;
+      store.interrupt(sessionId, "mission-worker-ended");
+      void runtime.cancel(sessionId, "mission-worker-ended").catch(() => {
+        logger.error("runtime_cancel_failed", { sessionId, reason: "mission-worker-ended" });
+      });
+      logger.info("mission_worker_released", { sessionId, toolUseIds: pendingToolIds, graceMs: config.workerEndGraceMs, generation });
+    }, config.workerEndGraceMs);
+    timer.unref();
+    workerEndTimers.set(sessionId, { generation, timer });
+  }
+
+  /**
+   * Droid compacts a long conversation with a tool-free summarizer and continues
+   * with a new first message that quotes the summary, which here is a new
+   * conversation. The tool the old one was waiting on was answered inside that
+   * summary, so it would hold its process and session slot for good (sessions
+   * waiting on StartMissionRun are never reclaimed). Link a summarizer to the one
+   * parked session waiting on exactly the last tool call it shows answered, and
+   * release that session only once Droid continues with the summary this Bridge
+   * produced. Anything ambiguous or unmatched releases nothing.
+   */
+  const compactions = new Map<string, { sessionId: string; pendingToolIds: string; at: number }>();
+  const COMPACTION_LINK_MS = 60 * 60 * 1000;
+  function summarizedSession(request: MessagesRequest): { sessionId: string; pendingToolIds: string } | undefined {
+    if (hostAllowsAnyTools(request)) return undefined;
+    const call = lastSummarizedToolCall(request);
+    if (!call) return undefined;
+    const parked = store.list().filter((session) => session.state === "WAITING_DROID_TOOL" && !activeRequests.has(session.bridgeSessionId)
+      && (runtime.pendingHostCalls?.(session.bridgeSessionId) ?? []).some((pending) => pending.toolName === call.name && sameToolInput(pending.input, call.input)));
+    return parked.length === 1 ? { sessionId: parked[0]!.bridgeSessionId, pendingToolIds: parked[0]!.pendingToolIds.join("\n") } : undefined;
+  }
+  function rememberCompaction(link: { sessionId: string; pendingToolIds: string }, summary: string): void {
+    const quote = summaryQuote(summary);
+    // A short reply is not a summary Droid would continue from.
+    if (quote.length < 200) return;
+    const now = Date.now();
+    for (const [key, entry] of compactions) if (now - entry.at > COMPACTION_LINK_MS) compactions.delete(key);
+    compactions.set(quote, { ...link, at: now });
+  }
+  function releaseCompacted(request: MessagesRequest): void {
+    const text = compactedSummaryText(request);
+    if (!text) return;
+    for (const [quote, entry] of compactions) {
+      if (!text.includes(quote)) continue;
+      compactions.delete(quote);
+      const session = store.get(entry.sessionId);
+      if (!session || session.state !== "WAITING_DROID_TOOL" || activeRequests.has(entry.sessionId) || session.pendingToolIds.join("\n") !== entry.pendingToolIds) return;
+      const toolUseIds = [...session.pendingToolIds];
+      clearWorkerEnd(entry.sessionId);
+      store.interrupt(entry.sessionId, "compacted-by-droid");
+      void runtime.cancel(entry.sessionId, "compacted-by-droid").catch(() => {
+        logger.error("runtime_cancel_failed", { sessionId: entry.sessionId, reason: "compacted-by-droid" });
+      });
+      logger.info("compacted_session_released", { sessionId: entry.sessionId, toolUseIds });
+      return;
+    }
+  }
 
   const server = createServer(async (req, res) => {
     try {
@@ -50,14 +209,15 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
     }
   });
 
-  const url = `http://${config.host}:${config.port}`;
+  const url = listenUrl(config.host, config.port);
 
   async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    assertRequestTarget(req);
     if (closing) {
       res.setHeader("Connection", "close");
       throw new BridgeError(503, "bridge_shutting_down", "bridge is shutting down");
     }
-    const urlObj = new URL(req.url ?? "/", `http://${config.host}`);
+    const urlObj = new URL(req.url ?? "/", "http://localhost");
     const path = urlObj.pathname;
 
     if (req.method === "GET" && path === "/control") {
@@ -89,17 +249,17 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
       return;
     }
     if (req.method === "POST" && path === "/internal/host-events") {
-      requireAdminToken(req.headers, config.adminToken);
+      requireAdminOrHookToken(req.headers, config.adminToken, config.hookToken);
       const envelope = await readJson(req, config.maxBodyBytes);
       const result = await control.hostEvent(envelope);
       const event = (envelope as { event?: Record<string, unknown> }).event;
-      appendFileSync(join(config.logDir, "host-events.jsonl"), `${JSON.stringify({ at: new Date().toISOString(), eventId: (envelope as { eventId?: string }).eventId, hook: event?.hook_event_name, hostSessionId: event?.session_id, toolName: event?.tool_name, matched: result.matched, ended: result.ended, sessions: result.sessions })}\n`);
+      appendLogLine(join(config.logDir, "host-events.jsonl"), JSON.stringify({ at: new Date().toISOString(), eventId: (envelope as { eventId?: string }).eventId, hook: event?.hook_event_name, hostSessionId: event?.session_id, toolName: event?.tool_name, matched: result.matched, ended: result.ended, sessions: result.sessions }));
       json(res, 200, result);
       return;
     }
     if (req.method === "GET" && path === "/internal/runtime") {
       requireAdminToken(req.headers, config.adminToken);
-      json(res, 200, { ...runtime.describe?.(), control: control.describe() });
+      json(res, 200, { ...runtime.describe?.(), control: control.describe(), authFailureCount });
       return;
     }
 
@@ -118,13 +278,7 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
       return;
     }
     if (req.method === "GET" && path === "/healthz") {
-      const { fatalErrors: _errors, ...publicRuntime } = runtime.describe?.() ?? {};
-      json(res, 200, {
-        ok: true,
-        mode: config.mode,
-        sdk: config.mode === "sdk",
-        upstream: publicRuntime,
-      });
+      json(res, 200, { ok: true, mode: config.mode });
       return;
     }
     if (req.method === "GET" && path === "/internal/sessions") {
@@ -145,7 +299,8 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
     }
     if (req.method === "POST" && (path === "/v1/messages/count_tokens" || path === "/v1/messages/count_tokens/")) {
       requireClientToken(req.headers, config.clientToken);
-      json(res, 501, apiError(501, "not_supported_error", "token counting is estimated-only; refusing to fake exact counts").error);
+      // 404 rather than 5xx: this is permanent, so clients must not retry it.
+      json(res, 404, { type: "error", error: { type: "not_found_error", message: "token counting is not supported: only estimates are possible and this bridge refuses to fake exact counts" } });
       return;
     }
     if (req.method === "GET" && (path === "/v1/models" || path === "/v1/models/")) {
@@ -171,7 +326,8 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
       throw error;
     }
 
-    const raw = await readJson(req, config.maxBodyBytes);
+    const rawBody = await readBody(req, config.maxBodyBytes);
+    const raw = parseJsonBody(rawBody);
     if (res.destroyed || req.aborted) return;
     // Shutdown may begin while an already accepted request is uploading its
     // body. Such requests must not create an SDK query after runtime.close().
@@ -188,15 +344,20 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
       if (config.mode === "sdk") resolveRequestModel(config, parsed.model);
     }
     const role = roleFromHeaders(headers);
-    const cwd = process.env.BRIDGE_SDK_CWD || header(headers, "x-bridge-cwd") || config.sdkCwd;
+    const cwd = resolveRequestCwd(headers, parsed, config);
     const prepared = control.prepareRequest(parsed, cwd);
     const request = prepared.request;
+    // Before this conversation takes a slot, free the one it replaces.
+    releaseCompacted(request);
+    const summarized = summarizedSession(request);
     const contextHash = sessionContextHash(headers, request, cwd);
     const resolved = resolveSession(store.list(), headers, request, {
       cwd, hostSessionId: control.hostSessionId(prepared.binding), allowModelSwitch: config.models !== undefined,
+      // Droid desktop has no conversation ID header or hooks to disambiguate.
+      continueIdenticalTranscripts: config.desktopProfile,
     });
     const session = resolved.match
-      ?? store.create({
+      ?? withSlot(() => store.create({
         role,
         model: request.model,
         droidSessionId: explicitSessionId(headers, request),
@@ -204,21 +365,33 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
         contextHash,
         requestMessageHashes: historyMessageHashes(request.messages),
         toolNames: (request.tools ?? []).map((t) => t.name),
-      });
+      }));
 
     const sessionId = session.bridgeSessionId;
-    control.bind(prepared.binding, sessionId);
     if (activeRequests.has(sessionId)) {
       throw new BridgeError(409, "session_busy", "another request is already running for this session");
     }
-    if (session.state === "CANCELLED" || session.state === "FAILED" || session.hostEnded === "terminal" || session.hostEnded === "interrupted") {
+    if (isEnded(session)) {
       throw new BridgeError(409, "session_unavailable", "this session has ended; start a new session");
     }
     const owner = Symbol(sessionId);
     const previous = structuredClone(session);
     activeRequests.set(sessionId, owner);
     try {
-      store.setState(sessionId, session.state === "WAITING_DROID_TOOL" ? "RESUMING" : "GENERATING");
+      // The state write can be refused (session limit); the binding cannot be
+      // undone. So write the state first and bind last, and if only the bind is
+      // refused give the session back exactly as it was.
+      clearWorkerEnd(sessionId);
+      withSlot(() => store.setState(sessionId, session.state === "WAITING_DROID_TOOL" ? "RESUMING" : "GENERATING"));
+      try {
+        control.bind(prepared.binding, sessionId);
+      } catch (error) {
+        // A session this request just created has no history worth keeping, and a
+        // lingering NEW one would hold a slot forever.
+        if (resolved.match) store.update(sessionId, { state: previous.state });
+        else store.setState(sessionId, "FAILED");
+        throw error;
+      }
     } catch (error) {
       activeRequests.delete(sessionId);
       throw error;
@@ -228,26 +401,66 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
       : undefined;
     let completed = false;
     let cancellationRequested = false;
+    let timedOut = false;
+    let timeoutSettled: Promise<void> | undefined;
     let rejectInterrupted!: (error: BridgeError) => void;
     const interrupted = new Promise<never>((_resolve, reject) => { rejectInterrupted = reject; });
     const cancelOwnedRequest = (reason: string, error: BridgeError): void => {
       if (completed || cancellationRequested || activeRequests.get(sessionId) !== owner) return;
       cancellationRequested = true;
+      watchdog.dispose();
       store.update(sessionId, { cancelRequested: true });
-      store.setState(sessionId, reason === "request-timeout" ? "FAILED" : "CANCELLED");
+      store.setState(sessionId, "CANCELLED");
       rejectInterrupted(error);
       void runtime.cancel(sessionId, reason).catch(() => {
         logger.error("runtime_cancel_failed", { sessionId, reason });
+      });
+    };
+    // A timed-out turn is interrupted first. If it winds down in time its native
+    // checkpoint stays resumable (IDLE); otherwise the process is killed (FAILED).
+    const settleExpiredTurn = async (): Promise<void> => {
+      control.cancelApprovals(sessionId);
+      let resumable = false;
+      if (runtime.interrupt) {
+        try { resumable = await runtime.interrupt(sessionId, "request-timeout"); }
+        catch { logger.warn("runtime_interrupt_failed", { sessionId }); }
+      }
+      if (resumable) {
+        store.update(sessionId, { cancelRequested: false, notes: [...store.require(sessionId).notes, "request-timeout-interrupted"] });
+        store.setState(sessionId, "IDLE");
+        return;
+      }
+      store.setState(sessionId, "FAILED");
+      await runtime.cancel(sessionId, "request-timeout").catch(() => {
+        logger.error("runtime_cancel_failed", { sessionId, reason: "request-timeout" });
+      });
+    };
+    const expireOwnedRequest = (kind: TurnTimeout): void => {
+      if (completed || cancellationRequested || activeRequests.get(sessionId) !== owner) return;
+      cancellationRequested = true;
+      timedOut = true;
+      // Fence the late completion of this turn before anything else happens.
+      store.update(sessionId, { cancelRequested: true });
+      rejectInterrupted(new BridgeError(504, "request_timeout", kind === "idle"
+        ? `request timed out: no progress for ${duration(config.requestTimeoutMs)}; the SDK turn was interrupted`
+        : `request exceeded the turn limit of ${duration(config.turnMaxMs)} (BRIDGE_TURN_MAX_MS); the SDK turn was interrupted`));
+      timeoutSettled = settleExpiredTurn().catch((error: unknown) => {
+        logger.error("request_timeout_settle_failed", { sessionId, error: error instanceof Error ? error.message : String(error) });
       });
     };
     const onDisconnect = (): void => {
       if (!res.writableFinished) cancelOwnedRequest("client-disconnect", new BridgeError(499, "cancelled", "client disconnected"));
     };
     res.once("close", onDisconnect);
-    const timer = setTimeout(() => {
-      cancelOwnedRequest("request-timeout", new BridgeError(504, "request_timeout", "request timed out; SDK execution was cancelled"));
-    }, config.requestTimeoutMs);
-    timer.unref();
+    // Idle limit: any SDK message, delta or tool event restarts it, and a pending
+    // approval pauses it. The absolute cap applies however much progress is made.
+    const watchdog = new TurnWatchdog({ idleMs: config.requestTimeoutMs, maxMs: config.turnMaxMs, onTimeout: expireOwnedRequest });
+    const sink: StreamSink = {
+      textDelta: (text) => { watchdog.touch(); if (writer && !completed && !cancellationRequested) writer.textDelta(text); },
+      toolTrace: (name, detail) => { watchdog.touch(); if (writer && !completed && !cancellationRequested) writer.toolTrace(name, detail); },
+      activity: () => watchdog.touch(),
+      approvalsPending: (count) => watchdog.setPaused(count > 0),
+    };
     try {
       store.update(sessionId, {
         hostEnded: undefined,
@@ -267,9 +480,13 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
         messageCount: request.messages.length,
         notes: [resolved.reason],
       });
-      appendFileSync(
+      // Message text and prompts stay out of the log unless the operator opts in.
+      const loggedBody = config.logBodies
+        ? redactJson(raw)
+        : { sha256: createHash("sha256").update(rawBody).digest("hex"), bytes: rawBody.length, toolNames: (request.tools ?? []).map((t) => t.name) };
+      appendLogLine(
         requestLog,
-        `${JSON.stringify({ at: new Date().toISOString(), path: "/v1/messages", headers: redactHeaders(headers as Record<string, string | string[] | undefined>), body: redactJson(raw), session: sessionId })}\n`,
+        JSON.stringify({ at: new Date().toISOString(), path: "/v1/messages", headers: redactHeaders(headers as Record<string, string | string[] | undefined>), body: loggedBody, session: sessionId }),
       );
       res.setHeader("X-Bridge-Session", sessionId);
       res.setHeader("X-Bridge-Role", role);
@@ -278,12 +495,7 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
 
       const turn: RuntimeTurn = await Promise.race([
         interrupted,
-        runtime.handle({ request, role, session, headers }, writer
-          ? {
-              textDelta: (text) => { if (!completed && !cancellationRequested) writer.textDelta(text); },
-              toolTrace: (name, detail) => { if (!completed && !cancellationRequested) writer.toolTrace(name, detail); },
-            }
-          : undefined),
+        runtime.handle({ request, role, session, headers }, sink),
       ]);
       if (cancellationRequested || store.get(sessionId)?.cancelRequested) {
         throw new BridgeError(499, "cancelled", "session cancelled");
@@ -298,7 +510,9 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
         usage: { ...turn.response.usage, estimated: turn.response.usage.estimated ?? false },
       });
       store.setState(sessionId, turn.pendingToolIds.length ? "WAITING_DROID_TOOL" : "IDLE");
-      appendFileSync(turnLog, `${JSON.stringify(redactJson({
+      if (turn.pendingToolIds.length) scheduleWorkerEnd(sessionId, turn.pendingToolIds);
+      if (summarized) rememberCompaction(summarized, turn.response.content.map((block) => (block.type === "text" && typeof block.text === "string" ? block.text : "")).join("\n"));
+      appendLogLine(turnLog, JSON.stringify(redactJson({
         at: new Date().toISOString(),
         session: sessionId,
         sdkSessionId: turn.sdkSessionId ?? session.sdkSessionId,
@@ -306,8 +520,9 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
         usage: turn.response.usage,
         sdkBillingUsage: turn.sdkBillingUsage,
         compactMetadata: turn.compactMetadata,
-        events: (turn.events ?? []).filter((event) => /usage|compact/i.test(event.type)),
-      }))}\n`);
+        // Cancellation and Task batch events carry only IDs and tool names: how a cancelled Droid tool was handled, which Task calls went to Droid together.
+        events: (turn.events ?? []).filter((event) => /usage|compact|cancelled_turn|task_batch/i.test(event.type)),
+      })));
       completed = true;
       if (writer) writer.finish(turn.response);
       else json(res, 200, turn.response);
@@ -322,19 +537,62 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
           // Restore only our pending request, never a later host lifecycle event.
           store.update(sessionId, { ...previous, hostEnded: previous.hostEnded });
         }
-      } else if (current?.state !== "CANCELLED" && !(error instanceof BridgeError && error.code === "host_session_ended")) {
+      } else if (!timedOut && current?.state !== "CANCELLED" && !(error instanceof BridgeError && error.code === "host_session_ended")) {
         store.setState(sessionId, "FAILED");
       }
+      // Answer now; the slot below may still be held while a timed-out turn stops.
       if (writer) writer.fail(error);
-      else throw error;
+      else writeError(res, error);
     } finally {
-      clearTimeout(timer);
+      watchdog.dispose();
+      writer?.dispose();
       res.off("close", onDisconnect);
+      // Keep the slot until a timed-out turn is interrupted or killed, so a retry
+      // never meets a half-stopped native session.
+      if (timeoutSettled) await timeoutSettled;
       if (activeRequests.get(sessionId) === owner) activeRequests.delete(sessionId);
     }
   }
 
+  function boundPort(): number {
+    const address = server.address();
+    if (address && typeof address === "object") return address.port;
+    return config.port;
+  }
+
+  function assertRequestTarget(req: IncomingMessage): void {
+    const port = boundPort();
+    const allowedHosts = new Set([`127.0.0.1:${port}`, `localhost:${port}`, `[::1]:${port}`]);
+    if (config.allowRemote) {
+      allowedHosts.add(`${formatListenHost(config.host)}:${port}`);
+      // The names remote clients dial. A wildcard bind cannot know them itself.
+      for (const name of config.allowedHosts) allowedHosts.add(`${name}:${port}`);
+    }
+    const requestHost = header(req.headers, "host");
+    if (!requestHost || ![...allowedHosts].some((item) => item.toLowerCase() === requestHost.toLowerCase())) {
+      throw new BridgeError(403, "permission_error", "Host is not allowed for this bridge.");
+    }
+    const origin = header(req.headers, "origin");
+    if (!origin) return;
+    const allowedOrigins = new Set([
+      `http://127.0.0.1:${port}`,
+      `http://localhost:${port}`,
+      `http://[::1]:${port}`,
+    ]);
+    if (config.allowRemote) {
+      allowedOrigins.add(listenUrl(config.host, port));
+      for (const name of config.allowedHosts) allowedOrigins.add(`http://${name}:${port}`);
+    }
+    if (![...allowedOrigins].some((item) => item.toLowerCase() === origin.toLowerCase())) {
+      throw new BridgeError(403, "permission_error", "Origin is not allowed for this bridge.");
+    }
+  }
+
   function record(req: IncomingMessage, authOk: boolean, extra: Partial<RedactedRequestRecord>): void {
+    if (!authOk) {
+      authFailureCount += 1;
+      return;
+    }
     const item: RedactedRequestRecord = {
       at: new Date().toISOString(),
       method: req.method ?? "GET",
@@ -344,18 +602,45 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
       ...extra,
     };
     records.push(item);
-    writeFileSync(join(config.logDir, "request-index.json"), JSON.stringify(records, null, 2));
+    if (records.length > RECORD_LIMIT) records.splice(0, records.length - RECORD_LIMIT);
+    indexDirty = true;
+    if (indexTimer) return;
+    indexTimer = setTimeout(() => {
+      indexTimer = undefined;
+      flushRequestIndex();
+    }, 1000);
+    indexTimer.unref();
+  }
+
+  function flushRequestIndex(): void {
+    if (indexTimer) {
+      clearTimeout(indexTimer);
+      indexTimer = undefined;
+    }
+    if (!indexDirty) return;
+    indexDirty = false;
+    const target = join(config.logDir, "request-index.json");
+    const temporary = `${target}.${randomUUID()}.tmp`;
+    try {
+      writeFileSync(temporary, JSON.stringify(records, null, 2), { mode: 0o600, flag: "wx" });
+      renameSync(temporary, target);
+    } finally {
+      rmSync(temporary, { force: true });
+    }
   }
 
   return {
     server,
     store,
     records,
+    get authFailureCount() { return authFailureCount; },
     url,
-    runtimeStatus: () => ({ ...runtime.describe?.(), control: control.describe() }),
+    runtimeStatus: () => ({ ...runtime.describe?.(), control: control.describe(), authFailureCount }),
     close: () => {
       if (closePromise) return closePromise;
       closing = true;
+      for (const sessionId of [...workerEndTimers.keys()]) clearWorkerEnd(sessionId);
+      flushRequestIndex();
       control.close();
       // Stop accepting before SDK cleanup begins. Handle both promises at once
       // so a server failure cannot become an unhandled rejection during cleanup.
@@ -382,16 +667,14 @@ export function listen(app: BridgeApp, config: BridgeConfig): Promise<BridgeApp>
         // The runtime shares this config and supplies the local client URL to
         // native skill commands, including when the OS chose an ephemeral port.
         config.port = address.port;
-        const url = new URL(app.url);
-        url.port = String(address.port);
-        app.url = url.toString().replace(/\/$/, "");
+        app.url = listenUrl(config.host, address.port);
       }
       resolve(app);
     });
   });
 }
 
-async function readJson(req: IncomingMessage, max: number): Promise<unknown> {
+async function readBody(req: IncomingMessage, max: number): Promise<Buffer> {
   const chunks: Buffer[] = [];
   let size = 0;
   for await (const chunk of req) {
@@ -400,9 +683,21 @@ async function readJson(req: IncomingMessage, max: number): Promise<unknown> {
     assertBodySize(size, max);
     chunks.push(buf);
   }
-  if (size === 0) return {};
-  try { return JSON.parse(Buffer.concat(chunks).toString("utf8")); }
+  return Buffer.concat(chunks);
+}
+
+function parseJsonBody(body: Buffer): unknown {
+  if (body.length === 0) return {};
+  try { return JSON.parse(body.toString("utf8")); }
   catch { throw new BridgeError(400, "invalid_request_error", "Request body must contain valid JSON."); }
+}
+
+async function readJson(req: IncomingMessage, max: number): Promise<unknown> {
+  return parseJsonBody(await readBody(req, max));
+}
+
+function duration(ms: number): string {
+  return ms < 1000 ? `${ms} ms` : `${Math.round(ms / 1000)} s`;
 }
 
 function json(res: ServerResponse, status: number, body: unknown): void {

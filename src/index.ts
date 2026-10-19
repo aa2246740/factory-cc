@@ -1,9 +1,11 @@
-import { mkdirSync, realpathSync, writeFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
+import { lstatSync, mkdirSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { loadConfig } from "./config.js";
+import { isLoopbackHost, loadConfig } from "./config.js";
 import { createBridgeApp, listen, type BridgeApp } from "./http/app.js";
 import { createLogger, type Logger } from "./logging.js";
+import { preflightAuth } from "./upstream/auth-env.js";
 import { publicSelection, selectionFromConfig } from "./upstream/providers.js";
 
 export function installShutdownHandlers(
@@ -49,30 +51,71 @@ export function installShutdownHandlers(
   };
 }
 
+function envProvided(name: string): boolean {
+  const value = process.env[name];
+  return value !== undefined && value !== "";
+}
+
+/** Atomic 0600 write that refuses to follow a symlink, matching scripts/local.ts privateWrite. */
+function privateTokenFile(path: string, token: string): void {
+  try {
+    const entry = lstatSync(path);
+    if (!entry.isFile() || entry.isSymbolicLink()) throw new Error(`Refusing to replace ${path}: not a regular file.`);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+  const temporary = `${path}.${randomUUID()}.tmp`;
+  try {
+    writeFileSync(temporary, `${token}\n`, { mode: 0o600, flag: "wx" });
+    renameSync(temporary, path);
+  } finally {
+    rmSync(temporary, { force: true });
+  }
+}
+
 async function main(): Promise<void> {
   const config = loadConfig();
   mkdirSync(config.dataDir, { recursive: true });
   const logger = createLogger(config.logDir);
-  if (config.mode === "sdk" && config.authMode === "subscription") {
-    writeFileSync(
-      join(config.dataDir, "upstream.json"),
-      `${JSON.stringify({ authMode: "subscription", overridesAnthropicEnv: false }, null, 2)}\n`,
-    );
-    logger.info("upstream", { authMode: "subscription", overridesAnthropicEnv: false });
-  } else if (config.mode === "sdk") {
-    const selected = selectionFromConfig({
-      baseUrl: config.upstreamBaseUrl,
-      model: config.upstreamModel,
-      tokenEnv: config.upstreamTokenEnv,
-    });
-    if (!selected) {
-      throw new Error("BYOK requires explicit BRIDGE_UPSTREAM_BASE_URL, BRIDGE_UPSTREAM_MODEL and BRIDGE_UPSTREAM_TOKEN_ENV; automatic credential discovery is disabled.");
+  if (config.mode === "sdk") {
+    const bridgeListen = `${config.host}:${config.port}`;
+    if (config.authMode === "byok") {
+      const selected = selectionFromConfig({
+        baseUrl: config.upstreamBaseUrl,
+        model: config.upstreamModel,
+        tokenEnv: config.upstreamTokenEnv,
+      });
+      if (!selected) {
+        throw new Error("BYOK requires explicit BRIDGE_UPSTREAM_BASE_URL, BRIDGE_UPSTREAM_MODEL and BRIDGE_UPSTREAM_TOKEN_ENV; automatic credential discovery is disabled.");
+      }
+      preflightAuth(config.authMode, process.env, selected, { bridgeListen });
+      config.upstreamBaseUrl = selected.provider.baseUrl;
+      config.upstreamModel = selected.provider.model;
+      config.upstreamTokenEnv = selected.provider.tokenEnv;
+      writeFileSync(join(config.dataDir, "upstream.json"), `${JSON.stringify(publicSelection(selected), null, 2)}\n`);
+      logger.info("upstream", publicSelection(selected));
+    } else {
+      // Fail closed before listen. The same checks run again for each query.
+      preflightAuth(config.authMode, process.env, undefined, { bridgeListen, claudeConfig: config.claudeConfig });
+      const record = { authMode: config.authMode, overridesAnthropicEnv: false };
+      writeFileSync(join(config.dataDir, "upstream.json"), `${JSON.stringify(record, null, 2)}\n`);
+      logger.info("upstream", record);
     }
-    config.upstreamBaseUrl = selected.provider.baseUrl;
-    config.upstreamModel = selected.provider.model;
-    config.upstreamTokenEnv = selected.provider.tokenEnv;
-    writeFileSync(join(config.dataDir, "upstream.json"), `${JSON.stringify(publicSelection(selected), null, 2)}\n`);
-    logger.info("upstream", publicSelection(selected));
+    if (!envProvided("BRIDGE_ADMIN_TOKEN") && !envProvided("BRIDGE_ADMIN_TOKEN_FILE")) {
+      const adminPath = join(config.dataDir, "admin-token");
+      privateTokenFile(adminPath, config.adminToken);
+      console.log(`Admin token file: ${adminPath}`);
+    }
+    if (!envProvided("BRIDGE_HOOK_TOKEN") && !envProvided("BRIDGE_HOOK_TOKEN_FILE")) {
+      const hookPath = join(config.dataDir, "hook-token");
+      privateTokenFile(hookPath, config.hookToken);
+      console.log(`Hook token file: ${hookPath}`);
+    }
+  }
+  if (!isLoopbackHost(config.host)) {
+    const warning = "Remote access serves the operator's credentials to other clients. The operator is responsible for terms compliance.";
+    logger.warn("remote_exposure", { host: config.host });
+    console.warn(warning);
   }
   writeFileSync(
     join(config.dataDir, "runtime.env"),

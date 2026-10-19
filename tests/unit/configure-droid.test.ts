@@ -37,6 +37,74 @@ describe("configure Droid", () => {
     expect(statSync(settings).mode & 0o777).toBe(0o600);
   });
 
+  it("removes the backup and marker on revert so the next configure takes a fresh backup", () => {
+    const { settings, backup, args } = paths();
+    writeFileSync(settings, '{"theme":"dark"}');
+    configureDroid(args, { BRIDGE_CLIENT_TOKEN: "k" });
+    configureDroid([...args, "--revert"], {});
+    for (const path of [backup, `${backup}.absent`, `${settings}.relay-bridge.models.json`]) expect(existsSync(path)).toBe(false);
+    expect(() => configureDroid([...args, "--revert"], {})).toThrow("No backup to revert.");
+  });
+
+  it("keeps user edits made between configure rounds and removes only the bridge's entries on revert", () => {
+    const { settings, args } = paths();
+    const userModel = { model: "my-model", displayName: "Mine", baseUrl: "https://user.invalid", apiKey: "user-key", provider: "anthropic" };
+    writeFileSync(settings, JSON.stringify({ theme: "dark", customModels: [userModel] }));
+    const first = readFileSync(settings, "utf8");
+    configureDroid(args, { BRIDGE_CLIENT_TOKEN: "k1" });
+    const reverted = configureDroid([...args, "--revert"], {});
+    expect(reverted.outcome).toBe("restored");
+    expect(readFileSync(settings, "utf8")).toBe(first);
+
+    // The user keeps working, then configures again; the stale first backup must not come back.
+    const edited = { ...JSON.parse(first), theme: "light", extra: { nested: [1, 2] } };
+    writeFileSync(settings, JSON.stringify(edited));
+    configureDroid(args, { BRIDGE_CLIENT_TOKEN: "k2" });
+    const configured = JSON.parse(readFileSync(settings, "utf8"));
+    configured.theme = "solarized"; configured.newSetting = true;
+    configured.customModels.push({ model: "added-later", displayName: "Later", baseUrl: "https://later.invalid", apiKey: "later-key", provider: "anthropic" });
+    writeFileSync(settings, JSON.stringify(configured));
+    const result = configureDroid([...args, "--revert"], {});
+    expect(result.outcome).toBe("removed-bridge-entries");
+    expect(result.notice).toMatch(/changed after the last configure/);
+    const final = JSON.parse(readFileSync(settings, "utf8"));
+    expect(final.theme).toBe("solarized"); expect(final.newSetting).toBe(true); expect(final.extra).toEqual({ nested: [1, 2] });
+    expect(final.customModels).toEqual([userModel, configured.customModels[2]]);
+    expect(JSON.stringify(final)).not.toContain("glm-5.2");
+    expect(final.sessionDefaultSettings.model).toBeUndefined();
+    expect(final.missionOrchestratorModel).toBeUndefined();
+    expect(final.missionModelSettings.workerModel).toBeUndefined(); expect(final.missionModelSettings.validationWorkerModel).toBeUndefined();
+    expect(existsSync(`${settings}.relay-bridge.bak`)).toBe(false);
+    expect(existsSync(`${settings}.relay-bridge.models.json`)).toBe(false);
+  });
+
+  it("keeps a user's selection of their own model and follows its renumbering after revert", () => {
+    const { settings, args } = paths();
+    const userModel = { model: "glm-5.2", displayName: "GLM-5.2", baseUrl: "https://user.invalid", apiKey: "user-key", provider: "anthropic" };
+    writeFileSync(settings, JSON.stringify({ customModels: [userModel] }));
+    configureDroid(args, { BRIDGE_CLIENT_TOKEN: "k1" });
+    const configured = JSON.parse(readFileSync(settings, "utf8"));
+    expect(configured.sessionDefaultSettings.model).toBe("custom:GLM-5.2-1");
+    configured.sessionDefaultSettings.model = "custom:GLM-5.2-0"; configured.touched = 1;
+    writeFileSync(settings, JSON.stringify(configured));
+    configureDroid([...args, "--revert"], {});
+    const final = JSON.parse(readFileSync(settings, "utf8"));
+    expect(final.customModels).toEqual([userModel]);
+    expect(final.sessionDefaultSettings.model).toBe("custom:GLM-5.2-0");
+  });
+
+  it("deletes a file the bridge created only if untouched, otherwise keeps user content", () => {
+    const { settings, args } = paths();
+    configureDroid(args, { BRIDGE_CLIENT_TOKEN: "k1" });
+    const configured = JSON.parse(readFileSync(settings, "utf8"));
+    configured.theme = "dark";
+    writeFileSync(settings, JSON.stringify(configured));
+    configureDroid([...args, "--revert"], {});
+    expect(JSON.parse(readFileSync(settings, "utf8")).theme).toBe("dark");
+    expect(JSON.parse(readFileSync(settings, "utf8")).customModels).toEqual([]);
+    expect(existsSync(`${settings}.relay-bridge.bak.absent`)).toBe(false);
+  });
+
   it("missing credentials do not create or change any files", () => {
     const { settings, backup, manifest, args } = paths();
     expect(() => configureDroid(args, {})).toThrow(/BRIDGE_CLIENT_TOKEN is required/);
@@ -167,6 +235,17 @@ describe("configure Droid", () => {
     expect(updated.customModels.every((model: { apiKey: string; baseUrl: string }) => model.apiKey === "rotated-key" && model.baseUrl === "http://127.0.0.1:21213")).toBe(true);
     expect(updated.sessionDefaultSettings.model).toBe("custom:GLM-4.7-0");
     expect(updated.missionModelSettings.workerModel).toBe("custom:GLM-4.7-0");
+  });
+
+  it("anthropic-api defaults to the same Claude aliases and cloud still requires explicit ids", () => {
+    const { settings, args } = paths();
+    configureDroid([...args.slice(0, -2), "--auth", "anthropic-api"], { BRIDGE_CLIENT_TOKEN: "local-token" });
+    const parsed = JSON.parse(readFileSync(settings, "utf8"));
+    expect(parsed.customModels.map((model: { model: string; displayName: string }) => [model.model, model.displayName])).toEqual([
+      ["sonnet", "Claude Sonnet"], ["opus", "Claude Opus"], ["haiku", "Claude Haiku"],
+    ]);
+    expect(() => configureDroid(args.slice(0, -2), { BRIDGE_CLIENT_TOKEN: "local-token", BRIDGE_AUTH: "cloud" })).toThrow(/explicit actual model/);
+    expect(() => configureDroid([...args.slice(0, -2), "--auth", "nope"], { BRIDGE_CLIENT_TOKEN: "local-token" })).toThrow(/--auth/);
   });
 
   it("subscription configuration exposes real Claude aliases without touching subscription credentials", () => {

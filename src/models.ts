@@ -1,5 +1,6 @@
 import type { BridgeConfig } from "./config.js";
 import { BridgeError } from "./types.js";
+import type { AuthMode } from "./upstream/auth-env.js";
 import { selectionFromConfig, type UpstreamSelection } from "./upstream/providers.js";
 
 /** A model is an inference choice. Factory roles are not model identifiers. */
@@ -17,7 +18,7 @@ export interface RequestModel {
   routeKey: string;
 }
 
-const names: Record<string, string> = { sonnet: "Claude Sonnet", opus: "Claude Opus", haiku: "Claude Haiku" };
+const names: Record<string, string> = { sonnet: "Claude Sonnet", opus: "Claude Opus", haiku: "Claude Haiku", fable: "Claude Fable" };
 const validId = (value: unknown): value is string => typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9._:/+-]{0,255}$/.test(value);
 
 export function parseModelIds(value: string): string[] {
@@ -28,9 +29,10 @@ export function parseModelIds(value: string): string[] {
   return ids;
 }
 
-export function modelsFromIds(ids: string[], authMode: "byok" | "subscription" = "byok"): BridgeModel[] {
+export function modelsFromIds(ids: string[], authMode: AuthMode = "byok"): BridgeModel[] {
+  const friendly = authMode === "claude-config" || authMode === "subscription" || authMode === "anthropic-api";
   return validateModels(ids.map((id) => ({ id, model: id,
-    displayName: authMode === "subscription" && names[id] ? names[id]! : /^glm-/i.test(id) ? id.toUpperCase() : id,
+    displayName: friendly && names[id] ? names[id]! : /^glm-/i.test(id) ? id.toUpperCase() : id,
   })));
 }
 
@@ -49,7 +51,9 @@ export function validateModels(models: BridgeModel[]): BridgeModel[] {
 
 export function configuredModels(config: Pick<BridgeConfig, "models" | "authMode" | "upstreamModel">): BridgeModel[] {
   if (config.models !== undefined) return validateModels(config.models);
-  if (config.authMode === "subscription") return modelsFromIds(["sonnet", "opus", "haiku"], "subscription");
+  if (config.authMode === "subscription" || config.authMode === "anthropic-api") return modelsFromIds(["sonnet", "opus", "haiku"], config.authMode);
+  // byok uses the explicit upstream model. cloud and inherit stay empty unless BRIDGE_MODELS is set,
+  // so a cloud process can still follow ANTHROPIC_MODEL from its own environment.
   return config.upstreamModel ? modelsFromIds([config.upstreamModel]) : [];
 }
 

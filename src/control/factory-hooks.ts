@@ -9,12 +9,12 @@ const MAX_HOOK_BYTES = 4 * 1024 * 1024;
 const CONFIG_FLAG = "--factory-cc-hook-config";
 
 type JsonObject = Record<string, unknown>;
-interface HookConfig { url: string; adminToken: string; command?: string }
+interface HookConfig { url: string; hookToken?: string; command?: string }
 export interface FactoryHookInstallOptions {
   hooksPath: string;
   configPath: string;
   url: string;
-  adminToken: string;
+  hookToken: string;
   /** Override only for packaged installations with their own executable. No credentials belong here. */
   command?: string;
 }
@@ -82,7 +82,7 @@ function withoutCommand(groups: unknown[], command: string): unknown[] {
 /** Merge the adapter into official hook configuration without replacing user hooks. */
 export function installFactoryHooks(options: FactoryHookInstallOptions): { hooksPath: string; configPath: string; events: readonly string[] } {
   factoryHookEndpoint(options.url);
-  if (!options.adminToken.trim()) throw new Error("Factory hooks require a nonempty admin token");
+  if (!options.hookToken.trim()) throw new Error("Factory hooks require a nonempty hook token");
   if (!isAbsolute(options.hooksPath) || !isAbsolute(options.configPath)) throw new Error("Factory hook paths must be absolute");
   if (resolve(options.hooksPath) === resolve(options.configPath)) throw new Error("Factory hooks and private configuration require separate paths");
   const hooks = readHooks(options.hooksPath);
@@ -99,7 +99,7 @@ export function installFactoryHooks(options: FactoryHookInstallOptions): { hooks
     hooks[event] = [...groups, { hooks: [{ type: "command", command, timeout: 15 }] }];
   }
   // Credentials never occur in hooks.json, process argv, or the return value.
-  privateWrite(options.configPath, `${JSON.stringify({ url: options.url, adminToken: options.adminToken, command })}\n`);
+  privateWrite(options.configPath, `${JSON.stringify({ url: options.url, hookToken: options.hookToken, command })}\n`);
   privateWrite(options.hooksPath, `${JSON.stringify(hooks, null, 2)}\n`);
   return { hooksPath: options.hooksPath, configPath: options.configPath, events: FACTORY_HOOK_EVENTS };
 }
@@ -124,21 +124,27 @@ export function removeFactoryHooks(options: { hooksPath: string; configPath: str
 function readConfig(path: string): HookConfig {
   let config: unknown;
   try { config = JSON.parse(readFileSync(path, "utf8")); } catch { throw new Error("Cannot read private Factory hook configuration"); }
-  if (!object(config) || typeof config.url !== "string" || typeof config.adminToken !== "string" || !config.adminToken.trim()
-      || (config.command !== undefined && typeof config.command !== "string")) throw new Error("Invalid private Factory hook configuration");
+  if (!object(config) || typeof config.url !== "string" || (config.command !== undefined && typeof config.command !== "string")) {
+    throw new Error("Invalid private Factory hook configuration");
+  }
+  const hookToken = typeof config.hookToken === "string" && config.hookToken.trim() ? config.hookToken : undefined;
+  const legacyAdmin = typeof config.adminToken === "string" && config.adminToken.trim();
+  const command = typeof config.command === "string" ? config.command : undefined;
+  // Old installations stored adminToken. Removal only needs command, so that file must still parse.
+  if (!hookToken && !legacyAdmin && !command) throw new Error("Invalid private Factory hook configuration");
   factoryHookEndpoint(config.url);
   // Keep existing installations private even if an external editor broadened permissions.
   chmodSync(path, 0o600);
-  return config as unknown as HookConfig;
+  return { url: config.url, hookToken, command };
 }
 
 export async function forwardFactoryHook(
-  config: { url: string; adminToken: string }, event: unknown,
+  config: { url: string; hookToken: string }, event: unknown,
   options: { fetch?: typeof fetch; eventId?: string; timeoutMs?: number; bindingToken?: string; launchId?: string } = {},
 ): Promise<{ additionalContext?: string; bindingToken?: string }> {
   if (!object(event) || typeof event.hook_event_name !== "string" || typeof event.session_id !== "string" || !event.session_id
       || !FACTORY_HOOK_EVENTS.includes(event.hook_event_name as typeof FACTORY_HOOK_EVENTS[number])) throw new Error("Invalid Factory lifecycle hook event");
-  if (!config.adminToken.trim()) throw new Error("Factory hooks require a nonempty admin token");
+  if (!config.hookToken.trim()) throw new Error("Factory hooks require a nonempty hook token");
   const url = factoryHookEndpoint(config.url);
   const body = JSON.stringify({ eventId: options.eventId ?? randomUUID(), event, ...(options.bindingToken !== undefined ? { bindingToken: options.bindingToken } : {}),
     ...(["SessionStart", "SessionEnd"].includes(event.hook_event_name) && options.launchId ? { launchId: options.launchId } : {}) });
@@ -146,7 +152,7 @@ export async function forwardFactoryHook(
   const send = options.fetch ?? fetch;
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
-      const response = await send(url, { method: "POST", headers: { authorization: `Bearer ${config.adminToken}`, "content-type": "application/json" }, body,
+      const response = await send(url, { method: "POST", headers: { authorization: `Bearer ${config.hookToken}`, "content-type": "application/json" }, body,
         signal: AbortSignal.timeout(options.timeoutMs ?? 3_000), redirect: "error" });
       if (!response.ok) {
         if (response.status >= 500 && attempt < 2) { await response.body?.cancel(); continue; }
@@ -167,13 +173,10 @@ export async function forwardFactoryHook(
   throw new Error("Factory lifecycle event was not accepted by the bridge");
 }
 class HookRejectedError extends Error {}
-class MissingClientLaunchError extends Error {}
 
 /** Fixed diagnostics only: hook inputs, response bodies and errors may contain secrets. */
-export function factoryHookFailureMessage(error: unknown): string {
-  return error instanceof MissingClientLaunchError
-    ? "Factory SessionEnd has no agent binding or wrapper launch; start interactive Droid with npm run run-droid so its lifecycle can be authenticated."
-    : "Factory lifecycle bridge unavailable; event delivery failed.";
+export function factoryHookFailureMessage(_error: unknown): string {
+  return "Factory lifecycle bridge unavailable; event delivery failed.";
 }
 
 /** Factory loads this official SessionStart environment file for later hooks. */
@@ -187,11 +190,17 @@ export function persistFactoryBinding(event: unknown, bindingToken: string): voi
   finally { closeSync(fd); }
 }
 
-export async function factoryHookMain(argv = process.argv.slice(2)): Promise<void> {
+export async function factoryHookMain(argv = process.argv.slice(2), env: NodeJS.ProcessEnv = process.env): Promise<void> {
+  // Project hooks fire for every Droid session in the project. Only a Droid started by
+  // run-droid / local carries the launch ID; any other session must send nothing to the bridge.
+  const launchId = env.BRIDGE_FACTORY_LAUNCH_ID;
+  if (!launchId?.trim()) return;
   const index = argv.indexOf(CONFIG_FLAG);
   const path = index < 0 ? undefined : argv[index + 1];
   if (!path || !isAbsolute(path)) throw new Error("Factory hook requires an absolute private configuration path");
   const config = readConfig(path);
+  if (!config.hookToken) throw new Error("Factory hooks require a nonempty hook token");
+  const hookToken = config.hookToken;
   let bytes = 0;
   const chunks: Buffer[] = [];
   for await (const chunk of process.stdin) {
@@ -202,14 +211,12 @@ export async function factoryHookMain(argv = process.argv.slice(2)): Promise<voi
   }
   let event: unknown;
   try { event = JSON.parse(Buffer.concat(chunks).toString("utf8")); } catch { throw new Error("Invalid Factory lifecycle hook JSON"); }
-  const bindingToken = process.env.BRIDGE_FACTORY_BINDING;
-  const launchId = process.env.BRIDGE_FACTORY_LAUNCH_ID;
+  const bindingToken = env.BRIDGE_FACTORY_BINDING;
   const clientSessionEnd = object(event) && event.hook_event_name === "SessionEnd" && bindingToken === undefined;
-  if (clientSessionEnd && !launchId?.trim()) throw new MissingClientLaunchError();
   if (object(event) && event.hook_event_name !== "SessionStart" && !clientSessionEnd && (!bindingToken || !/^[a-f0-9]{64}$/.test(bindingToken))) {
     throw new Error("Factory lifecycle event has no SessionStart generation binding");
   }
-  const result = await forwardFactoryHook(config, event, { bindingToken, launchId });
+  const result = await forwardFactoryHook({ url: config.url, hookToken }, event, { bindingToken, launchId });
   if (object(event) && event.hook_event_name === "SessionStart") {
     if (!result.bindingToken || !result.additionalContext) throw new Error("Factory SessionStart received no generation binding");
     persistFactoryBinding(event, result.bindingToken);

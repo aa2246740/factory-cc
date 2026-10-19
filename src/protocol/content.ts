@@ -40,6 +40,12 @@ export function collectToolResults(messages: Message[]): Array<{
   return results;
 }
 
+/** Tool results answer a call only in the final user message; earlier ones are history. */
+export function collectLatestToolResults(messages: Message[]): ReturnType<typeof collectToolResults> {
+  const latest = messages.at(-1);
+  return latest?.role === "user" ? collectToolResults([latest]) : [];
+}
+
 export function collectToolUses(messages: Message[]): Array<{ id: string; name: string; input: unknown }> {
   const uses: Array<{ id: string; name: string; input: unknown }> = [];
   for (const message of messages) {

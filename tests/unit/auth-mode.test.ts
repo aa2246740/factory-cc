@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { loadConfig } from "../../src/config.js";
+import { buildChildEnv } from "../../src/upstream/auth-env.js";
 import { modelSlots, sdkEnv } from "../../src/upstream/providers.js";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -14,25 +15,29 @@ describe("BRIDGE_AUTH", () => {
       expect(loadConfig({ dataDir, authMode: "byok", permissionMode: "bypass" }).permissionMode).toBe("bypass");
     } finally { vi.unstubAllEnvs(); }
   });
-  it("subscription does not override ANTHROPIC_BASE_URL / AUTH_TOKEN / API_KEY", () => {
-    const previous = {
-      base: process.env.ANTHROPIC_BASE_URL,
-      token: process.env.ANTHROPIC_AUTH_TOKEN,
-      key: process.env.ANTHROPIC_API_KEY,
-      minimax: process.env.MINIMAXCN_API_KEY,
+  it("subscription refuses API credentials instead of copying them", () => {
+    const source = {
+      PATH: "/usr/bin", HOME: "/tmp/home",
+      ANTHROPIC_BASE_URL: "https://api.anthropic.com",
+      ANTHROPIC_AUTH_TOKEN: "local-subscription-token-placeholder",
+      ANTHROPIC_API_KEY: "local-api-key-placeholder",
+      MINIMAXCN_API_KEY: "minimax-should-not-be-copied",
+      CLAUDE_CODE_OAUTH_TOKEN: "oauth-may-pass",
     };
-    process.env.ANTHROPIC_BASE_URL = "https://api.anthropic.com";
-    process.env.ANTHROPIC_AUTH_TOKEN = "local-subscription-token-placeholder";
-    process.env.ANTHROPIC_API_KEY = "local-api-key-placeholder";
-    process.env.MINIMAXCN_API_KEY = "minimax-should-not-be-copied";
-
-    const env = sdkEnv(undefined, "127.0.0.1:18787", "subscription");
-    expect(env.ANTHROPIC_BASE_URL).toBe("https://api.anthropic.com");
-    expect(env.ANTHROPIC_AUTH_TOKEN).toBe("local-subscription-token-placeholder");
-    expect(env.ANTHROPIC_API_KEY).toBe("local-api-key-placeholder");
-    expect(env.ANTHROPIC_MODEL).toBe(process.env.ANTHROPIC_MODEL);
-
-    restore(previous);
+    let error: unknown;
+    try { buildChildEnv("subscription", source, undefined, { bridgeListen: "127.0.0.1:18787" }); }
+    catch (caught) { error = caught; }
+    expect(error).toMatchObject({ code: "auth_env_rejected" });
+    const message = String(error);
+    expect(message).toContain("ANTHROPIC_API_KEY");
+    expect(message).toContain("anthropic-api");
+    expect(message).not.toContain("local-api-key-placeholder");
+    expect(message).not.toContain("local-subscription-token-placeholder");
+    expect(message).not.toContain("minimax-should-not-be-copied");
+    const clean = buildChildEnv("subscription", { PATH: "/usr/bin", HOME: "/tmp/home", CLAUDE_CODE_OAUTH_TOKEN: "oauth-may-pass", MINIMAXCN_API_KEY: "minimax-should-not-be-copied" });
+    expect(clean.CLAUDE_CODE_OAUTH_TOKEN).toBe("oauth-may-pass");
+    expect(clean.MINIMAXCN_API_KEY).toBeUndefined();
+    expect(clean.ANTHROPIC_API_KEY).toBeUndefined();
   });
 
   it("byok still injects the MiniMax slot and empties API_KEY", () => {
@@ -67,15 +72,3 @@ describe("BRIDGE_AUTH", () => {
     else process.env.BRIDGE_AUTH = previous;
   });
 });
-
-function restore(previous: { base?: string; token?: string; key?: string; minimax?: string }): void {
-  setOrDelete("ANTHROPIC_BASE_URL", previous.base);
-  setOrDelete("ANTHROPIC_AUTH_TOKEN", previous.token);
-  setOrDelete("ANTHROPIC_API_KEY", previous.key);
-  setOrDelete("MINIMAXCN_API_KEY", previous.minimax);
-}
-
-function setOrDelete(name: string, value?: string): void {
-  if (value === undefined) delete process.env[name];
-  else process.env[name] = value;
-}
