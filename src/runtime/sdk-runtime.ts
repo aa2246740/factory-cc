@@ -21,6 +21,7 @@ import { redactClaudeConfigText, claudeConfigNeedsLogin, CLAUDE_LOGIN_REQUIRED }
 import { buildChildEnv, classifyAuth, maskEmail, type AuthClassification, type AuthObservation } from "../upstream/auth-env.js";
 import { publicSelection, sdkEnv, selectionFromConfig, type UpstreamSelection } from "../upstream/providers.js";
 import { resolveRequestModel } from "../models.js";
+import { claudeReasoningKey, claudeReasoningOptions, droidReasoningLevel } from "./reasoning.js";
 
 type ModelRoute = ReturnType<typeof resolveRequestModel>;
 
@@ -118,6 +119,8 @@ interface LiveSdk {
   catalog?: DroidMcpCatalog;
   policyKey?: string;
   modelRoute?: ModelRoute;
+  /** JSON of the Claude effort/thinking options applied to the open query. */
+  reasoningKey?: string;
   abort?: AbortController;
   query?: ReturnType<SdkHandle["query"]>;
   loop?: Promise<void>;
@@ -386,6 +389,7 @@ export class SdkRuntime implements BridgeRuntime {
         throw new BridgeError(409, "session_configuration_changed", "Working directory, model, permission policy or role changed; start a separate session");
       }
       if (modelRoute) await this.selectModel(live, modelRoute, results.length > 0);
+      await this.selectReasoning(live, input, results.length > 0);
       const context = buildHostContext(input, resolveCwd(input, this.config));
       // Droid ends its own turn when the user cancels a tool, without a request.
       // Whatever arrives with that result later is the user's next turn, never
@@ -557,6 +561,59 @@ export class SdkRuntime implements BridgeRuntime {
     };
     live.events.push({ at: now(), type: "sdk_model_changed", data: change });
     this.logger.info("sdk_model_changed", change);
+  }
+
+  /** Same idle retire as a model switch. The next startQuery resumes sdkSessionId. */
+  private async selectReasoning(live: LiveSdk, input: RuntimeRequest, hasResults: boolean): Promise<void> {
+    const next = claudeReasoningKey(input.request);
+    if (live.reasoningKey === next) return;
+    if (!live.query) {
+      live.reasoningKey = next;
+      return;
+    }
+    if (hasResults || live.active || live.starting || live.pending.size || live.handlerArrivals.size
+        || live.candidates.size || live.hostResultConsumptions.size || live.approvals.size
+        || live.backgroundTasks.size || live.outbox.length) {
+      throw new BridgeError(409, "reasoning_switch_busy", "Finish the current turn, tools and background tasks before changing reasoning effort.");
+    }
+    if (!this.config.persistSessions || !live.sdkSessionId) {
+      throw new BridgeError(409, "reasoning_switch_requires_persistence", "Changing reasoning effort requires a persisted native session.");
+    }
+    if (!live.query.close) {
+      throw new BridgeError(409, "reasoning_switch_unavailable", "The native query cannot be closed safely for a reasoning change.");
+    }
+    const previous = live.reasoningKey;
+    const query = live.query;
+    const loop = live.loop;
+    live.queryEpoch++;
+    live.inputs.close();
+    live.abort?.abort();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      query.close!();
+      if (loop) await Promise.race([
+        loop,
+        new Promise<never>((_resolve, reject) => {
+          timer = setTimeout(() => reject(new Error("Native query did not close")), Math.min(5_000, Math.max(1, this.config.requestTimeoutMs)));
+        }),
+      ]);
+    } catch {
+      const failure = new BridgeError(502, "reasoning_switch_failed", "The old native query could not be closed safely; the reasoning level was not changed.");
+      this.stop(live, failure);
+      throw failure;
+    } finally { if (timer) clearTimeout(timer); }
+    if (live.terminal) throw live.terminal;
+    live.inputs = new InputQueue();
+    live.query = undefined;
+    live.loop = undefined;
+    live.abort = undefined;
+    live.reasoningKey = next;
+    live.lastReply = undefined;
+    live.lastRequestKey = undefined;
+    const level = droidReasoningLevel(input.request) ?? null;
+    const change = { from: previous ?? null, to: next, level, sdkSessionId: live.sdkSessionId, sessionId: live.current?.session.bridgeSessionId, strategy: "resume" };
+    live.events.push({ at: now(), type: "sdk_reasoning_changed", data: change });
+    this.logger.info("sdk_reasoning_changed", change);
   }
 
   private validateResults(live: LiveSdk, results: DroidResult[]): void {
@@ -798,10 +855,16 @@ export class SdkRuntime implements BridgeRuntime {
     if (route?.model) options.model = route.model;
     else if (selection) options.model = selection.provider.model;
     else if (process.env.ANTHROPIC_MODEL) options.model = process.env.ANTHROPIC_MODEL;
+    const reasoning = claudeReasoningOptions(droidReasoningLevel(input.request));
+    if (reasoning?.effort) options.effort = reasoning.effort;
+    if (reasoning?.thinking) options.thinking = reasoning.thinking;
+    live.reasoningKey = claudeReasoningKey(input.request);
     if (this.config.claudeExecutable) options.pathToClaudeCodeExecutable = this.config.claudeExecutable;
     if (live.sdkSessionId) options.resume = live.sdkSessionId;
     const expectedResumeId = route ? live.sdkSessionId : undefined;
-    live.events.push({ at: now(), type: "sdk_query_start", data: { resumed: Boolean(live.sdkSessionId), sdkSessionId: live.sdkSessionId, droidMcp: catalog.definitions().map((tool) => tool.name) } });
+    const queryStart = { resumed: Boolean(live.sdkSessionId), sdkSessionId: live.sdkSessionId, droidMcp: catalog.definitions().map((tool) => tool.name), effort: reasoning?.effort ?? null, thinking: reasoning?.thinking?.type ?? null };
+    live.events.push({ at: now(), type: "sdk_query_start", data: queryStart });
+    this.logger.info("sdk_query_options", queryStart);
     try {
       live.query = sdk.query({ prompt: live.inputs, options });
       // Iterate the Query itself. Its close() owns process shutdown; never call raw generator.return().

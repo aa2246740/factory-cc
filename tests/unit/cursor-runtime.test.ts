@@ -8,7 +8,7 @@ import type { CursorAgentApi, CursorRunLike, CursorRunResult, CursorSendOptions 
 import { cursorMenuFromCatalog } from "../../src/runtime/cursor/catalog.js";
 import { writeCursorCredential } from "../../src/runtime/cursor/credentials.js";
 import { applyCursorUpdate, emptyCursorDraft } from "../../src/runtime/cursor/events.js";
-import { cursorCatalogFixture } from "../../src/runtime/cursor/fixture.js";
+import { cursorCatalogFixture, cursorLiveCatalogFixture } from "../../src/runtime/cursor/fixture.js";
 import { installCursorRejectionGuard } from "../../src/runtime/cursor/sdk-load.js";
 import { CursorSdkRuntime } from "../../src/runtime/cursor/sdk-runtime.js";
 import type { RuntimeRequest } from "../../src/runtime/types.js";
@@ -310,5 +310,37 @@ describe("CursorSdkRuntime", () => {
     await new Promise((resolve) => setTimeout(resolve, 5));
     await expect(fresh.interrupt("bridge-stuck", "stop")).resolves.toBe(false);
     hung.catch(() => undefined);
+  });
+
+  it("sends the mapped reasoning effort on the same agent and ignores it for Composer", async () => {
+    const sent: Array<CursorSendOptions | undefined> = [];
+    const fake = fakeCursor({ onSend: (options) => { sent.push(options); } });
+    const dir = mkdtempSync(join(tmpdir(), "cursor-runtime-"));
+    dirs.push(dir);
+    const cfg = loadConfig({
+      dataDir: dir, mode: "sdk", authMode: "subscription",
+      models: cursorMenuFromCatalog(cursorLiveCatalogFixture, "default"),
+    });
+    const runtime = new CursorSdkRuntime(cfg, logger, { api: fake.api, env: {} });
+    const grok = session({ model: "cursor:grok-4.7" });
+    const high = { ...userTurn("first", "cursor:grok-4.7"), output_config: { effort: "high" } };
+    await runtime.handle(input(grok, high));
+    const low = { ...userTurn("second", "cursor:grok-4.7"), output_config: { effort: "low" } };
+    await runtime.handle(input(grok, low));
+    const off = { ...userTurn("third", "cursor:grok-4.7"), thinking: { type: "between_tools" }, output_config: { effort: "high" } };
+    await runtime.handle(input(grok, off));
+    expect(fake.api.create).toHaveBeenCalledTimes(1);
+    expect(sent.map((options) => options?.model)).toEqual([
+      { id: "grok-4.7", params: [{ id: "context", value: "256k" }, { id: "reasoning_effort", value: "high" }, { id: "fast", value: "false" }] },
+      { id: "grok-4.7", params: [{ id: "context", value: "256k" }, { id: "reasoning_effort", value: "low" }, { id: "fast", value: "false" }] },
+      { id: "grok-4.7", params: [{ id: "context", value: "256k" }, { id: "reasoning_effort", value: "low" }, { id: "fast", value: "false" }] },
+    ]);
+    const composer = fakeCursor({ onSend: (options) => { sent.push(options); } });
+    const composerRuntime = new CursorSdkRuntime(cfg, logger, { api: composer.api, env: {} });
+    await composerRuntime.handle(input(session(), { ...userTurn("composer"), output_config: { effort: "max" } }));
+    expect(composer.api.create).toHaveBeenCalledTimes(1);
+    expect(sent.at(-1)?.model).toEqual({ id: "composer-2.5", params: [{ id: "fast", value: "false" }] });
+    await runtime.handle(input(grok, { ...userTurn("default pin", "cursor:grok-4.7") }));
+    expect(sent.at(-1)?.model).toEqual({ id: "grok-4.7", params: [{ id: "context", value: "256k" }, { id: "reasoning_effort", value: "high" }, { id: "fast", value: "false" }] });
   });
 });

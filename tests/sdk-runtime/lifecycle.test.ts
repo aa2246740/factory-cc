@@ -166,6 +166,36 @@ describe("official SDK streaming-input lifecycle (injected offline SDK)", () => 
     expect(sdk.calls).toHaveLength(2);
   });
 
+  it("resumes the same native session when reasoning effort changes and omits it when no level is sent", async () => {
+    const sdk = new FakeSdk(async function* (_input, index) { yield success(`reply-${index}`); });
+    const { runtime } = create(sdk, { models: modelCatalog });
+    const s = session({ toolNames: ["TaskOutput"] });
+    await runtime.handle(request(s, "first", { model: "first-model", tools: [tool], output_config: { effort: "low" }, thinking: { type: "adaptive", display: "summarized" } }));
+    expect(sdk.calls[0]!.options.effort).toBe("low");
+    expect(sdk.calls[0]!.options.thinking).toEqual({ type: "adaptive", display: "summarized" });
+    const reply = await runtime.handle(request(s, "second", {
+      model: "first-model", tools: [tool], output_config: { effort: "high" }, thinking: { type: "adaptive", display: "summarized" },
+      messages: [user("first"), { role: "assistant", content: "reply-0" }, user("Use the higher effort")],
+    }));
+    expect(sdk.close).toHaveBeenCalledTimes(1);
+    expect(sdk.calls).toHaveLength(2);
+    expect(sdk.calls[1]!.options).toMatchObject({ effort: "high", thinking: { type: "adaptive", display: "summarized" }, resume: "native-sdk-session", model: "native-model-a" });
+    expect(reply.sdkSessionId).toBe("native-sdk-session");
+    expect(reply.events).toContainEqual(expect.objectContaining({ type: "sdk_reasoning_changed", data: expect.objectContaining({ strategy: "resume", sdkSessionId: "native-sdk-session" }) }));
+    const plain = new FakeSdk(async function* () { yield success("plain"); });
+    const other = create(plain, { models: modelCatalog });
+    await other.runtime.handle(request(session({ bridgeSessionId: "plain" }), "no level", { model: "first-model" }));
+    expect(plain.calls[0]!.options.effort).toBeUndefined();
+    expect(plain.calls[0]!.options.thinking).toBeUndefined();
+    await runtime.handle(request(s, "off", {
+      model: "first-model", tools: [tool], thinking: { type: "between_tools" }, output_config: { effort: "high" },
+      messages: [user("first"), { role: "assistant", content: "reply-0" }, user("Use the higher effort"), { role: "assistant", content: "reply-1" }, user("Turn reasoning off")],
+    }));
+    expect(sdk.calls[2]!.options.thinking).toEqual({ type: "disabled" });
+    expect(sdk.calls[2]!.options.effort).toBeUndefined();
+    expect(sdk.calls[2]!.options.resume).toBe("native-sdk-session");
+  });
+
   it("switches subscription models through resume on an allowlisted environment", async () => {
     const saved: Array<[string, string | undefined]> = [];
     for (const name of forbiddenNamesIn("subscription", process.env)) {

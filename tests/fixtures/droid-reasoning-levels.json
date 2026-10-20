@@ -1,0 +1,13 @@
+{
+  "source": "droid 0.236.0 exec --reasoning-effort, baseModelId claude-sonnet-5-5, mock bridge 18797, 2026-10-20",
+  "note": "Message text, tool schemas, and credentials are omitted. Both requests in a turn carried the same thinking and output_config.",
+  "levels": {
+    "omitted": { "thinking": { "type": "adaptive", "display": "summarized" }, "output_config": { "effort": "high" } },
+    "off": { "thinking": { "type": "between_tools" }, "output_config": { "effort": "high" } },
+    "low": { "thinking": { "type": "adaptive", "display": "summarized" }, "output_config": { "effort": "low" } },
+    "medium": { "thinking": { "type": "adaptive", "display": "summarized" }, "output_config": { "effort": "medium" } },
+    "high": { "thinking": { "type": "adaptive", "display": "summarized" }, "output_config": { "effort": "high" } },
+    "xhigh": { "thinking": { "type": "adaptive", "display": "summarized" }, "output_config": { "effort": "xhigh" } },
+    "max": { "thinking": { "type": "adaptive", "display": "summarized" }, "output_config": { "effort": "max" } }
+  }
+}

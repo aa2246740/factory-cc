@@ -39,7 +39,34 @@ The key is `CURSOR_API_KEY` or `BRIDGE_DATA_DIR/cursor-auth.json` (mode 0600). `
 
 Sessions record `provider`. The fingerprint includes it for Cursor, and a model switch substitutes only the model. Claude to Cursor starts a new session. The first Cursor send of that session carries the old transcript as reference text. It does not resume the Claude session. Cursor does not set `systemPrompt` and does not load `settingSources`.
 
-Droid tools are in-process `local.customTools`. `execute()` stays pending until `deliverResults` or `completeHostTool`. The assistant message uses the tool name Droid advertised. Current `droid exec` advertises `Execute` and rejects `mcp__droid__Execute`. Native tools are `read`, `grep`, `glob`, `ls`, and `mcp`. Creation fails if `mcp` is missing. Droid's reasoning selector is not mapped.
+Droid tools are in-process `local.customTools`. `execute()` stays pending until `deliverResults` or `completeHostTool`. The assistant message uses the tool name Droid advertised. Current `droid exec` advertises `Execute` and rejects `mcp__droid__Execute`. Native tools are `read`, `grep`, `glob`, `ls`, and `mcp`. Creation fails if `mcp` is missing.
+
+## Reasoning selector
+
+Droid shows Sonnet 5.5's selector on every bridge entry because each one uses `baseModelId: claude-sonnet-5-5`. Captured with Droid 0.236.0, a level is two request fields:
+
+| Selector | `thinking` | `output_config.effort` |
+| --- | --- | --- |
+| omitted (Sonnet 5 default) | `{ type: "adaptive", display: "summarized" }` | `high` |
+| off | `{ type: "between_tools" }` | `high` (not `off`) |
+| low, medium, high, xhigh, max | adaptive, summarized | that level |
+
+`off` is `thinking.type === "between_tools"`. The effort field stays at the base model's default. A request with neither signal has no level.
+
+Cursor mapping is catalog-driven. If the model publishes `reasoning_effort` or `effort`, the level becomes the nearest allowed value. `off` and `none` use the lowest. An exact allowed value is kept. Otherwise the nearest rank wins, and a tie uses the lower rank. `fast` stays `false` and `context` stays `256k`. No level keeps today's pin (`reasoning_effort=high` on Grok 4.7). Composer 2.5 publishes only `fast`, so the selector is accepted and ignored; the run still sends `fast=false`. If Cursor later adds an effort parameter to that row, the same code maps it. A level change calls `send()` with the new params on the existing agent.
+
+Grok 4.7 today (`low|medium|high|xhigh`):
+
+| Droid | Cursor `reasoning_effort` |
+| --- | --- |
+| off | low |
+| low | low |
+| medium | medium |
+| high | high |
+| xhigh | xhigh |
+| max | xhigh |
+
+Claude Code uses `@anthropic-ai/claude-agent-sdk` 0.3.300 `query` options. No level leaves `effort` and `thinking` unset. `off` sets `thinking: { type: "disabled" }` and does not forward the leftover effort `high`. `low|medium|high|xhigh|max` set `effort` to that value and `thinking: { type: "adaptive", display: "summarized" }`. `minimal` maps to `low`. A level change on an idle session closes the query and `resume`s the same SDK session. Cursor passes the new params to the next `send()` on the same agent. The session hash includes the level. A change is accepted when a complete history or an authenticated retained turn proves continuity, the directory, role, and tools still match, and any Factory host id agrees on both sides. A busy session returns 409. `BRIDGE_AUTH` is unchanged.
 
 ## Commands
 

@@ -20,7 +20,13 @@ export interface BridgeModel {
   /** Set for Cursor menu entries. Claude entries leave this unset so older catalogs stay identical. */
   provider?: ModelProvider;
   /** Full explicit Cursor selection. Required when provider is cursor. */
-  cursor?: { id: string; params: CursorModelParameter[] };
+  cursor?: { id: string; params: CursorModelParameter[]; parameters?: CursorParameterValues[] };
+}
+
+/** Allowed values copied from the catalog so a later request can map a reasoning level. */
+export interface CursorParameterValues {
+  id: string;
+  values: Array<{ value: string }>;
 }
 
 /** Menu ids use this prefix so they cannot collide with Claude model ids. `:` is inside validId; brackets are not. */
@@ -36,7 +42,7 @@ export interface RequestModel {
   displayName: string;
   selection?: UpstreamSelection;
   provider: ModelProvider;
-  cursor?: { id: string; params: CursorModelParameter[] };
+  cursor?: { id: string; params: CursorModelParameter[]; parameters?: CursorParameterValues[] };
   routeKey: string;
 }
 
@@ -76,7 +82,7 @@ export function validateModels(models: BridgeModel[]): BridgeModel[] {
   });
 }
 
-function normalizeCursorSelection(selection: BridgeModel["cursor"]): { id: string; params: CursorModelParameter[] } {
+function normalizeCursorSelection(selection: BridgeModel["cursor"]): { id: string; params: CursorModelParameter[]; parameters?: CursorParameterValues[] } {
   if (!selection || !validId(selection.id) || !Array.isArray(selection.params)) {
     throw new BridgeError(400, "invalid_model_catalog", "A Cursor model needs an explicit SDK id and parameter list.");
   }
@@ -86,7 +92,25 @@ function normalizeCursorSelection(selection: BridgeModel["cursor"]): { id: strin
     }
     return { id: param.id, value: param.value };
   });
-  return { id: selection.id, params };
+  const parameters = normalizeCursorParameters(selection.parameters);
+  return { id: selection.id, params, ...(parameters ? { parameters } : {}) };
+}
+
+function normalizeCursorParameters(parameters: CursorParameterValues[] | undefined): CursorParameterValues[] | undefined {
+  if (parameters === undefined) return undefined;
+  if (!Array.isArray(parameters)) throw new BridgeError(400, "invalid_model_catalog", "Cursor parameter specs must be a list.");
+  return parameters.map((parameter) => {
+    if (!parameter || !validId(parameter.id) || !Array.isArray(parameter.values) || !parameter.values.length) {
+      throw new BridgeError(400, "invalid_model_catalog", "Each Cursor parameter spec needs an id and allowed values.");
+    }
+    const values = parameter.values.map((value) => {
+      if (!value || typeof value.value !== "string" || !value.value || value.value.length > 64 || /[\x00-\x1f\x7f]/.test(value.value)) {
+        throw new BridgeError(400, "invalid_model_catalog", "Each Cursor parameter value must be a short string.");
+      }
+      return { value: value.value };
+    });
+    return { id: parameter.id, values };
+  });
 }
 
 export function configuredModels(config: Pick<BridgeConfig, "models" | "authMode" | "upstreamModel">): BridgeModel[] {
