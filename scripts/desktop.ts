@@ -309,6 +309,8 @@ export async function desktop(argv: string[], deps: DesktopDependencies): Promis
     const install: Installation = { ...previous, ...(parsed.models ? { models: parsed.models } : {}) };
     if (cursorModels) install.cursorModels = cursorModels;
     else delete install.cursorModels;
+    // The LaunchAgent runs dist/. Rebuild so the restarted service runs the current source, not a stale build.
+    checkedRun(deps, deps.node, [join(install.repo, "node_modules/typescript/bin/tsc"), "-p", join(install.repo, "tsconfig.build.json")]);
     if (!existsSync(join(install.repo, "dist/index.js"))) throw new Error(caveat);
     syncModels(deps, install, menu);
     if (explicit && menu) writeCursorMenu(deps, menu, catalog);
