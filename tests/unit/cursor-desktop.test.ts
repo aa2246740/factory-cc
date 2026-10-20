@@ -123,7 +123,7 @@ it("wires cursor login through an injected SDK store in the bridge data dir", as
   const lines: string[] = [];
   deps.stdout = (text) => lines.push(text);
   const loggedIn = await desktop(["cursor", "login"], deps);
-  expect(seen[0]).toMatchObject({ openBrowser: false, apiKeyName: `factory-cc (${hostname()})`, apiKeyTtlMs: 7_776_000_000 });
+  expect(seen[0]).toMatchObject({ openBrowser: true, apiKeyName: `factory-cc (${hostname()})`, apiKeyTtlMs: 7_776_000_000 });
   expect(constructed).toEqual([join(paths.data, "cursor-auth.json")]);
   expect(constructed[0]).not.toContain(".cursor/sdk");
   expect(lines.join("")).toContain("https://cursor.test/device");

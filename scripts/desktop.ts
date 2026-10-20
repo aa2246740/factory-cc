@@ -368,6 +368,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
     path: process.env.PATH ?? "/usr/bin:/bin", uid: process.getuid!(), platform: process.platform, env: process.env,
     run: (command, args) => { const result = spawnSync(command, args, { encoding: "utf8", env: { HOME: homedir(), PATH: process.env.PATH }, stdio: ["ignore", "pipe", "pipe"] }); return { status: result.status ?? 1, stdout: result.stdout }; },
     assertPortFree: assertDesktopPortFree,
+    // Progress such as the Cursor login URL goes to stderr; stdout stays the JSON result.
+    stdout: (text) => { process.stderr.write(text); },
     health: async (port) => { try { const result = await fetch(`http://127.0.0.1:${port}/healthz`, { signal: AbortSignal.timeout(2000), redirect: "error" }); const body: unknown = await result.json(); return result.ok && isDesktopHealthPayload(body); } catch { return false; } },
   }).then((result) => console.log(JSON.stringify(result, null, 2))).catch((error: unknown) => { console.error(error instanceof Error ? error.message : "Desktop operation failed."); process.exitCode = 1; });
 }

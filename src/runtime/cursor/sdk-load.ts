@@ -63,13 +63,14 @@ export function loadCursorSdk(): { Agent: CursorAgentApi } & CursorPlatformModul
 /**
  * Mint a key with `Cursor.auth.login` and persist it under the bridge data dir.
  * The store path is `cursor-auth.json` there, never `~/.cursor/sdk/auth.json`.
- * `apiKeyTtlMs` is the SDK default (90 days). The browser is not opened; the caller prints the URL.
+ * `apiKeyTtlMs` is the SDK default (90 days). The SDK opens the browser when that is likely to work
+ * (not over SSH or with NO_OPEN_BROWSER); the caller also prints the URL.
  */
 export function cursorLoginFromSdk(dataDir: string, sdk: CursorPlatformModule, host = hostname()): CursorLogin {
   return async ({ onLoginUrl }) => {
     const store = new sdk.FileCredentialStore(cursorCredentialPath(dataDir));
     const result = await sdk.Cursor.auth.login({
-      openBrowser: false,
+      openBrowser: true,
       onLoginUrl,
       store,
       apiKeyName: `factory-cc (${host})`,
