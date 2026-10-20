@@ -38,6 +38,7 @@ export class SessionStore {
     droidSessionId?: string;
     historyHash?: string;
     contextHash?: string;
+    reasoning?: string;
     requestMessageHashes?: string[];
     historyMessageHashes?: string[];
     toolNames: string[];
@@ -52,6 +53,7 @@ export class SessionStore {
       ...(input.provider ? { provider: input.provider } : {}),
       historyHash: input.historyHash,
       contextHash: input.contextHash,
+      ...(input.reasoning ? { reasoning: input.reasoning } : {}),
       requestMessageHashes: input.requestMessageHashes,
       historyMessageHashes: input.historyMessageHashes,
       toolNames: input.toolNames,

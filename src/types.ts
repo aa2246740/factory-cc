@@ -62,6 +62,8 @@ export interface MessagesRequest {
   stop_sequences?: string[];
   metadata?: Record<string, Json>;
   thinking?: Json;
+  /** Droid's reasoning selector. `effort` is the level; `format` stays rejected. */
+  output_config?: Json;
   cache_control?: Json;
 }
 

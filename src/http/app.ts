@@ -8,6 +8,7 @@ import { appendLogLine, type Logger } from "../logging.js";
 import { parseMessagesRequest } from "../protocol/validate.js";
 import { apiError } from "../protocol/messages.js";
 import { explicitSessionId, historyMessageHashes, historyPrefixHash, resolveSession, roleFromHeaders, sessionContextHash } from "../sessions/correlate.js";
+import { droidReasoningLevel } from "../runtime/reasoning.js";
 import { isEnded } from "../sessions/state.js";
 import { HUMAN_WAIT_TOOLS, MISSION_SPAWN_TOOLS, MISSION_WORKER_END_TOOL } from "../runtime/mission-tools.js";
 import { compactedSummaryText, lastSummarizedToolCall, sameToolInput, summaryQuote } from "../sessions/compaction.js";
@@ -365,6 +366,7 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
         droidSessionId: explicitSessionId(headers, request),
         historyHash: historyPrefixHash(request),
         contextHash,
+        reasoning: droidReasoningLevel(request),
         requestMessageHashes: historyMessageHashes(request.messages),
         toolNames: (request.tools ?? []).map((t) => t.name),
       }));
@@ -470,6 +472,7 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
         model: request.model,
         ...(provider === "cursor" ? { provider } : {}),
         contextHash,
+        reasoning: droidReasoningLevel(request),
         historyHash: historyPrefixHash(request),
         requestMessageHashes: historyMessageHashes(request.messages),
         toolNames: (request.tools ?? []).map((t) => t.name),
@@ -533,7 +536,7 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
       completed = true;
       const current = store.get(sessionId);
       const recoverableSwitch = error instanceof BridgeError && error.status === 409
-        && ["model_switch_busy", "model_switch_requires_persistence", "model_switch_unavailable"].includes(error.code);
+        && ["model_switch_busy", "model_switch_requires_persistence", "model_switch_unavailable", "reasoning_switch_busy", "reasoning_switch_requires_persistence", "reasoning_switch_unavailable"].includes(error.code);
       if (recoverableSwitch) {
         if (!cancellationRequested && current && !current.cancelRequested && current.hostEnded === undefined
           && (current.state === "GENERATING" || current.state === "RESUMING")) {

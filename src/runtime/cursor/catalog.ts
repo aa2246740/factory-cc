@@ -89,7 +89,14 @@ function menuEntry(catalog: readonly CursorCatalogItem[], spec: string, firstPar
     model: item.id,
     displayName: menuLabel(item, params, canonical),
     provider: "cursor",
-    cursor: { id: item.id, params },
+    cursor: {
+      id: item.id,
+      params,
+      parameters: (item.parameters ?? []).map((parameter) => ({
+        id: parameter.id,
+        values: parameter.values.map((value) => ({ value: value.value })),
+      })),
+    },
   };
 }
 

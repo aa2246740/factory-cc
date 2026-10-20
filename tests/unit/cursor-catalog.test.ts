@@ -19,7 +19,7 @@ describe("Cursor catalog menu", () => {
       { id: "context", value: "standard" },
       { id: "fast", value: "false" },
     ]);
-    expect(JSON.stringify(menu)).not.toMatch(/500k/);
+    expect(JSON.stringify(menu.map((model) => model.cursor?.params))).not.toMatch(/500k/);
     expect(menu.every((model) => model.provider === "cursor" && model.cursor?.params.length === (model.model === "composer-2.5" ? 1 : 3))).toBe(true);
   });
 
@@ -58,7 +58,7 @@ describe("Cursor catalog menu", () => {
       { id: "reasoning_effort", value: "high" },
       { id: "fast", value: "false" },
     ]);
-    expect(JSON.stringify(menu[1]?.cursor)).not.toMatch(/500k|"true"/);
+    expect(JSON.stringify(menu[1]?.cursor?.params)).not.toMatch(/500k|"true"/);
     expect(standardContextValue([{ value: "500k" }, { value: "256k" }])).toBe("256k");
   });
 

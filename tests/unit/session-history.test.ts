@@ -416,6 +416,35 @@ describe("conversation continuity and isolation", () => {
           .toThrowError(expect.objectContaining({ code: "ambiguous_session" }));
       });
 
+      it("keeps one session when the selector level changes and continuity is proved", () => {
+        const leveled = { ...oldRequest, thinking: { type: "adaptive", display: "summarized" }, output_config: { effort: "high" } };
+        const record = owned({
+          model: leveled.model,
+          reasoning: "high",
+          contextHash: sessionContextHash({}, leveled, cwd),
+          requestMessageHashes: historyMessageHashes(leveled.messages),
+          historyMessageHashes: historyMessageHashes(oldHistory),
+        });
+        const low = { ...leveled, output_config: { effort: "low" }, messages: [...oldHistory, userMessage("What verification code did I ask you to remember?")] };
+        expect(resolveSession([record], {}, low, options)).toMatchObject({ match: record, reason: "history-prefix" });
+        const off = { ...low, thinking: { type: "between_tools" }, output_config: { effort: "high" } };
+        expect(resolveSession([record], {}, off, options)).toMatchObject({ match: record, reason: "history-prefix" });
+        expect(resolveSession([record], {}, { ...low, messages: [low.messages.at(-1)!] }, options).match).toBeUndefined();
+        expect(() => resolveSession([record], { "x-bridge-session": "droid-a" }, { ...low, messages: [low.messages.at(-1)!] }, options))
+          .toThrowError(expect.objectContaining({ code: "session_context_changed" }));
+        expect(() => resolveSession([owned({ ...record, state: "GENERATING" })], {}, low, options))
+          .toThrowError(expect.objectContaining({ code: "reasoning_switch_busy" }));
+        expect(resolveSession([record], {}, { ...low, tools: [] }, options).match).toBeUndefined();
+        const unbound = owned({
+          model: leveled.model, reasoning: "high", factorySessionId: undefined, factoryCwd: undefined,
+          contextHash: sessionContextHash({}, leveled, cwd),
+          requestMessageHashes: historyMessageHashes(leveled.messages),
+          historyMessageHashes: historyMessageHashes(oldHistory),
+        });
+        expect(resolveSession([unbound], {}, low, { cwd, allowModelSwitch: true })).toMatchObject({ match: unbound, reason: "history-prefix" });
+        expect(resolveSession([record], {}, low, { ...options, hostSessionId: undefined }).match).toBeUndefined();
+      });
+
       it("permits the same narrow change after authenticated compaction while retaining exact-tail checks", () => {
         const record = owned();
         const compacted = { ...changed, messages: [userMessage("Rewritten Factory summary."), ...changed.messages] };

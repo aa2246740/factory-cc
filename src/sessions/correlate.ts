@@ -4,6 +4,7 @@ import { asBlocks, collectToolResults } from "../protocol/content.js";
 import type { ContentBlock, Message, MessagesRequest, RoleTag } from "../types.js";
 import { BridgeError } from "../types.js";
 import { providerFromModelId, type ModelProvider } from "../models.js";
+import { droidReasoningLevel, requestAtReasoningLevel, requestWithoutReasoningLevel } from "../runtime/reasoning.js";
 import { isEnded, type SessionRecord } from "./state.js";
 import { canonicalWorkspacePath, resolveRequestCwd } from "../workspace.js";
 
@@ -57,11 +58,15 @@ export function sessionProvider(session: Pick<SessionRecord, "provider" | "model
  */
 export function sessionContextHash(headers: Headers, request: MessagesRequest, cwd?: string, provider: ModelProvider = "claude"): string {
   const workspace = cwd ?? resolveRequestCwd(headers, request);
+  const reasoning = droidReasoningLevel(request);
   return hash({
     model: request.model,
     role: roleFromHeaders(headers),
     cwd: workspace ? canonicalWorkspacePath(workspace) : null,
-    thinking: request.thinking,
+    // A selector level replaces the adaptive/between_tools thinking object.
+    // Other thinking shapes, such as a provider's enabled budget, stay in the hash.
+    thinking: reasoning ? undefined : request.thinking,
+    ...(reasoning ? { reasoning } : {}),
     ...(provider === "cursor" ? { provider } : {}),
   });
 }
@@ -84,6 +89,13 @@ export function resolveSession(
     : contextHash;
   const assertSelectedContext = (session: SessionRecord, authenticatedThinkingChange = false): void => {
     if (!authenticatedThinkingChange) assertContext(session, compatibleContextHash(session), headers, request);
+    if (authenticatedThinkingChange && !switchingModel(session)) {
+      if (isEnded(session)) throw new BridgeError(409, "session_unavailable", "This session has ended; start a new session.");
+      if (session.state !== "IDLE" || session.pendingToolIds.length > 0 || session.cancelRequested) {
+        throw new BridgeError(409, "reasoning_switch_busy", "Reasoning changes require an idle session with no pending tool calls; finish the current turn first.");
+      }
+      return;
+    }
     if (!switchingModel(session)) return;
     if (isEnded(session)) {
       throw new BridgeError(409, "session_unavailable", "This session has ended; start a new session.");
@@ -117,17 +129,40 @@ export function resolveSession(
   // difference only after a complete history or authenticated retained turn
   // proves continuity, and independently prove every other fingerprint field.
   // Explicit IDs alone and tool-free auxiliary requests do not get this exception.
-  // contextHash contains model/role/cwd/thinking, plus provider when the owner is Cursor.
+  // contextHash contains model/role/cwd/thinking, plus reasoning when a selector level
+  // is present, plus provider when the owner is Cursor.
   // Any future execution field added there must also be checked here before this exception.
-  const canChangeHostThinking = (session: SessionRecord): boolean => switchingModel(session)
-    && sessionProvider(session) === requestProvider
+  const sameExecutionScope = (session: SessionRecord): boolean => sessionProvider(session) === requestProvider
     && Boolean(session.contextHash) && Boolean(options.hostSessionId) && Boolean(workspace)
     && session.factorySessionId === options.hostSessionId && session.factoryCwd !== undefined
     && canonicalWorkspacePath(session.factoryCwd) === workspace
     && session.role === roleFromHeaders(headers)
     && session.toolNames.length > 0 && Boolean(request.tools?.length);
+  const canChangeHostThinking = (session: SessionRecord): boolean => switchingModel(session) && sameExecutionScope(session);
+  // Same-model selector changes are a different field from an arbitrary thinking
+  // blob. The previous level's hash must still match, so model, role, directory
+  // and provider are unchanged. A Factory host id is required only when one
+  // exists; `droid exec` continuations have none, and a conflicting host never
+  // matches. The caller still has to prove continuity with history or a tail.
+  const hostAgrees = (session: SessionRecord): boolean => {
+    if (!session.factorySessionId && !options.hostSessionId) return true;
+    return Boolean(session.factorySessionId && options.hostSessionId && workspace
+      && session.factorySessionId === options.hostSessionId && session.factoryCwd !== undefined
+      && canonicalWorkspacePath(session.factoryCwd) === workspace);
+  };
+  const canChangeReasoningLevel = (session: SessionRecord): boolean => {
+    if (switchingModel(session) || session.model !== request.model || !session.contextHash || !hostAgrees(session)) return false;
+    if (sessionProvider(session) !== requestProvider || session.role !== roleFromHeaders(headers)) return false;
+    if (session.toolNames.length === 0 || !request.tools?.length) return false;
+    const current = droidReasoningLevel(request);
+    if ((session.reasoning ?? undefined) === current) return false;
+    const previous = session.reasoning
+      ? sessionContextHash(headers, requestAtReasoningLevel(request, session.reasoning), options.cwd, requestProvider)
+      : sessionContextHash(headers, requestWithoutReasoningLevel(request), options.cwd, requestProvider);
+    return session.contextHash === previous;
+  };
   const historyContextMatches = (session: SessionRecord): boolean => session.contextHash === compatibleContextHash(session)
-    || canChangeHostThinking(session);
+    || canChangeHostThinking(session) || canChangeReasoningLevel(session);
   const inHostScope = (session: SessionRecord): boolean => !options.hostSessionId || !session.factorySessionId
     || (session.factorySessionId === options.hostSessionId && (!workspace || (session.factoryCwd !== undefined && canonicalWorkspacePath(session.factoryCwd) === workspace)));
   const assertHostScope = (session: SessionRecord): void => {
@@ -166,7 +201,7 @@ export function resolveSession(
     }
     if (hit) {
       assertHostScope(hit);
-      assertSelectedContext(hit, canChangeHostThinking(hit) && (hasCompleteHistory(hit) || hasAuthenticatedTail(hit)));
+      assertSelectedContext(hit, (canChangeHostThinking(hit) || canChangeReasoningLevel(hit)) && (hasCompleteHistory(hit) || hasAuthenticatedTail(hit)));
       return { match: hit, reason: "explicit-id" };
     }
     // An explicit new conversation may intentionally share the same prompt.
@@ -190,7 +225,7 @@ export function resolveSession(
     : options.continueIdenticalTranscripts ? identicalIdleTranscript(candidates, request.model) : undefined;
   if (candidates.length > 1 && !chosen) throw ambiguous("multiple transcripts match this history; supply X-Bridge-Session");
   if (chosen) {
-    assertSelectedContext(chosen, canChangeHostThinking(chosen));
+    assertSelectedContext(chosen, canChangeHostThinking(chosen) || canChangeReasoningLevel(chosen));
     return { match: chosen, reason: candidates.length > 1 ? "identical-history-prefix" : "history-prefix" };
   }
 
@@ -203,12 +238,12 @@ export function resolveSession(
       return hasAuthenticatedTail(session) && historyContextMatches(session)
         // Identify a genuine model-switch continuation before rejecting busy
         // state; filtering it out would silently fork the native conversation.
-        && (switchingModel(session) || (session.state === "IDLE" && !session.cancelRequested && session.pendingToolIds.length === 0))
+        && (switchingModel(session) || canChangeReasoningLevel(session) || (session.state === "IDLE" && !session.cancelRequested && session.pendingToolIds.length === 0))
         && !isEnded(session);
     });
   if (authenticatedTail.length > 1) throw ambiguous("multiple authenticated Factory transcripts match the retained turn; supply X-Bridge-Session");
   if (authenticatedTail[0]) {
-    assertSelectedContext(authenticatedTail[0], canChangeHostThinking(authenticatedTail[0]));
+    assertSelectedContext(authenticatedTail[0], canChangeHostThinking(authenticatedTail[0]) || canChangeReasoningLevel(authenticatedTail[0]));
     return { match: authenticatedTail[0], reason: "authenticated-history-tail" };
   }
 

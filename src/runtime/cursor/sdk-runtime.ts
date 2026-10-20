@@ -4,6 +4,7 @@ import type { Logger } from "../../logging.js";
 import { assistantMessage } from "../../protocol/messages.js";
 import { collectToolResults, textFromBlocks } from "../../protocol/content.js";
 import { providerFromModelId, type CursorModelParameter } from "../../models.js";
+import { applyCursorReasoning, droidReasoningLevel } from "../reasoning.js";
 import { BridgeError, type ContentBlock, type Json, type Usage } from "../../types.js";
 import { resolveRequestCwd } from "../../workspace.js";
 import { buildDynamicUserContent, buildInitialUserContent } from "../system-prompt.js";
@@ -100,7 +101,7 @@ export class CursorSdkRuntime implements BridgeRuntime {
 
   async handle(input: RuntimeRequest, sink?: StreamSink): Promise<RuntimeTurn> {
     const tools = assertCursorNativeTools(this.nativeTools);
-    const selection = this.selection(input.request.model);
+    const selection = this.selection(input.request.model, input.request);
     const live = this.live(input.session.bridgeSessionId);
     if (live.busy) throw new BridgeError(409, "session_busy", "This Cursor session already has an active request");
     live.busy = true;
@@ -120,6 +121,7 @@ export class CursorSdkRuntime implements BridgeRuntime {
         return await this.finishOrPark(live, input, this.armPark(live));
       }
       const message = this.userMessage(input, !input.session.sdkSessionId && !live.sent);
+      this.logger.info("cursor_run_params", { model: selection.id, params: selection.params });
       let parked = false;
       const park = new Promise<void>((resolve) => { live.releasePark = () => { parked = true; resolve(); }; });
       const run = await agent.send(message, {
@@ -202,11 +204,14 @@ export class CursorSdkRuntime implements BridgeRuntime {
     return this.api;
   }
 
-  private selection(modelId: string): { id: string; params: CursorModelParameter[] } {
+  private selection(modelId: string, request: RuntimeRequest["request"]): { id: string; params: CursorModelParameter[] } {
     if (providerFromModelId(modelId) !== "cursor") throw new BridgeError(400, "unknown_model", "This model is not a Cursor model.");
     const profile = this.config.models?.find((model) => model.id === modelId && model.provider === "cursor");
     if (!profile?.cursor) throw new BridgeError(400, "unknown_model", "This Cursor model is not on the menu.");
-    return profile.cursor;
+    return {
+      id: profile.cursor.id,
+      params: applyCursorReasoning(profile.cursor.params, profile.cursor.parameters, droidReasoningLevel(request)),
+    };
   }
 
   private async ensureAgent(live: LiveCursor, input: RuntimeRequest, selection: { id: string; params: CursorModelParameter[] }, tools: string[]): Promise<CursorAgentLike> {
