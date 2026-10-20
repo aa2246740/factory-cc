@@ -1,3 +1,4 @@
+import { canonicalToolUseId } from "../../protocol/content.js";
 import type { ContentBlock, Json } from "../../types.js";
 import { outboundDroidToolName } from "./tools.js";
 
@@ -51,7 +52,7 @@ export function applyCursorUpdate(draft: CursorTurnDraft, update: CursorUpdate):
   }
   if (update.type === "tool-call-started" || update.type === "tool-call-completed" || update.type === "partial-tool-call") {
     const call = asToolCall(update.toolCall);
-    const callId = typeof update.callId === "string" ? update.callId : "";
+    const callId = typeof update.callId === "string" ? canonicalToolUseId(update.callId) : "";
     if (!call || !callId) return;
     draft.events.push({ type: update.type, data: { callId, tool: call.type, name: toolLabel(call) } });
     if (update.type === "tool-call-started" && call.type === "mcp") {

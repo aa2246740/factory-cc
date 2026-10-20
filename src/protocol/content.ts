@@ -20,6 +20,15 @@ export function lastUserText(messages: Message[]): string {
   return "";
 }
 
+/**
+ * Cursor's SDK call id is `call-<uuid>-N` plus a newline plus `fc_<uuid>_0`.
+ * Droid stores that newline and sends the tool_result with `_` in its place.
+ * Folding the newline makes the parked id and the echo one id.
+ */
+export function canonicalToolUseId(id: string): string {
+  return id.replace(/[\r\n]+/g, "_");
+}
+
 export function collectToolResults(messages: Message[]): Array<{
   tool_use_id: string;
   content: string | ContentBlock[];

@@ -41,6 +41,10 @@ Sessions record `provider`. The fingerprint includes it for Cursor, and a model 
 
 Droid tools are in-process `local.customTools`. `execute()` stays pending until `deliverResults` or `completeHostTool`. The assistant message uses the tool name Droid advertised. Current `droid exec` advertises `Execute` and rejects `mcp__droid__Execute`. Native tools are `read`, `grep`, `glob`, `ls`, and `mcp`. Creation fails if `mcp` is missing.
 
+Cursor SDK call ids look like `call-<uuid>-N` plus a newline plus `fc_<uuid>_0`. Droid's `tool_result` echoes that newline as `_`. The bridge folds the newline before the id is stored or sent, and session matching compares the folded form. A cancelled or ambiguous session is still refused. The `[mcp__droid__…]` tool trace in the assistant text is the same SSE trace Claude Code writes. It is part of the hashed transcript. It is not a session boundary.
+
+`customTools` are fixed for one `send()`. Droid's deferred tools (WebSearch, FetchUrl, and the rest of the "Deferred tools:" list in the unified catalog reminder) are registered on that send, so ToolSearch can be followed by a real call without a new agent. A tool Droid already advertised keeps its schema. A name that exists only in the reminder gets a permissive object schema, with `query` for WebSearch and `url` for FetchUrl. The tool_use name stays the bare name Droid accepts. An identical retry of a Cursor request that already finished stays on that idle session and returns the same response. It does not open another agent. Claude Code does not use that retry rule.
+
 ## Reasoning selector
 
 Droid shows Sonnet 5.5's selector on every bridge entry because each one uses `baseModelId: claude-sonnet-5-5`. Captured with Droid 0.236.0, a level is two request fields:

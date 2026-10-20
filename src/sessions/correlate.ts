@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { header } from "../security/auth.js";
-import { asBlocks, collectToolResults } from "../protocol/content.js";
+import { asBlocks, canonicalToolUseId, collectToolResults } from "../protocol/content.js";
 import type { ContentBlock, Message, MessagesRequest, RoleTag } from "../types.js";
 import { BridgeError } from "../types.js";
 import { providerFromModelId, type ModelProvider } from "../models.js";
@@ -108,7 +108,7 @@ export function resolveSession(
   // Factory keeps old tool_results in its history. An ended session can no
   // longer consume one, so it must not own the conversation they appear in.
   const owners = sessions.filter((session) => !isEnded(session)
-    && results.some((result) => session.pendingToolIds.includes(result.tool_use_id)));
+    && results.some((result) => holdsToolId(session.pendingToolIds, result.tool_use_id)));
   if (owners.length === 0) {
     // Only a request that does nothing but return the abandoned tool's result is
     // a retry. Any new user content makes it a new turn over imported history.
@@ -117,7 +117,7 @@ export function resolveSession(
     if (latestBlocks.length > 0 && latestBlocks.every((block) => block.type === "tool_result")) {
       const retried = collectToolResults([latest!]);
       const held = (session: SessionRecord): string[] => [...(session.endedToolIds ?? []), ...session.pendingToolIds];
-      if (sessions.some((session) => isEnded(session) && retried.some((result) => held(session).includes(result.tool_use_id)))) {
+      if (sessions.some((session) => isEnded(session) && retried.some((result) => holdsToolId(held(session), result.tool_use_id)))) {
         throw new BridgeError(409, "session_unavailable", "This tool result belongs to a session that was cancelled, timed out or interrupted. Its tool call will not be replayed; send a new message to continue in a new session.");
       }
     }
@@ -259,6 +259,23 @@ export function resolveSession(
   if (activeDuplicates.length) {
     throw ambiguous("identical concurrent prompts require X-Bridge-Session or distinct tool_use IDs");
   }
+  // Cursor can be handed the same completed tool-result body again a few seconds
+  // later. That retry is not a new conversation. Claude keeps the old behavior.
+  if (requestProvider === "cursor") {
+    const replays = sessions.filter((session) => {
+      if (!inHostScope(session) || isEnded(session) || !historyContextMatches(session)) return false;
+      // Idle: the turn already finished. Waiting: the turn parked a tool and Droid
+      // repeated that same request body. A busy generating session is not a replay.
+      if (session.cancelRequested || (session.state !== "IDLE" && session.state !== "WAITING_DROID_TOOL")) return false;
+      const handled = session.requestMessageHashes;
+      return Boolean(handled && handled.length === incoming.length && handled.every((fingerprint, index) => incoming[index] === fingerprint));
+    });
+    if (replays.length > 1) throw ambiguous("identical completed requests require X-Bridge-Session");
+    if (replays[0]) {
+      assertSelectedContext(replays[0]);
+      return { match: replays[0], reason: "request-replay" };
+    }
+  }
   return { reason: "new-session" };
 }
 
@@ -290,6 +307,11 @@ function assertContext(session: SessionRecord, contextHash: string, headers: Hea
   if (legacyMismatch || (session.contextHash && session.contextHash !== contextHash)) {
     throw new BridgeError(409, "session_context_changed", "model, role, workspace or execution settings changed; start a new session");
   }
+}
+
+function holdsToolId(ids: readonly string[] | undefined, toolUseId: string): boolean {
+  const wanted = canonicalToolUseId(toolUseId);
+  return (ids ?? []).some((id) => canonicalToolUseId(id) === wanted);
 }
 
 function ambiguous(message: string): BridgeError {
