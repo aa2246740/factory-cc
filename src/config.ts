@@ -101,6 +101,20 @@ function ensurePrivateDir(path: string): void {
   chmodSync(path, 0o700);
 }
 
+function readCursorMenu(file: string | undefined): BridgeModel[] | undefined {
+  if (!file) return undefined;
+  let parsed: unknown;
+  try { parsed = JSON.parse(readFileSync(file, "utf8")); }
+  catch { throw new Error(`BRIDGE_CURSOR_MODELS_FILE could not be read: ${file}`); }
+  if (!Array.isArray(parsed)) throw new Error("BRIDGE_CURSOR_MODELS_FILE must contain a JSON array of models.");
+  return validateModels(parsed as BridgeModel[]);
+}
+
+function mergeModelCatalog(base: BridgeModel[] | undefined, cursor: BridgeModel[] | undefined): BridgeModel[] | undefined {
+  if (!cursor?.length) return base;
+  return validateModels([...(base ?? []).filter((model) => model.provider !== "cursor"), ...cursor]);
+}
+
 function tokenEnv(name: string): string | undefined {
   const file = env(`${name}_FILE`);
   if (file && env(name)) throw new Error(`${name} and ${name}_FILE cannot both be set.`);
@@ -188,7 +202,10 @@ export function loadConfig(overrides: Partial<BridgeConfig> = {}): BridgeConfig 
     upstreamModel: overrides.upstreamModel ?? env("BRIDGE_UPSTREAM_MODEL"),
     upstreamTokenEnv: overrides.upstreamTokenEnv ?? env("BRIDGE_UPSTREAM_TOKEN_ENV"),
     models: overrides.models !== undefined ? validateModels(overrides.models)
-      : env("BRIDGE_MODELS") ? modelsFromIds(parseModelIds(env("BRIDGE_MODELS")!), authMode) : claudeConfig ? claudeConfigModels(claudeConfig).models : undefined,
+      : mergeModelCatalog(
+        env("BRIDGE_MODELS") ? modelsFromIds(parseModelIds(env("BRIDGE_MODELS")!), authMode) : claudeConfig ? claudeConfigModels(claudeConfig).models : undefined,
+        readCursorMenu(env("BRIDGE_CURSOR_MODELS_FILE")),
+      ),
   };
   if (claudeConfig) Object.defineProperty(config, "claudeConfig", { value: claudeConfig });
   return config;

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { appendFileSync, closeSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Logger } from "../logging.js";
+import type { ModelProvider } from "../models.js";
 import { sessionId } from "../relay/ids.js";
 import type { RoleTag, SessionState } from "../types.js";
 import { BridgeError } from "../types.js";
@@ -33,6 +34,7 @@ export class SessionStore {
   create(input: {
     role: RoleTag;
     model: string;
+    provider?: ModelProvider;
     droidSessionId?: string;
     historyHash?: string;
     contextHash?: string;
@@ -47,6 +49,7 @@ export class SessionStore {
       role: input.role,
       state: "NEW",
       model: input.model,
+      ...(input.provider ? { provider: input.provider } : {}),
       historyHash: input.historyHash,
       contextHash: input.contextHash,
       requestMessageHashes: input.requestMessageHashes,

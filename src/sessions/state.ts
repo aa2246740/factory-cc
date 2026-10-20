@@ -1,3 +1,4 @@
+import type { ModelProvider } from "../models.js";
 import type { RoleTag, SessionState } from "../types.js";
 
 export interface SessionRecord {
@@ -6,6 +7,8 @@ export interface SessionRecord {
   factorySessionId?: string;
   factoryCwd?: string;
   sdkSessionId?: string;
+  /** Runtime that owns sdkSessionId. Absent on Claude sessions created before Cursor coexisted. */
+  provider?: ModelProvider;
   /** Persist replay safety independently of process-local callback state. */
   hostEnded?: "resumable" | "terminal" | "interrupted";
   role: RoleTag;

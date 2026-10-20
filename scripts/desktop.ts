@@ -1,19 +1,24 @@
 import { spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { z } from "zod";
 import { modelsFromIds, parseModelIds, type BridgeModel } from "../src/models.js";
+import { coerceCursorCatalog, cursorMenuFromCatalog, formatCursorCatalog, type CursorCatalogItem } from "../src/runtime/cursor/catalog.js";
+import { CURSOR_LOGIN_COMMAND, cursorApiKey, cursorCredentialStatus, cursorExpiryWarning, formatCursorStatus, loginCursor, type CursorLogin } from "../src/runtime/cursor/credentials.js";
+import { cursorLoginFromSdk, loadCursorSdk, type CursorPlatformModule } from "../src/runtime/cursor/sdk-load.js";
 import { assertClaudeCredential, claudeConfigModels, readClaudeConfig } from "../src/upstream/claude-config.js";
 import { configureDroid, DROID_BASE_MODEL } from "./configure-droid.js";
 
 const LABEL = "ai.factory-cc.bridge";
 const installationSchema = z.object({ version: z.literal(1), port: z.number().int().min(1).max(65535), repo: z.string(), node: z.string(), path: z.string(),
   // Explicit Droid menu models; absent means follow the Claude Code settings aliases.
-  models: z.array(z.string()).optional() });
+  models: z.array(z.string()).optional(),
+  // Cursor menu selector (`default`, `first-party`, or an explicit list). The key stays out of this file.
+  cursorModels: z.string().min(1).max(4000).optional() });
 type Installation = z.infer<typeof installationSchema>;
 export type Runner = (command: string, args: string[]) => { status: number; stdout?: string };
 export interface DesktopDependencies {
@@ -27,12 +32,21 @@ export interface DesktopDependencies {
   assertPortFree: (port: number) => Promise<void>;
   health: (port: number) => Promise<boolean>;
   sleep?: (ms: number) => Promise<void>;
+  /** Isolated from the developer shell. Cursor status/login read this, never `process.env`, when set. */
+  env?: NodeJS.ProcessEnv;
+  cursorCatalog?: readonly CursorCatalogItem[];
+  cursorLogin?: CursorLogin;
+  /** Injected `@cursor/sdk` boundary. Production loads the real module when this is absent. */
+  cursorSdk?: CursorPlatformModule;
+  stdout?: (text: string) => void;
+  now?: () => number;
 }
 export function desktopPaths(home: string) {
   const state = join(home, "Library/Application Support/factory-cc");
   return { state, data: join(state, "bridge-data"), token: join(state, "client-token"),
     admin: join(state, "admin-token"), hook: join(state, "hook-token"),
     manifest: join(state, "installation.json"), models: join(state, "models.env"),
+    cursorCatalog: join(state, "cursor-catalog.json"), cursorMenu: join(state, "cursor-menu.json"),
     plist: join(home, `Library/LaunchAgents/${LABEL}.plist`), settings: join(home, ".factory/settings.json") };
 }
 function privateFile(path: string, value: string) {
@@ -50,7 +64,8 @@ export function desktopPlist(deps: DesktopDependencies, install: Installation): 
     BRIDGE_PERMISSION: "ask", BRIDGE_DESKTOP: "1", BRIDGE_HOST: "127.0.0.1", BRIDGE_PORT: String(install.port),
     BRIDGE_DATA_DIR: paths.data, BRIDGE_CLIENT_TOKEN_FILE: paths.token,
     BRIDGE_ADMIN_TOKEN_FILE: paths.admin, BRIDGE_HOOK_TOKEN_FILE: paths.hook,
-    ...(install.models ? { BRIDGE_MODELS: install.models.join(",") } : {}) };
+    ...(install.models ? { BRIDGE_MODELS: install.models.join(",") } : {}),
+    ...(install.cursorModels ? { BRIDGE_CURSOR_MODELS_FILE: paths.cursorMenu } : {}) };
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
@@ -92,13 +107,14 @@ async function bootstrap(deps: DesktopDependencies, plist: string) {
     await (deps.sleep ?? ((ms) => new Promise<void>((resolve) => setTimeout(resolve, ms))))(1000);
   }
 }
-function syncModels(deps: DesktopDependencies, install: Installation) {
+function syncModels(deps: DesktopDependencies, install: Installation, cursorMenu?: BridgeModel[]) {
   const paths = desktopPaths(deps.home);
   // Deliberately use exactly the environment launchd will receive. Never inherit shell credentials.
   const config = readClaudeConfig({ HOME: deps.home, PATH: install.path }, `127.0.0.1:${install.port}`);
   assertClaudeCredential(config);
-  const models = install.models ? modelsFromIds(install.models, "claude-config").map(explicitLabel)
+  const claude = install.models ? modelsFromIds(install.models, "claude-config").map(explicitLabel)
     : claudeConfigModels(config).models.map((model) => ({ ...model, displayName: `Claude Code · ${model.displayName.replace(/^Claude /, "")}` }));
+  const models = [...claude, ...(cursorMenu ?? [])];
   // A literal key, not an apiKeyHelper: Droid strips executable credential
   // commands from the runtime settings that Mission workers and validators load.
   // The token only admits requests to this loopback Bridge.
@@ -119,20 +135,124 @@ function explicitLabel(model: BridgeModel): BridgeModel {
   const name = match ? `${match[1]![0]!.toUpperCase()}${match[1]!.slice(1)} ${match[2]}.${match[3]} (${model.id})` : model.id;
   return { ...model, displayName: `Claude Code · ${name}` };
 }
-function parseOptions(action: string, options: string[]): { port?: number; models?: string[] } {
-  const parsed: { port?: number; models?: string[] } = {};
+function parseOptions(action: string, options: string[]): { port?: number; models?: string[]; cursorModels?: string } {
+  const parsed: { port?: number; models?: string[]; cursorModels?: string } = {};
   for (let index = 0; index < options.length; index += 2) {
     const [flag, value] = [options[index], options[index + 1]];
     if (flag === "--port" && action === "install" && parsed.port === undefined && /^\d+$/.test(value ?? "")) parsed.port = Number(value);
     else if (flag === "--models" && ["install", "restart"].includes(action) && parsed.models === undefined && value) parsed.models = parseModelIds(value);
-    else throw new Error("Options: install [--port <1..65535>] [--models id,id,...]; restart [--models id,id,...].");
+    else if (flag === "--cursor-models" && ["install", "restart"].includes(action) && parsed.cursorModels === undefined && value) parsed.cursorModels = value;
+    else throw new Error("Options: install [--port <1..65535>] [--models id,id,...] [--cursor-models default|first-party|id,id,...]; restart [--models id,id,...] [--cursor-models ...].");
   }
   return parsed;
 }
+
+/** `{ ok: true, mode: "sdk" }` is the desktop health contract, including when Cursor is also configured. */
+export function isDesktopHealthPayload(body: unknown): boolean {
+  return z.object({ ok: z.literal(true), mode: z.literal("sdk") }).safeParse(body).success;
+}
+
+function cursorClock(deps: DesktopDependencies): { env: NodeJS.ProcessEnv; now: number } {
+  return { env: deps.env ?? {}, now: deps.now?.() ?? Date.now() };
+}
+
+function cursorLoggedIn(deps: DesktopDependencies): boolean {
+  const { env, now } = cursorClock(deps);
+  return cursorCredentialStatus(desktopPaths(deps.home).data, env, now).loggedIn;
+}
+
+function cursorAbsentNotice(): string {
+  return `Cursor is not logged in, so the menu has no Cursor entries. Run ${CURSOR_LOGIN_COMMAND} to add them.`;
+}
+
+/** Login and `cursor models` may create the state dir before install. That is not an installation. */
+function cursorPreinstallOnly(state: string): boolean {
+  if (!existsSync(state)) return true;
+  let names: string[];
+  try { names = readdirSync(state); } catch { return false; }
+  if (names.some((name) => name !== "cursor-catalog.json" && name !== "bridge-data")) return false;
+  if (!names.includes("bridge-data")) return true;
+  try { return readdirSync(join(state, "bridge-data")).every((name) => name === "cursor-auth.json"); }
+  catch { return false; }
+}
+
+async function fetchCursorCatalog(deps: DesktopDependencies): Promise<CursorCatalogItem[]> {
+  const { env, now } = cursorClock(deps);
+  const key = cursorApiKey(desktopPaths(deps.home).data, env, now);
+  if (!key) throw new Error(`No Cursor credential. Run ${CURSOR_LOGIN_COMMAND} first.`);
+  const sdk = deps.cursorSdk ?? loadCursorSdk();
+  try {
+    return coerceCursorCatalog(await sdk.Cursor.models.list({ apiKey: key }));
+  } catch (error) {
+    if (error instanceof Error && /not a list|catalog row \d+ is invalid/.test(error.message)) throw error;
+    const message = error instanceof Error ? error.message : "Cursor catalog request failed.";
+    const redacted = message.split(key).join("[redacted]");
+    if (/unauthori|unauthenticated|invalid api key|api key|not logged in|authentication/i.test(redacted)) {
+      throw new Error(`${redacted} Run ${CURSOR_LOGIN_COMMAND}.`);
+    }
+    throw new Error(redacted);
+  }
+}
+
+async function resolveCursorMenu(deps: DesktopDependencies, selector: string): Promise<{ menu: BridgeModel[]; catalog?: readonly CursorCatalogItem[] }> {
+  const catalog = deps.cursorCatalog ?? await fetchCursorCatalog(deps);
+  let menu: BridgeModel[];
+  try { menu = cursorMenuFromCatalog(catalog, selector); }
+  catch (error) { throw new Error(error instanceof Error ? error.message : "Cursor catalog rejected the requested models."); }
+  return { menu, ...(deps.cursorCatalog ? {} : { catalog }) };
+}
+
+function readCursorMenuFile(deps: DesktopDependencies): BridgeModel[] | undefined {
+  try {
+    const parsed = JSON.parse(readFileSync(desktopPaths(deps.home).cursorMenu, "utf8")) as unknown;
+    return Array.isArray(parsed) ? parsed as BridgeModel[] : undefined;
+  } catch { return undefined; }
+}
+
+function writeCursorMenu(deps: DesktopDependencies, menu: BridgeModel[], catalog?: readonly CursorCatalogItem[]): void {
+  const paths = desktopPaths(deps.home);
+  const snapshot = catalog ?? deps.cursorCatalog;
+  if (snapshot) replacePrivateFile(paths.cursorCatalog, `${JSON.stringify(snapshot)}\n`);
+  replacePrivateFile(paths.cursorMenu, `${JSON.stringify(menu)}\n`);
+}
+
+async function cursorDesktop(args: string[], deps: DesktopDependencies): Promise<Record<string, unknown>> {
+  const [sub, filter] = args;
+  const paths = desktopPaths(deps.home);
+  const env = deps.env ?? {};
+  const now = deps.now?.() ?? Date.now();
+  if (sub === "status") {
+    const text = formatCursorStatus(cursorCredentialStatus(paths.data, env, now), now);
+    deps.stdout?.(text);
+    return { text };
+  }
+  if (sub === "models") {
+    const catalog = deps.cursorCatalog ?? await fetchCursorCatalog(deps);
+    if (!deps.cursorCatalog) {
+      mkdirSync(paths.state, { recursive: true, mode: 0o700 });
+      chmodSync(paths.state, 0o700);
+      replacePrivateFile(paths.cursorCatalog, `${JSON.stringify(catalog)}\n`);
+    }
+    const text = formatCursorCatalog(catalog, filter);
+    deps.stdout?.(text);
+    return { text };
+  }
+  if (sub === "login") {
+    const login = deps.cursorLogin ?? cursorLoginFromSdk(paths.data, deps.cursorSdk ?? loadCursorSdk());
+    mkdirSync(paths.data, { recursive: true, mode: 0o700 });
+    const urls: string[] = [];
+    const status = await loginCursor(paths.data, login, (url) => { urls.push(url); deps.stdout?.(`${url}\n`); }, now);
+    const text = formatCursorStatus(status, now);
+    deps.stdout?.(text);
+    return { text, loginUrl: urls[0] ?? null };
+  }
+  throw new Error("Usage: npm run desktop -- cursor login | cursor status | cursor models [filter]");
+}
 export async function desktop(argv: string[], deps: DesktopDependencies): Promise<Record<string, unknown>> {
   const [action, ...options] = argv;
-  if (!["install", "uninstall", "status", "restart"].includes(action ?? "")) throw new Error("Usage: npm run desktop -- install [--port 18787] [--models id,id,...] | uninstall | status | restart [--models id,id,...]");
+  if (!["install", "uninstall", "status", "restart", "cursor"].includes(action ?? "")) throw new Error("Usage: npm run desktop -- install [--port 18787] [--models id,id,...] [--cursor-models default|first-party|id,id,...] | uninstall | status | restart [--models id,id,...] [--cursor-models ...] | cursor login | cursor status | cursor models [filter]");
   if (deps.platform !== "darwin") throw new Error("Desktop LaunchAgent installation requires macOS.");
+  if (action === "cursor") return cursorDesktop(options, deps);
   const parsed = parseOptions(action!, options);
   const paths = desktopPaths(deps.home), domain = `gui/${deps.uid}`;
   const caveat = "The repository and Node executable must remain available. If /Volumes/Workspace is unmounted, this service cannot start.";
@@ -140,9 +260,18 @@ export async function desktop(argv: string[], deps: DesktopDependencies): Promis
     const install = readInstallation(deps);
     const loaded = deps.run("launchctl", ["print", `${domain}/${LABEL}`]).status === 0;
     const scriptMode = scriptToolModels(deps.home).includes(DROID_BASE_MODEL);
+    const { env, now } = cursorClock(deps);
+    const cursorStatus = cursorCredentialStatus(paths.data, env, now);
+    const cursorWarning = cursorExpiryWarning(cursorStatus, now);
     return { installed: true, plistPresent: existsSync(paths.plist), loaded, port: install.port, models: install.models ?? "follow Claude Code settings",
       repositoryPresent: existsSync(join(install.repo, "dist/index.js")), healthy: await deps.health(install.port), caveat,
-      ...(scriptMode ? { warning: `Droid now runs ${DROID_BASE_MODEL} in Script mode, so these models lose direct Read/Execute/Create/Edit tools. Update factory-cc to a base model outside script_tool_models.` } : {}) };
+      cursor: {
+        loggedIn: cursorStatus.loggedIn, expired: cursorStatus.expired,
+        expires: cursorStatus.expiresAt ?? (cursorStatus.source === "env" ? "unknown" : "none"),
+        account: cursorStatus.accountPresent ? "present" : "absent",
+      },
+      ...(scriptMode ? { warning: `Droid now runs ${DROID_BASE_MODEL} in Script mode, so these models lose direct Read/Execute/Create/Edit tools. Update factory-cc to a base model outside script_tool_models.` } : {}),
+      ...(cursorWarning ? { cursorWarning } : {}) };
   }
   if (action === "uninstall") {
     if (!existsSync(paths.manifest)) {
@@ -157,19 +286,45 @@ export async function desktop(argv: string[], deps: DesktopDependencies): Promis
     return { installed: false, changed: [paths.settings, `${paths.settings}.relay-bridge.bak`, `${paths.settings}.relay-bridge.bak.absent`, `${paths.settings}.relay-bridge.models.json`, paths.plist, paths.state] };
   }
   if (action === "restart") {
-    const install = { ...readInstallation(deps), ...(parsed.models ? { models: parsed.models } : {}) };
+    const previous = readInstallation(deps);
+    const explicit = parsed.cursorModels !== undefined;
+    let menu: BridgeModel[] | undefined;
+    let warning: string | undefined;
+    let catalog: readonly CursorCatalogItem[] | undefined;
+    let cursorModels = previous.cursorModels;
+    if (explicit) {
+      // A missing credential or an invalid id throws here, before bootout, so a working service stays up.
+      const resolved = await resolveCursorMenu(deps, parsed.cursorModels!);
+      menu = resolved.menu;
+      catalog = resolved.catalog;
+      cursorModels = parsed.cursorModels;
+    } else if (!cursorLoggedIn(deps)) {
+      warning = cursorAbsentNotice();
+      menu = undefined;
+      cursorModels = undefined;
+    } else if (previous.cursorModels && existsSync(paths.cursorMenu)) {
+      menu = readCursorMenuFile(deps);
+      cursorModels = menu ? previous.cursorModels : undefined;
+    } else cursorModels = undefined;
+    const install: Installation = { ...previous, ...(parsed.models ? { models: parsed.models } : {}) };
+    if (cursorModels) install.cursorModels = cursorModels;
+    else delete install.cursorModels;
     if (!existsSync(join(install.repo, "dist/index.js"))) throw new Error(caveat);
-    syncModels(deps, install); // Validate before stopping a working service.
+    syncModels(deps, install, menu);
+    if (explicit && menu) writeCursorMenu(deps, menu, catalog);
     replacePrivateFile(paths.manifest, JSON.stringify(install, null, 2) + "\n");
     replacePrivateFile(paths.plist, desktopPlist(deps, install));
     bootout(deps);
     await bootstrap(deps, paths.plist);
-    return { restarted: true, changed: [paths.settings, `${paths.settings}.relay-bridge.models.json`, paths.models, paths.manifest, paths.plist], models: install.models ?? "follow Claude Code settings", caveat };
+    return { restarted: true, changed: [paths.settings, `${paths.settings}.relay-bridge.models.json`, paths.models, paths.manifest, paths.plist], models: install.models ?? "follow Claude Code settings", ...(install.cursorModels ? { cursorModels: install.cursorModels } : {}), ...(warning ? { warning } : {}), caveat };
   }
   const port = parsed.port ?? 18787;
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error("--port must be 1..65535.");
-  if (existsSync(paths.state) || existsSync(paths.plist) || existsSync(`${paths.settings}.relay-bridge.models.json`) || existsSync(`${paths.settings}.relay-bridge.bak`) || existsSync(`${paths.settings}.relay-bridge.bak.absent`)) throw new Error("Existing desktop or managed-model state found. Use status/restart, or revert the previous configure-droid installation first.");
-  const install: Installation = { version: 1, port, repo: realpathSync(deps.repo), node: realpathSync(deps.node), path: deps.path, ...(parsed.models ? { models: parsed.models } : {}) };
+  if (!cursorPreinstallOnly(paths.state) || existsSync(paths.plist) || existsSync(`${paths.settings}.relay-bridge.models.json`) || existsSync(`${paths.settings}.relay-bridge.bak`) || existsSync(`${paths.settings}.relay-bridge.bak.absent`)) throw new Error("Existing desktop or managed-model state found. Use status/restart, or revert the previous configure-droid installation first.");
+  const cursor: { menu?: BridgeModel[]; warning?: string; catalog?: readonly CursorCatalogItem[] } = parsed.cursorModels
+    ? await resolveCursorMenu(deps, parsed.cursorModels)
+    : cursorLoggedIn(deps) ? {} : { warning: cursorAbsentNotice() };
+  const install: Installation = { version: 1, port, repo: realpathSync(deps.repo), node: realpathSync(deps.node), path: deps.path, ...(parsed.models ? { models: parsed.models } : {}), ...(cursor.menu ? { cursorModels: parsed.cursorModels } : {}) };
   assertClaudeCredential(readClaudeConfig({ HOME: deps.home, PATH: deps.path }, `127.0.0.1:${port}`));
   checkedRun(deps, deps.node, [join(deps.repo, "node_modules/typescript/bin/tsc"), "-p", join(deps.repo, "tsconfig.build.json")]);
   if (!existsSync(join(install.repo, "dist/index.js"))) throw new Error("Missing built dist/index.js. Run npm run build.");
@@ -178,10 +333,12 @@ export async function desktop(argv: string[], deps: DesktopDependencies): Promis
   chmodSync(paths.state, 0o700);
   let configured = false;
   try {
-    mkdirSync(paths.data, { mode: 0o700 });
+    mkdirSync(paths.data, { recursive: true, mode: 0o700 });
+    chmodSync(paths.data, 0o700);
     for (const path of [paths.token, paths.admin, paths.hook]) privateFile(path, randomBytes(32).toString("hex") + "\n");
     for (const name of ["stdout.log", "stderr.log"]) privateFile(join(paths.state, name), "");
-    const result = syncModels(deps, install);
+    const result = syncModels(deps, install, cursor.menu);
+    if (cursor.menu) writeCursorMenu(deps, cursor.menu, cursor.catalog);
     configured = true;
     privateFile(paths.manifest, JSON.stringify(install, null, 2) + "\n");
     mkdirSync(dirname(paths.plist), { recursive: true });
@@ -190,7 +347,7 @@ export async function desktop(argv: string[], deps: DesktopDependencies): Promis
     return { installed: true, port, changed: [paths.state, paths.data, paths.token, paths.admin, paths.hook,
       join(paths.state, "stdout.log"), join(paths.state, "stderr.log"), paths.manifest, paths.models, paths.settings,
       result.backup && existsSync(String(result.backup)) ? result.backup : `${paths.settings}.relay-bridge.bak.absent`, result.metadataPath, paths.plist],
-      uninstall: "npm run desktop -- uninstall", caveat };
+      uninstall: "npm run desktop -- uninstall", ...(cursor.warning ? { warning: cursor.warning } : {}), caveat };
   } catch (error) {
     if (configured || existsSync(`${paths.settings}.relay-bridge.models.json`)) configureDroid(["--settings", paths.settings, "--revert"], { HOME: deps.home });
     rmSync(paths.plist, { force: true });
@@ -208,9 +365,9 @@ export async function assertDesktopPortFree(port: number): Promise<void> {
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   desktop(process.argv.slice(2), {
     home: homedir(), repo: resolve(dirname(fileURLToPath(import.meta.url)), ".."), node: process.execPath,
-    path: process.env.PATH ?? "/usr/bin:/bin", uid: process.getuid!(), platform: process.platform,
+    path: process.env.PATH ?? "/usr/bin:/bin", uid: process.getuid!(), platform: process.platform, env: process.env,
     run: (command, args) => { const result = spawnSync(command, args, { encoding: "utf8", env: { HOME: homedir(), PATH: process.env.PATH }, stdio: ["ignore", "pipe", "pipe"] }); return { status: result.status ?? 1, stdout: result.stdout }; },
     assertPortFree: assertDesktopPortFree,
-    health: async (port) => { try { const result = await fetch(`http://127.0.0.1:${port}/healthz`, { signal: AbortSignal.timeout(2000), redirect: "error" }); const body: unknown = await result.json(); return result.ok && z.object({ ok: z.literal(true), mode: z.literal("sdk") }).safeParse(body).success; } catch { return false; } },
+    health: async (port) => { try { const result = await fetch(`http://127.0.0.1:${port}/healthz`, { signal: AbortSignal.timeout(2000), redirect: "error" }); const body: unknown = await result.json(); return result.ok && isDesktopHealthPayload(body); } catch { return false; } },
   }).then((result) => console.log(JSON.stringify(result, null, 2))).catch((error: unknown) => { console.error(error instanceof Error ? error.message : "Desktop operation failed."); process.exitCode = 1; });
 }
