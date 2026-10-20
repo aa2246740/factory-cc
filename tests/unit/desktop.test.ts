@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { desktop, desktopPaths, type DesktopDependencies } from "../../scripts/desktop.js";
@@ -69,6 +69,18 @@ it("restart re-reads the catalog and preserves unrelated models", async () => {
   await desktop(["restart"], deps);
   expect(JSON.parse(readFileSync(paths.settings, "utf8")).customModels.map((v: { model: string }) => v.model)).toEqual(["opus"]);
   expect(run.mock.calls.slice(-2)).toEqual([["launchctl", ["bootout", "gui/501/ai.factory-cc.bridge"]], ["launchctl", ["bootstrap", "gui/501", paths.plist]]]);
+});
+it("restart rebuilds dist before the service is replaced", async () => {
+  const { deps, run } = fixture(); await desktop(["install"], deps);
+  run.mockClear();
+  await desktop(["restart"], deps);
+  // The installation records the resolved repository path.
+  const repo = realpathSync(deps.repo);
+  const build = run.mock.calls.findIndex(([, args]) => args.includes(join(repo, "tsconfig.build.json")));
+  const bootout = run.mock.calls.findIndex(([, args]) => args[0] === "bootout");
+  expect(run.mock.calls[build]).toEqual([deps.node, [join(repo, "node_modules/typescript/bin/tsc"), "-p", join(repo, "tsconfig.build.json")]]);
+  expect(build).toBeGreaterThanOrEqual(0);
+  expect(build).toBeLessThan(bootout);
 });
 it("status checks only the registered port and reports unavailable external repository", async () => {
   const { deps, paths } = fixture(); await desktop(["install"], deps); rmSync(join(deps.repo, "dist/index.js"));
