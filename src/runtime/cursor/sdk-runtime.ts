@@ -2,10 +2,11 @@ import { randomUUID } from "node:crypto";
 import type { BridgeConfig } from "../../config.js";
 import type { Logger } from "../../logging.js";
 import { assistantMessage } from "../../protocol/messages.js";
-import { collectToolResults, textFromBlocks } from "../../protocol/content.js";
+import { canonicalToolUseId, collectToolResults, textFromBlocks } from "../../protocol/content.js";
 import { providerFromModelId, type CursorModelParameter } from "../../models.js";
 import { applyCursorReasoning, droidReasoningLevel } from "../reasoning.js";
 import { BridgeError, type ContentBlock, type Json, type Usage } from "../../types.js";
+import { historyMessageHashes } from "../../sessions/correlate.js";
 import { resolveRequestCwd } from "../../workspace.js";
 import { buildDynamicUserContent, buildInitialUserContent } from "../system-prompt.js";
 import { INTERRUPT_GRACE_MS } from "../turn-watchdog.js";
@@ -14,7 +15,8 @@ import type { CursorAgentApi, CursorAgentLike, CursorRunLike, CursorRunResult } 
 import { cursorApiKey, cursorCredentialStatus, cursorReauthMessage, cursorStoredKeyExpired } from "./credentials.js";
 import { applyCursorUpdate, emptyCursorDraft, type CursorTurnDraft, type CursorUpdate } from "./events.js";
 import { loadCursorSdk, openCursorAgentStore } from "./sdk-load.js";
-import { assertCursorNativeTools, base64Image, CURSOR_NATIVE_TOOLS, customToolDefinitions, outboundDroidToolName, toCursorToolResult, type CursorCustomToolResult } from "./tools.js";
+import { deferredToolDefinitions } from "./deferred-catalog.js";
+import { assertCursorNativeTools, bareDroidToolName, base64Image, CURSOR_NATIVE_TOOLS, customToolDefinitions, outboundDroidToolName, toCursorToolResult, type CursorCustomToolResult } from "./tools.js";
 
 interface PendingTool {
   resolve: (result: CursorCustomToolResult) => void;
@@ -35,6 +37,8 @@ interface LiveCursor {
   settled?: Promise<CursorRunResult>;
   sink?: StreamSink;
   releasePark?: () => void;
+  lastRequestHash?: string;
+  lastTurn?: RuntimeTurn;
 }
 
 export interface CursorSdkDependencies {
@@ -106,6 +110,13 @@ export class CursorSdkRuntime implements BridgeRuntime {
     if (live.busy) throw new BridgeError(409, "session_busy", "This Cursor session already has an active request");
     live.busy = true;
     live.sink = sink;
+    const requestHash = historyMessageHashes(input.request.messages).join("\n");
+    // Droid sometimes repeats a body whose turn already finished. Answer with the
+    // same response instead of opening another agent.send().
+    if (live.lastTurn && live.lastRequestHash === requestHash) {
+      try { return live.lastTurn; }
+      finally { live.busy = false; live.sink = undefined; }
+    }
     live.draft = emptyCursorDraft();
     try {
       if (cursorStoredKeyExpired(this.config.dataDir, this.env, this.now())) {
@@ -117,8 +128,8 @@ export class CursorSdkRuntime implements BridgeRuntime {
       // parked tool may make the model call another tool before wait() settles.
       // Arm a fresh park so that call is returned to Droid instead of waiting forever.
       if (live.run && live.run.status === "running") {
-        if (live.pending.size) return this.toolTurn(live, input);
-        return await this.finishOrPark(live, input, this.armPark(live));
+        if (live.pending.size) return this.remember(live, requestHash, this.toolTurn(live, input));
+        return this.remember(live, requestHash, await this.finishOrPark(live, input, this.armPark(live)));
       }
       const message = this.userMessage(input, !input.session.sdkSessionId && !live.sent);
       this.logger.info("cursor_run_params", { model: selection.id, params: selection.params });
@@ -139,8 +150,8 @@ export class CursorSdkRuntime implements BridgeRuntime {
         throw error;
       });
       void live.settled.catch(() => undefined);
-      if (parked || live.pending.size) return this.toolTurn(live, input);
-      return await this.finishOrPark(live, input, park);
+      if (parked || live.pending.size) return this.remember(live, requestHash, this.toolTurn(live, input));
+      return this.remember(live, requestHash, await this.finishOrPark(live, input, park));
     } catch (error) {
       throw presentCursorAuthError(error);
     } finally {
@@ -189,6 +200,12 @@ export class CursorSdkRuntime implements BridgeRuntime {
   async close(): Promise<void> {
     for (const sessionId of [...this.lives.keys()]) await this.cancel(sessionId, "bridge shutdown");
     if (this.store) await (await this.store).dispose?.();
+  }
+
+  private remember(live: LiveCursor, requestHash: string, turn: RuntimeTurn): RuntimeTurn {
+    live.lastRequestHash = requestHash;
+    live.lastTurn = turn;
+    return turn;
   }
 
   private live(sessionId: string): LiveCursor {
@@ -241,22 +258,25 @@ export class CursorSdkRuntime implements BridgeRuntime {
   }
 
   private customTools(live: LiveCursor, input: RuntimeRequest): Record<string, { description?: string; inputSchema?: Record<string, unknown>; execute: (args: Record<string, unknown>, context: { toolCallId?: string }) => Promise<CursorCustomToolResult> }> {
-    const advertised = new Map((input.request.tools ?? []).map((tool) => [tool.name.replace(/^mcp__droid__/, ""), tool.name]));
+    const advertised = new Map((input.request.tools ?? []).map((tool) => [bareDroidToolName(tool.name), tool.name]));
     const tools: Record<string, { description?: string; inputSchema?: Record<string, unknown>; execute: (args: Record<string, unknown>, context: { toolCallId?: string }) => Promise<CursorCustomToolResult> }> = {};
     const nativeReads = new Set(["Read", "LS", "Grep", "Glob"]);
     const customSource = this.config.desktopProfile
-      ? (input.request.tools ?? []).filter((tool) => !nativeReads.has(tool.name.replace(/^mcp__droid__/, "")))
-      : input.request.tools;
-    for (const tool of customToolDefinitions(customSource)) {
+      ? (input.request.tools ?? []).filter((tool) => !nativeReads.has(bareDroidToolName(tool.name)))
+      : input.request.tools ?? [];
+    const advertisedNames = new Set(customSource.map((tool) => bareDroidToolName(tool.name)));
+    const merged = [...customSource, ...deferredToolDefinitions(input.request.messages, advertisedNames)];
+    for (const tool of customToolDefinitions(merged)) {
       tools[tool.name] = {
         description: tool.description,
         inputSchema: tool.inputSchema,
         execute: (args, context) => new Promise((resolve, reject) => {
-          const id = context.toolCallId || `tool_${randomUUID().replace(/-/g, "")}`;
+          const id = canonicalToolUseId(context.toolCallId || `tool_${randomUUID().replace(/-/g, "")}`);
           const outbound = outboundDroidToolName(tool.name);
           // Current `droid exec` advertises `Execute` and rejects `mcp__droid__Execute`.
-          // Keep the prefix only when that is the name Droid actually advertised.
-          const wireName = advertised.get(tool.name) ?? outbound;
+          // Deferred tools are not in this request's catalog yet, so they use the bare name
+          // Droid accepts once ToolSearch has loaded them. Keep a prefix only when Droid sent one.
+          const wireName = advertised.get(tool.name) ?? tool.name;
           const inputArgs = args ?? {};
           live.pending.set(id, { resolve, reject, name: advertised.get(tool.name) ?? tool.name, outbound, input: inputArgs });
           const existing = live.draft.blocks.find((block) => block.type === "tool_use" && block.id === id);
@@ -294,21 +314,36 @@ export class CursorSdkRuntime implements BridgeRuntime {
 
   private deliverRequestResults(live: LiveCursor, input: RuntimeRequest): void {
     for (const result of collectToolResults(input.request.messages)) {
-      const pending = live.pending.get(result.tool_use_id);
+      const pending = this.takePending(live, result.tool_use_id);
       if (!pending) continue;
       pending.resolve(toCursorToolResult(result.content, result.is_error));
-      live.pending.delete(result.tool_use_id);
     }
   }
 
   private acceptTool(sessionId: string, toolUseId: string, content: string | ContentBlock[], isError?: boolean): "accepted" | "duplicate" {
     const live = this.lives.get(sessionId);
     if (!live) throw new BridgeError(409, "interrupted_tool_roundtrip", "No live Cursor agent owns these tool results");
-    const pending = live.pending.get(toolUseId);
+    const pending = this.takePending(live, toolUseId);
     if (!pending) return "duplicate";
     pending.resolve(toCursorToolResult(content, isError));
-    live.pending.delete(toolUseId);
     return "accepted";
+  }
+
+  /** Pending keys are canonical. A result may still carry the raw newline form. */
+  private takePending(live: LiveCursor, toolUseId: string): PendingTool | undefined {
+    const wanted = canonicalToolUseId(toolUseId);
+    const direct = live.pending.get(wanted);
+    if (direct) {
+      live.pending.delete(wanted);
+      return direct;
+    }
+    for (const [key, pending] of live.pending) {
+      if (canonicalToolUseId(key) === wanted) {
+        live.pending.delete(key);
+        return pending;
+      }
+    }
+    return undefined;
   }
 
   private armPark(live: LiveCursor): Promise<void> {
