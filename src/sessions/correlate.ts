@@ -3,6 +3,7 @@ import { header } from "../security/auth.js";
 import { asBlocks, collectToolResults } from "../protocol/content.js";
 import type { ContentBlock, Message, MessagesRequest, RoleTag } from "../types.js";
 import { BridgeError } from "../types.js";
+import { providerFromModelId, type ModelProvider } from "../models.js";
 import { isEnded, type SessionRecord } from "./state.js";
 import { canonicalWorkspacePath, resolveRequestCwd } from "../workspace.js";
 
@@ -45,13 +46,23 @@ export function historyMessageHashes(messages: Message[]): string[] {
  * Identity still requires an explicit ID, pending tool ownership, or a unique
  * complete transcript prefix; host context and catalogs never identify a session.
  */
-export function sessionContextHash(headers: Headers, request: MessagesRequest, cwd?: string): string {
+export function sessionProvider(session: Pick<SessionRecord, "provider" | "model">): ModelProvider {
+  return session.provider ?? providerFromModelId(session.model);
+}
+
+/**
+ * Claude fingerprints stay the historical shape (model, role, cwd, thinking) so
+ * existing sessions still match. Cursor adds provider, and a model switch
+ * substitutes only the model: the request's provider stays in the hash.
+ */
+export function sessionContextHash(headers: Headers, request: MessagesRequest, cwd?: string, provider: ModelProvider = "claude"): string {
   const workspace = cwd ?? resolveRequestCwd(headers, request);
   return hash({
     model: request.model,
     role: roleFromHeaders(headers),
     cwd: workspace ? canonicalWorkspacePath(workspace) : null,
     thinking: request.thinking,
+    ...(provider === "cursor" ? { provider } : {}),
   });
 }
 
@@ -59,16 +70,17 @@ export function resolveSession(
   sessions: SessionRecord[],
   headers: Headers,
   request: MessagesRequest,
-  options: { cwd?: string; hostSessionId?: string; allowModelSwitch?: boolean; continueIdenticalTranscripts?: boolean } = {},
+  options: { cwd?: string; hostSessionId?: string; allowModelSwitch?: boolean; continueIdenticalTranscripts?: boolean; provider?: ModelProvider } = {},
 ): { match?: SessionRecord; reason: string } {
   const explicit = explicitSessionId(headers, request);
-  const contextHash = sessionContextHash(headers, request, options.cwd);
+  const requestProvider = options.provider ?? providerFromModelId(request.model);
+  const contextHash = sessionContextHash(headers, request, options.cwd, requestProvider);
   const switchingModel = (session: SessionRecord): boolean => options.allowModelSwitch === true && session.model !== request.model;
   // Keep the persisted fingerprint format: old checkpoints include their model.
   // Substitute only that field when checking a requested switch, so role,
-  // workspace and thinking configuration remain part of session identity.
+  // workspace, thinking and provider remain part of session identity.
   const compatibleContextHash = (session: SessionRecord): string => switchingModel(session)
-    ? sessionContextHash(headers, { ...request, model: session.model }, options.cwd)
+    ? sessionContextHash(headers, { ...request, model: session.model }, options.cwd, requestProvider)
     : contextHash;
   const assertSelectedContext = (session: SessionRecord, authenticatedThinkingChange = false): void => {
     if (!authenticatedThinkingChange) assertContext(session, compatibleContextHash(session), headers, request);
@@ -105,9 +117,10 @@ export function resolveSession(
   // difference only after a complete history or authenticated retained turn
   // proves continuity, and independently prove every other fingerprint field.
   // Explicit IDs alone and tool-free auxiliary requests do not get this exception.
-  // contextHash currently contains only model/role/cwd/thinking. Any future
-  // execution field added there must also be checked here before this exception.
+  // contextHash contains model/role/cwd/thinking, plus provider when the owner is Cursor.
+  // Any future execution field added there must also be checked here before this exception.
   const canChangeHostThinking = (session: SessionRecord): boolean => switchingModel(session)
+    && sessionProvider(session) === requestProvider
     && Boolean(session.contextHash) && Boolean(options.hostSessionId) && Boolean(workspace)
     && session.factorySessionId === options.hostSessionId && session.factoryCwd !== undefined
     && canonicalWorkspacePath(session.factoryCwd) === workspace
@@ -257,8 +270,14 @@ function normalizedContent(content: string | ContentBlock[] | undefined): unknow
     // Ignore only the actual protocol annotation. A tool input may legitimately
     // have a field named cache_control, and that field must remain significant.
     const normalized = Object.fromEntries(Object.entries(block).filter(([key]) => key !== "cache_control"));
-    if (block.type === "tool_result" && (typeof block.content === "string" || Array.isArray(block.content))) {
-      normalized.content = normalizedContent(block.content as string | ContentBlock[]);
+    if (block.type === "tool_result") {
+      // Droid omits is_error when it returns a successful tool result, then writes
+      // is_error:false when it replays that same block. Those are one result.
+      // is_error:true stays in the fingerprint.
+      if (normalized.is_error === false) delete normalized.is_error;
+      if (typeof block.content === "string" || Array.isArray(block.content)) {
+        normalized.content = normalizedContent(block.content as string | ContentBlock[]);
+      }
     }
     return normalized;
   });

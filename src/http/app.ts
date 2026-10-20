@@ -14,7 +14,7 @@ import { compactedSummaryText, lastSummarizedToolCall, sameToolInput, summaryQuo
 import { hostAllowsAnyTools } from "../runtime/native-tool-policy.js";
 import { SessionStore } from "../sessions/store.js";
 import { createRuntime } from "../runtime/factory.js";
-import type { RuntimeTurn, StreamSink } from "../runtime/types.js";
+import type { BridgeRuntime, RuntimeTurn, StreamSink } from "../runtime/types.js";
 import { TurnWatchdog, type TurnTimeout } from "../runtime/turn-watchdog.js";
 import { header, requireAdminOrHookToken, requireAdminToken, requireClientToken } from "../security/auth.js";
 import { assertBodySize } from "../security/limits.js";
@@ -25,7 +25,7 @@ import { statusPageHtml } from "./status-page.js";
 import { messageId } from "../protocol/messages.js";
 import { ControlBroker } from "../control/broker.js";
 import { controlPageHtml, controlPageHeaders } from "./control-page.js";
-import { configuredModels, resolveRequestModel } from "../models.js";
+import { configuredModels, providerFromModelId, resolveRequestModel, type ModelProvider } from "../models.js";
 
 export interface BridgeApp {
   server: Server;
@@ -48,9 +48,8 @@ function listenUrl(host: string, port: number): string {
   return `http://${formatListenHost(host)}:${port}`;
 }
 
-export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath: string): BridgeApp {
+export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath: string, runtime: BridgeRuntime = createRuntime(config, logger, canaryPath)): BridgeApp {
   const store = new SessionStore(join(config.dataDir, "sessions"), config.persistSessions, config.maxSessions, logger);
-  const runtime = createRuntime(config, logger, canaryPath);
   // Approvals wait on a person, so they get their own limit rather than the turn's idle limit.
   const control = new ControlBroker(runtime, store, config.approvalTimeoutMs);
   runtime.setControl?.(control);
@@ -347,12 +346,14 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
     const cwd = resolveRequestCwd(headers, parsed, config);
     const prepared = control.prepareRequest(parsed, cwd);
     const request = prepared.request;
+    const listed = configuredModels(config).find((model) => model.id === request.model);
+    const provider: ModelProvider = listed?.provider ?? providerFromModelId(request.model);
     // Before this conversation takes a slot, free the one it replaces.
     releaseCompacted(request);
     const summarized = summarizedSession(request);
-    const contextHash = sessionContextHash(headers, request, cwd);
+    const contextHash = sessionContextHash(headers, request, cwd, provider);
     const resolved = resolveSession(store.list(), headers, request, {
-      cwd, hostSessionId: control.hostSessionId(prepared.binding), allowModelSwitch: config.models !== undefined,
+      cwd, hostSessionId: control.hostSessionId(prepared.binding), allowModelSwitch: config.models !== undefined, provider,
       // Droid desktop has no conversation ID header or hooks to disambiguate.
       continueIdenticalTranscripts: config.desktopProfile,
     });
@@ -360,6 +361,7 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
       ?? withSlot(() => store.create({
         role,
         model: request.model,
+        ...(provider === "cursor" ? { provider } : {}),
         droidSessionId: explicitSessionId(headers, request),
         historyHash: historyPrefixHash(request),
         contextHash,
@@ -466,6 +468,7 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
         hostEnded: undefined,
         role,
         model: request.model,
+        ...(provider === "cursor" ? { provider } : {}),
         contextHash,
         historyHash: historyPrefixHash(request),
         requestMessageHashes: historyMessageHashes(request.messages),

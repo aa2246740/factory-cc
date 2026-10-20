@@ -84,7 +84,7 @@ export interface RuntimeHostEnd {
 }
 
 export interface BridgeRuntime {
-  readonly kind: "mock" | "fake" | "sdk";
+  readonly kind: "mock" | "fake" | "sdk" | "cursor";
   handle(input: RuntimeRequest, sink?: StreamSink): Promise<RuntimeTurn>;
   cancel(sessionId: string, reason: string): Promise<void>;
   deliverResults(

@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-10-20T04:23:00.000Z",
+  "sdk": "@cursor/sdk@1.0.35",
+  "menuPins": {
+    "cursor:composer-2.5": [{ "id": "fast", "value": "false" }],
+    "cursor:grok-4.7": [
+      { "id": "context", "value": "256k" },
+      { "id": "reasoning_effort", "value": "high" },
+      { "id": "fast", "value": "false" }
+    ]
+  },
+  "finalSmoke": {
+    "startedAt": "2026-10-20T04:19:08.115Z",
+    "finishedAt": "2026-10-20T04:19:56.616Z",
+    "model": "cursor:composer-2.5",
+    "params": [{ "id": "fast", "value": "false" }],
+    "finishedRuns": 3,
+    "scenarios": [
+      {
+        "id": "S1.1",
+        "verdict": "PASS",
+        "durationSec": 16,
+        "droidTools": "none",
+        "nativeTrace": "read",
+        "fileUnchanged": true
+      },
+      {
+        "id": "S1.2",
+        "verdict": "PASS",
+        "durationSec": 18,
+        "tools": ["Edit", "Execute"],
+        "npmExit": 0,
+        "sameSession": true
+      },
+      {
+        "id": "S1.3",
+        "verdict": "PASS",
+        "durationSec": 9,
+        "sameBridge": true,
+        "sameAgent": true
+      }
+    ]
+  },
+  "earlierAcceptance": {
+    "date": "2026-10-20",
+    "S1": "S1.1–S1.4 and S1.6 PASS; S1.5 FAIL on an existing session, new-session retry PASS",
+    "S2": "PASS",
+    "S3": { "verdict": "PASS", "durationSec": 433, "orchestrator": "cursor:composer-2.5" },
+    "S4": { "verdict": "PASS", "durationSec": 354, "orchestrator": "haiku", "workers": "cursor:composer-2.5" }
+  },
+  "checks": {
+    "tscNoEmit": 0,
+    "build": 0,
+    "testsPassed": 827,
+    "testsSkipped": 3,
+    "testFilesPassed": 71,
+    "testFilesSkipped": 1,
+    "diffCheck": "clean"
+  }
+}

@@ -34,6 +34,8 @@ Mission：编排模型跟随当前对话所选的模型。worker 和 validator �
 
 默认菜单跟随 `~/.claude/settings.json` 的别名映射（opus、sonnet、haiku、fable 各自指向的模型）。只想在 Droid 里固定几个模型、又不改 Claude Code 自己的设置时，用 `--models` 写实际模型 ID，例如 `npm run desktop -- install --models claude-opus-5-5,claude-sonnet-5-5,claude-haiku-5-5`，菜单显示为 `Claude Code · Opus 5.5 (claude-opus-5-5)` 等。已安装的可用 `npm run desktop -- restart --models ...` 改，之后不带 `--models` 的 restart 沿用这份列表。模型 ID 原样交给 Claude Code，网关不提供该模型时第一条消息会报错。Claude Code 自己的后台小任务仍按其设置里的 haiku 映射。
 
+Cursor 可以和这些 Claude Code 条目同时出现。先运行 `npm run desktop -- cursor login`（会打印登录地址；key 写进 Bridge 数据目录，权限 0600，不会打印出来）。然后 `npm run desktop -- install --cursor-models default` 只加 `Cursor · Composer 2.5`（`fast=false`）和 `Cursor · Grok 4.7`（`fast=false`、high effort、256k 上下文）。不带 `--cursor-models` 的 install 和 restart 仍只配置 Claude Code，菜单里不出现 Cursor 条目。`BRIDGE_AUTH` 仍是 Claude 的凭证。plist 里只放菜单文件路径，不放 Cursor 的 key。`npm run desktop -- cursor status` 会显示到期时间，剩余不超过 7 天时给出警告。见 [Cursor](docs/CURSOR.md)。
+
 编辑 `~/.claude/settings.json` 后，重启 Bridge 以重新读取认证 helper 和模型映射、同步菜单；运行中的对话会中断。安装器不会把当前 shell 的凭证或其它环境变量复制给 launchd。
 
 ```bash
