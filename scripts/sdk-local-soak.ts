@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
-import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { loadConfig } from "../src/config.js";
 import { createBridgeApp, listen } from "../src/http/app.js";
@@ -12,6 +12,7 @@ import { processTable } from "../src/runtime/owned-processes.js";
 
 // Real unmodified SDK/CLI, deterministic localhost provider, no paid key.
 const root = resolve(process.env.BRIDGE_SOAK_DIR ?? `tmp/sdk-local-soak-${Date.now()}`);
+assert(!existsSync(root) || readdirSync(root).length === 0, "SDK-local acceptance requires a fresh, empty output directory");
 mkdirSync(root, { recursive: true, mode: 0o700 });
 const pidFile = process.env.BRIDGE_EVIDENCE_PIDS ?? join(root, "PIDS.txt");
 appendFileSync(pidFile, `${process.pid} sdk-local-runner\n`);

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { once } from "node:events";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { randomBytes } from "node:crypto";
@@ -18,6 +18,7 @@ import { installFactoryHooks } from "../src/control/factory-hooks.js";
 assert(process.argv.includes("--run"), "Pass --run to use the configured providers; --mission also exercises a tiny Droid Mission");
 const repo = process.cwd();
 const root = resolve(process.env.BRIDGE_LIVE_DIR ?? `tmp/live-stability-${Date.now()}`);
+assert(!existsSync(root) || readdirSync(root).length === 0, "Provider acceptance requires a fresh, empty output directory");
 const evidence = process.env.BRIDGE_EVIDENCE_DIR ?? root;
 mkdirSync(root, { recursive: true, mode: 0o700 }); mkdirSync(evidence, { recursive: true, mode: 0o700 });
 const pidFile = join(evidence, "PIDS.txt");
@@ -72,7 +73,7 @@ const configEnv: NodeJS.ProcessEnv = {
   BRIDGE_MODELS: "haiku", BRIDGE_CURSOR_MODELS_FILE: menuFile,
   BRIDGE_CURSOR_AUTH_FILE: join(realHome, "Library/Application Support/factory-cc/bridge-data/cursor-auth.json"),
   BRIDGE_CLIENT_TOKEN: token, BRIDGE_ADMIN_TOKEN: admin, BRIDGE_HOOK_TOKEN: hook,
-  BRIDGE_REQUEST_TIMEOUT_MS: "180000", BRIDGE_MAX_SESSIONS: process.argv.includes("--mission-only") ? "4" : "1", BRIDGE_LOG_MAX_BYTES: "1048576",
+  BRIDGE_REQUEST_TIMEOUT_MS: "180000", BRIDGE_MAX_SESSIONS: process.argv.includes("--mission") ? "4" : "1", BRIDGE_LOG_MAX_BYTES: "1048576",
 };
 const droidEnv = { ...configEnv, HOME: droidHome, FACTORY_HOME_OVERRIDE: droidHome, FACTORY_AIRGAP_ENABLED: "1", BRIDGE_CONTROL_URL: url };
 let bridge: ChildProcess | undefined;
