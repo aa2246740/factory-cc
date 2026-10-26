@@ -2,7 +2,7 @@ import { BridgeError } from "../types.js";
 import { sessionProvider } from "../sessions/correlate.js";
 import type { ModelProvider } from "../models.js";
 import type { ContentBlock } from "../types.js";
-import type { BridgeRuntime, RuntimeControl, RuntimeHostCall, RuntimeHostCompletion, RuntimeHostEnd, RuntimeRequest, RuntimeTurn, StreamSink } from "./types.js";
+import type { BridgeRuntime, RetiredSession, RuntimeControl, RuntimeHostCall, RuntimeHostCompletion, RuntimeHostEnd, RuntimeRequest, RuntimeTurn, StreamSink } from "./types.js";
 
 /**
  * One BridgeRuntime for the process. Each session stays on the runtime that
@@ -61,9 +61,24 @@ export class RouterRuntime implements BridgeRuntime {
     return { ...(this.claude.describe?.() ?? { kind: "sdk" }), cursor: this.cursor?.describe?.() ?? { enabled: false } };
   }
 
+  protectedSessionIds(): string[] {
+    return [...(this.claude.protectedSessionIds?.() ?? []), ...(this.cursor?.protectedSessionIds?.() ?? [])];
+  }
+
+  isSessionUsable(sessionId: string): boolean {
+    return this.owner(sessionId).isSessionUsable?.(sessionId) ?? false;
+  }
+
   async close(): Promise<void> {
-    await this.claude.close?.();
-    await this.cursor?.close?.();
+    const results = await Promise.allSettled([this.claude.close?.(), this.cursor?.close?.()]);
+    this.owners.clear();
+    const errors = results.flatMap((result) => result.status === "rejected" ? [result.reason] : []);
+    if (errors.length) throw new AggregateError(errors, "Runtime shutdown failed");
+  }
+
+  async forget(session: RetiredSession): Promise<void> {
+    await this.runtime(session.provider ?? this.owners.get(session.bridgeSessionId) ?? "claude").forget?.(session);
+    this.owners.delete(session.bridgeSessionId);
   }
 
   private owner(sessionId: string): BridgeRuntime {

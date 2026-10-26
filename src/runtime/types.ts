@@ -8,6 +8,8 @@ export interface RuntimeRequest {
   headers: Record<string, string | string[] | undefined>;
   /** Trusted host policy supplied by the controller, never raw Messages metadata. */
   factoryPermissionMode?: string;
+  /** Trusted HTTP retry receipt. Prior results become reference history, never callbacks. */
+  recovery?: "cold-import";
 }
 
 export interface RuntimeTurn {
@@ -83,6 +85,8 @@ export interface RuntimeHostEnd {
   sdkSessionId?: string;
 }
 
+export type RetiredSession = Pick<SessionRecord, "bridgeSessionId" | "sdkSessionId" | "provider">;
+
 export interface BridgeRuntime {
   readonly kind: "mock" | "fake" | "sdk" | "cursor";
   handle(input: RuntimeRequest, sink?: StreamSink): Promise<RuntimeTurn>;
@@ -102,5 +106,9 @@ export interface BridgeRuntime {
   completeHostTool?(sessionId: string, completion: RuntimeHostCompletion): Promise<"accepted" | "duplicate">;
   endHostSession?(sessionId: string, reason: string): Promise<RuntimeHostEnd>;
   describe?(): Record<string, unknown>;
+  protectedSessionIds?(): string[];
+  isSessionUsable?(sessionId: string): boolean;
+  /** Drop only inactive retained metadata after its durable session was pruned. */
+  forget?(session: RetiredSession): Promise<void>;
   close?(): Promise<void>;
 }

@@ -22,7 +22,8 @@ it("installs built Node service, private token files and helper models without e
   const { deps, paths, root, run } = fixture();
   const result = await desktop(["install", "--port", "19876"], deps);
   const plist = readFileSync(paths.plist, "utf8");
-  expect(plist).toContain("dist/index.js"); expect(plist).not.toContain("tsx");
+  expect(plist).toContain("bridge-launcher.sh"); expect(plist).not.toContain("tsx");
+  expect(readFileSync(join(paths.state, "bridge-launcher.sh"), "utf8")).toContain("dist/index.js");
   expect(plist).toContain("claude-config"); expect(plist).toContain("127.0.0.1"); expect(plist).toContain("19876");
   expect(plist).toContain("<string>ask</string>"); expect(plist).toContain("BRIDGE_DESKTOP");
   expect(plist).toContain("/fixture/bin:&amp;/usr/bin"); expect(plist).toContain("<integer>30</integer>");

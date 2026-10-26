@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { appendFileSync, closeSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, closeSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Logger } from "../logging.js";
 import type { ModelProvider } from "../models.js";
@@ -8,15 +8,20 @@ import type { RoleTag, SessionState } from "../types.js";
 import { BridgeError } from "../types.js";
 import { type SessionRecord, retirePendingTools, transition } from "./state.js";
 
+export interface SessionRetention { maxRecords: number; maxAgeMs: number; journalMaxBytes: number }
+export const DEFAULT_SESSION_RETENTION: SessionRetention = { maxRecords: 1000, maxAgeMs: 7 * 24 * 60 * 60 * 1000, journalMaxBytes: 8 * 1024 * 1024 };
+
 export class SessionStore {
   private readonly sessions = new Map<string, SessionRecord>();
   private readonly file: string;
+  private writes = 0;
 
   constructor(
     private readonly dir: string,
     private readonly persist: boolean,
     private readonly maxSessions: number,
     private readonly logger?: Pick<Logger, "warn">,
+    private readonly retention = DEFAULT_SESSION_RETENTION,
   ) {
     mkdirSync(dir, { recursive: true });
     this.file = join(dir, "sessions.jsonl");
@@ -113,11 +118,28 @@ export class SessionStore {
     atomicWrite(join(this.dir, "sessions-snapshot.json"), JSON.stringify(this.list(), null, 2));
   }
 
+  /** Never prune active work, callbacks, or a session pinned by the HTTP/control layer. */
+  prune(protectedIds: ReadonlySet<string> = new Set(), now = Date.now()): string[] {
+    const eligible = this.list().filter((record) => !protectedIds.has(record.bridgeSessionId) && !isActive(record.state) && !record.pendingToolIds.length)
+      .sort((a, b) => Date.parse(a.updatedAt) - Date.parse(b.updatedAt));
+    const removed: string[] = [];
+    for (const record of eligible) {
+      if (this.sessions.size <= this.retention.maxRecords && now - Date.parse(record.updatedAt) < this.retention.maxAgeMs) continue;
+      this.sessions.delete(record.bridgeSessionId);
+      removed.push(record.bridgeSessionId);
+    }
+    if (removed.length) this.compact();
+    return removed;
+  }
+
   private flush(record: SessionRecord): void {
+    record.notes = record.notes.slice(-128);
     if (!this.persist) return;
     this.terminateLastLine();
     appendFileSync(this.file, `${JSON.stringify(record)}\n`, { mode: 0o600 });
-    this.snapshot();
+    this.writes++;
+    if (this.writes >= 256 || statSync(this.file).size >= this.retention.journalMaxBytes) this.compact();
+    else this.snapshot();
   }
 
   /** A crash can leave half a record behind. Never let the next append join that line. */
@@ -140,7 +162,7 @@ export class SessionStore {
   private requireCapacity(): void {
     const active = this.list().filter((record) => isActive(record.state)).length;
     if (active >= this.maxSessions) {
-      throw new BridgeError(429, "session_limit", `active session limit ${this.maxSessions} reached`);
+      throw new BridgeError(429, "session_limit", `active session limit ${this.maxSessions} reached`, { retry_after: 1 });
     }
   }
 
@@ -186,7 +208,9 @@ export class SessionStore {
 
   /** The log appends a full record per change. Rewrite it once as one record per session. */
   private compact(): void {
+    if (!this.persist) return;
     atomicWrite(this.file, this.list().map((record) => `${JSON.stringify(record)}\n`).join(""));
+    this.writes = 0;
     this.snapshot();
   }
 }

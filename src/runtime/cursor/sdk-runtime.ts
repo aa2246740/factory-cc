@@ -10,11 +10,13 @@ import { historyMessageHashes } from "../../sessions/correlate.js";
 import { resolveRequestCwd } from "../../workspace.js";
 import { buildDynamicUserContent, buildInitialUserContent } from "../system-prompt.js";
 import { INTERRUPT_GRACE_MS } from "../turn-watchdog.js";
+import { upstreamError } from "../upstream-error.js";
+import { redactValue } from "../../security/redact.js";
 import type { BridgeRuntime, RuntimeControl, RuntimeHostCall, RuntimeHostCompletion, RuntimeHostEnd, RuntimeRequest, RuntimeTurn, StreamSink } from "../types.js";
 import type { CursorAgentApi, CursorAgentLike, CursorRunLike, CursorRunResult } from "./agent-api.js";
 import { cursorApiKey, cursorCredentialStatus, cursorReauthMessage, cursorStoredKeyExpired } from "./credentials.js";
 import { applyCursorUpdate, emptyCursorDraft, type CursorTurnDraft, type CursorUpdate } from "./events.js";
-import { loadCursorSdk, openCursorAgentStore } from "./sdk-load.js";
+import { loadCursorSdk, openCursorAgentStore, type CursorAgentStore } from "./sdk-load.js";
 import { deferredToolDefinitions } from "./deferred-catalog.js";
 import { assertCursorNativeTools, bareDroidToolName, base64Image, CURSOR_NATIVE_TOOLS, customToolDefinitions, outboundDroidToolName, toCursorToolResult, type CursorCustomToolResult } from "./tools.js";
 
@@ -39,6 +41,11 @@ interface LiveCursor {
   releasePark?: () => void;
   lastRequestHash?: string;
   lastTurn?: RuntimeTurn;
+  ended?: BridgeError;
+  cancelled: Promise<never>;
+  rejectCancellation(error: BridgeError): void;
+  lastTouched: number;
+  stopping?: Promise<void>;
 }
 
 export interface CursorSdkDependencies {
@@ -47,6 +54,7 @@ export interface CursorSdkDependencies {
   interruptGraceMs?: number;
   env?: NodeJS.ProcessEnv;
   now?: () => number;
+  openStore?: typeof openCursorAgentStore;
 }
 
 /** Local Cursor agent. The real SDK is loaded only when no agent API is injected. */
@@ -59,7 +67,10 @@ export class CursorSdkRuntime implements BridgeRuntime {
   private readonly now: () => number;
   private api?: CursorAgentApi;
   private readonly injected: boolean;
-  private store?: Promise<{ dispose?: () => Promise<void> }>;
+  private store?: Promise<CursorAgentStore>;
+  private closing = false;
+  private cleanupTimeouts = 0;
+  private readonly openStore?: typeof openCursorAgentStore;
 
   constructor(
     private readonly config: BridgeConfig,
@@ -72,6 +83,7 @@ export class CursorSdkRuntime implements BridgeRuntime {
     this.now = dependencies.now ?? Date.now;
     this.api = dependencies.api;
     this.injected = dependencies.api !== undefined;
+    this.openStore = dependencies.openStore ?? (this.injected ? undefined : openCursorAgentStore);
   }
 
   setControl(_control: RuntimeControl | undefined): void {
@@ -83,6 +95,9 @@ export class CursorSdkRuntime implements BridgeRuntime {
     return {
       kind: "cursor",
       agents: this.lives.size,
+      cleanupTimeouts: this.cleanupTimeouts,
+      slotsInUse: [...this.lives.values()].filter((live) => live.agent || live.busy).length,
+      pendingHostCalls: [...this.lives.values()].reduce((sum, live) => sum + live.pending.size, 0),
       keyExpiresAt: status.expiresAt ?? null,
       accountPresent: status.accountPresent,
       loggedIn: status.loggedIn,
@@ -95,6 +110,15 @@ export class CursorSdkRuntime implements BridgeRuntime {
     return [...live.pending.entries()].map(([toolUseId, call]) => ({ toolUseId, toolName: call.name, input: call.input }));
   }
 
+  protectedSessionIds(): string[] {
+    return [...this.lives.entries()].filter(([, live]) => !live.ended && (live.busy || live.pending.size || live.run?.status === "running")).map(([id]) => id);
+  }
+
+  isSessionUsable(sessionId: string): boolean {
+    const live = this.lives.get(sessionId);
+    return Boolean(live && !live.ended);
+  }
+
   async deliverResults(sessionId: string, results: Array<{ tool_use_id: string; content: string | ContentBlock[]; is_error?: boolean }>): Promise<Array<"accepted" | "duplicate">> {
     return results.map((result) => this.acceptTool(sessionId, result.tool_use_id, result.content, result.is_error));
   }
@@ -104,21 +128,18 @@ export class CursorSdkRuntime implements BridgeRuntime {
   }
 
   async handle(input: RuntimeRequest, sink?: StreamSink): Promise<RuntimeTurn> {
+    if (this.closing) throw new BridgeError(503, "bridge_shutting_down", "Bridge is shutting down");
     const tools = assertCursorNativeTools(this.nativeTools);
     const selection = this.selection(input.request.model, input.request);
     const live = this.live(input.session.bridgeSessionId);
     if (live.busy) throw new BridgeError(409, "session_busy", "This Cursor session already has an active request");
     live.busy = true;
+    live.lastTouched = this.now();
     live.sink = sink;
-    const requestHash = historyMessageHashes(input.request.messages).join("\n");
-    // Droid sometimes repeats a body whose turn already finished. Answer with the
-    // same response instead of opening another agent.send().
-    if (live.lastTurn && live.lastRequestHash === requestHash) {
-      try { return live.lastTurn; }
-      finally { live.busy = false; live.sink = undefined; }
-    }
-    live.draft = emptyCursorDraft();
     try {
+      const requestHash = historyMessageHashes(input.request.messages).join("\n");
+      if (live.lastTurn && live.lastRequestHash === requestHash) return live.lastTurn;
+      live.draft = emptyCursorDraft();
       if (cursorStoredKeyExpired(this.config.dataDir, this.env, this.now())) {
         throw new BridgeError(401, "cursor_auth", cursorReauthMessage("Cursor key is expired."));
       }
@@ -135,28 +156,43 @@ export class CursorSdkRuntime implements BridgeRuntime {
       this.logger.info("cursor_run_params", { model: selection.id, params: selection.params });
       let parked = false;
       const park = new Promise<void>((resolve) => { live.releasePark = () => { parked = true; resolve(); }; });
-      const run = await agent.send(message, {
+      const sending = agent.send(message, {
         model: { id: selection.id, params: selection.params },
         onDelta: ({ update }) => this.observe(live, update),
         local: { customTools: this.customTools(live, input) },
+      }).then(async (run) => {
+        if (live.ended) { await this.bounded(run.cancel()); throw live.ended; }
+        return run;
       });
+      const run = await Promise.race([sending, live.cancelled]);
       live.run = run;
       live.sent = true;
       live.settled = run.wait().then((result) => {
         if (result.status === "finished") live.checkpoint = true;
         return result;
       }).catch((error: unknown) => {
-        this.logger.warn("cursor_run_failed", { error: error instanceof Error ? error.message : String(error) });
+        this.logger.warn("cursor_run_failed", { name: error instanceof Error ? error.name : "unknown" });
         throw error;
       });
       void live.settled.catch(() => undefined);
       if (parked || live.pending.size) return this.remember(live, requestHash, this.toolTurn(live, input));
       return this.remember(live, requestHash, await this.finishOrPark(live, input, park));
     } catch (error) {
-      throw presentCursorAuthError(error);
+      const retrySafe = !live.pending.size;
+      await this.cancel(input.session.bridgeSessionId, "request-failed");
+      const converted = upstreamError(error) ?? presentCursorAuthError(error);
+      if (converted instanceof Error) {
+        const key = cursorApiKey(this.config.dataDir, this.env, this.now());
+        const message = redactValue(key ? converted.message.replaceAll(key, "[redacted]") : converted.message);
+        throw converted instanceof BridgeError ? new BridgeError(converted.status, converted.code, message,
+          [429, 529].includes(converted.status) && retrySafe ? { ...converted.extra, retry_from_history: true } : converted.extra) : new BridgeError(502, "cursor_sdk_error", message);
+      }
+      throw converted;
     } finally {
       live.busy = false;
       live.sink = undefined;
+      live.lastTouched = this.now();
+      void this.trimIdle().catch(() => this.logger.warn("cursor_idle_trim_failed"));
     }
   }
 
@@ -170,7 +206,7 @@ export class CursorSdkRuntime implements BridgeRuntime {
       const timed = new Promise<boolean>((resolve) => { timer = setTimeout(() => resolve(false), this.grace); });
       await Promise.race([cancelled, timed]);
       if (run.status === "running") {
-        await this.agents().cancelRun?.(run.id).catch(() => undefined);
+        await this.bounded(this.agents().cancelRun?.(run.id));
       }
       return run.status !== "running" && live.checkpoint;
     } finally {
@@ -181,12 +217,20 @@ export class CursorSdkRuntime implements BridgeRuntime {
   async cancel(sessionId: string, reason: string): Promise<void> {
     const live = this.lives.get(sessionId);
     if (!live) return;
-    await live.run?.cancel().catch(() => undefined);
-    if (live.run?.status === "running") await this.agents().cancelRun?.(live.run.id).catch(() => undefined);
-    live.agent?.close();
-    for (const pending of live.pending.values()) pending.reject(new BridgeError(499, "cancelled", reason));
+    if (live.stopping) return live.stopping;
+    const error = new BridgeError(499, "cancelled", reason);
+    live.ended = error;
+    live.rejectCancellation(error);
+    live.sink = undefined;
+    live.releasePark = undefined;
+    for (const pending of live.pending.values()) pending.reject(error);
     live.pending.clear();
-    this.lives.delete(sessionId);
+    try { live.agent?.close(); } catch { this.logger.warn("cursor_close_failed", { sessionId }); }
+    live.stopping = (async () => {
+      await this.bounded(Promise.resolve().then(() => live.run?.cancel()));
+      if (live.run?.status === "running") await this.bounded(this.agents().cancelRun?.(live.run.id));
+    })().finally(() => { if (this.lives.get(sessionId) === live) this.lives.delete(sessionId); });
+    return live.stopping;
   }
 
   async endHostSession(sessionId: string, reason: string): Promise<RuntimeHostEnd> {
@@ -197,9 +241,33 @@ export class CursorSdkRuntime implements BridgeRuntime {
     return { resumable, sdkSessionId };
   }
 
+  async forget({ bridgeSessionId: sessionId, sdkSessionId }: import("../types.js").RetiredSession): Promise<void> {
+    const live = this.lives.get(sessionId);
+    if (live && (live.busy || live.pending.size || live.run?.status === "running")) return;
+    if (live) await this.cancel(sessionId, "session-expired");
+    if (sdkSessionId && this.store) {
+      const store = await this.store;
+      if (store.agents) await store.agents.delete({ filter: { agentIds: [sdkSessionId] } });
+    }
+  }
+
   async close(): Promise<void> {
-    for (const sessionId of [...this.lives.keys()]) await this.cancel(sessionId, "bridge shutdown");
-    if (this.store) await (await this.store).dispose?.();
+    this.closing = true;
+    await Promise.all([...this.lives.keys()].map((sessionId) => this.cancel(sessionId, "bridge shutdown")));
+    if (this.store) await this.bounded(this.store.then((store) => store.dispose?.()));
+    this.store = undefined;
+  }
+
+  private async bounded(operation?: Promise<unknown>): Promise<void> {
+    let timer: NodeJS.Timeout | undefined;
+    try { await Promise.race([operation?.catch(() => undefined), new Promise<void>((resolve) => { timer = setTimeout(() => { this.cleanupTimeouts++; this.logger.warn("cursor_cleanup_timeout"); resolve(); }, this.grace); })]); }
+    finally { if (timer) clearTimeout(timer); }
+  }
+
+  private async trimIdle(): Promise<void> {
+    if (!this.config.persistSessions) return;
+    const idle = [...this.lives.entries()].filter(([, live]) => live.checkpoint && !live.busy && !live.pending.size && live.run?.status !== "running").sort(([, a], [, b]) => a.lastTouched - b.lastTouched);
+    await Promise.all(idle.slice(0, Math.max(0, idle.length - (this.config.maxIdleSessions ?? 4))).map(([id]) => this.cancel(id, "idle-pool-limit")));
   }
 
   private remember(live: LiveCursor, requestHash: string, turn: RuntimeTurn): RuntimeTurn {
@@ -211,7 +279,10 @@ export class CursorSdkRuntime implements BridgeRuntime {
   private live(sessionId: string): LiveCursor {
     const existing = this.lives.get(sessionId);
     if (existing) return existing;
-    const created: LiveCursor = { pending: new Map(), draft: emptyCursorDraft(), checkpoint: false, busy: false, sent: false };
+    let rejectCancellation!: (error: BridgeError) => void;
+    const cancelled = new Promise<never>((_resolve, reject) => { rejectCancellation = reject; });
+    void cancelled.catch(() => undefined);
+    const created: LiveCursor = { pending: new Map(), draft: emptyCursorDraft(), checkpoint: false, busy: false, sent: false, cancelled, rejectCancellation, lastTouched: this.now() };
     this.lives.set(sessionId, created);
     return created;
   }
@@ -233,27 +304,40 @@ export class CursorSdkRuntime implements BridgeRuntime {
 
   private async ensureAgent(live: LiveCursor, input: RuntimeRequest, selection: { id: string; params: CursorModelParameter[] }, tools: string[]): Promise<CursorAgentLike> {
     if (live.agent) return live.agent;
-    const options = await this.agentOptions(input, selection, tools);
+    const occupied = [...this.lives.values()].filter((other) => other.agent || other.busy);
+    if (occupied.length > this.config.maxSessions) {
+      const idle = [...this.lives.entries()].filter(([, other]) => other !== live && other.checkpoint && !other.busy && !other.pending.size && other.run?.status !== "running")
+        .sort(([, a], [, b]) => a.lastTouched - b.lastTouched)[0];
+      if (!idle) throw new BridgeError(429, "rate_limit_error", "All Cursor slots have live work. Retry later.", { retry_after: 1 });
+      await this.cancel(idle[0], "idle-eviction");
+      this.logger.info("cursor_idle_evicted", { sessionId: idle[0] });
+    }
+    const options = await Promise.race([this.agentOptions(live, input, selection, tools), live.cancelled]);
+    if (live.ended || this.closing) throw live.ended ?? new BridgeError(503, "bridge_shutting_down", "Bridge is shutting down");
     // A cross-provider session has no Cursor agent id. Reference history is sent; nothing is resumed.
     const resumeId = input.session.sdkSessionId;
-    live.agent = resumeId ? await this.agents().resume(resumeId, options) : await this.agents().create(options);
+    const creating = (resumeId ? this.agents().resume(resumeId, options) : this.agents().create(options)).then((agent) => {
+      if (live.ended || this.closing) { agent.close(); throw live.ended ?? new Error("Bridge is shutting down"); }
+      return agent;
+    });
+    live.agent = await Promise.race([creating, live.cancelled]);
     return live.agent;
   }
 
-  private async agentOptions(input: RuntimeRequest, selection: { id: string; params: CursorModelParameter[] }, tools: string[]): Promise<Record<string, unknown>> {
+  private async agentOptions(live: LiveCursor, input: RuntimeRequest, selection: { id: string; params: CursorModelParameter[] }, tools: string[]): Promise<Record<string, unknown>> {
     const cwd = resolveRequestCwd(input.headers, input.request, this.config);
     const apiKey = cursorApiKey(this.config.dataDir, this.env, this.now());
-    const store = this.injected ? undefined : await this.agentStore(cwd);
+    const store = this.openStore ? await this.agentStore(cwd, this.openStore) : undefined;
     return {
       model: { id: selection.id, params: selection.params },
       tools,
       ...(apiKey ? { apiKey } : {}),
-      local: { cwd, ...(store ? { store } : {}), customTools: this.customTools(this.live(input.session.bridgeSessionId), input) },
+      local: { cwd, ...(store ? { store } : {}), customTools: this.customTools(live, input) },
     };
   }
 
-  private agentStore(workspaceRef: string): Promise<{ dispose?: () => Promise<void> }> {
-    if (!this.store) this.store = openCursorAgentStore(this.config.dataDir, workspaceRef);
+  private agentStore(workspaceRef: string, openStore: typeof openCursorAgentStore): Promise<CursorAgentStore> {
+    if (!this.store) this.store = openStore(this.config.dataDir, workspaceRef).catch((error: unknown) => { this.store = undefined; throw error; });
     return this.store;
   }
 
@@ -271,6 +355,7 @@ export class CursorSdkRuntime implements BridgeRuntime {
         description: tool.description,
         inputSchema: tool.inputSchema,
         execute: (args, context) => new Promise((resolve, reject) => {
+          if (live.ended) { reject(live.ended); return; }
           const id = canonicalToolUseId(context.toolCallId || `tool_${randomUUID().replace(/-/g, "")}`);
           const outbound = outboundDroidToolName(tool.name);
           // Current `droid exec` advertises `Execute` and rejects `mcp__droid__Execute`.
@@ -298,7 +383,9 @@ export class CursorSdkRuntime implements BridgeRuntime {
   }
 
   private observe(live: LiveCursor, update: CursorUpdate): void {
+    if (live.ended) return;
     applyCursorUpdate(live.draft, update);
+    if (live.draft.events.length > 1000) live.draft.events.splice(0, live.draft.events.length - 1000);
     live.sink?.activity?.();
     if (update.type === "text-delta" && typeof update.text === "string") live.sink?.textDelta(update.text);
     if (update.type === "tool-call-started") {
@@ -356,7 +443,7 @@ export class CursorSdkRuntime implements BridgeRuntime {
     if (live.pending.size) return this.toolTurn(live, input);
     const done = live.settled.then((result) => ({ kind: "done" as const, result }));
     const parked = (park ?? new Promise<void>(() => undefined)).then(() => ({ kind: "parked" as const }));
-    const outcome = await Promise.race([done, parked]);
+    const outcome = await Promise.race([done, parked, live.cancelled]);
     if (outcome.kind === "parked" || live.pending.size) return this.toolTurn(live, input);
     return this.completedTurn(live, input, outcome.result);
   }
@@ -391,7 +478,7 @@ export class CursorSdkRuntime implements BridgeRuntime {
 function presentCursorAuthError(error: unknown): unknown {
   if (!(error instanceof Error) || error.message.includes("npm run desktop -- cursor login")) return error;
   if (!isCursorAuthRejection(error)) return error;
-  return new BridgeError(401, "cursor_auth", cursorReauthMessage(error.message || "Cursor rejected the key."));
+  return new BridgeError(401, "cursor_auth", cursorReauthMessage("Cursor rejected the credential."));
 }
 
 function isCursorAuthRejection(error: Error): boolean {

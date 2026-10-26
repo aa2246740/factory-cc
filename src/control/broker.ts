@@ -33,7 +33,7 @@ export class ControlBroker implements RuntimeControl {
   private readonly hosts = new Map<string, HostBinding>();
   private readonly tokens = new Map<string, HostBinding>();
   private readonly receipts = new Map<string, { hash: string; result: Promise<ObjectValue> }>();
-  private readonly launches = new Map<string, { cwd: string; cwdAliases: Set<string>; ended: boolean; hosts: Set<HostBinding> }>();
+  private readonly launches = new Map<string, { cwd: string; cwdAliases: Set<string>; ended: boolean; hosts: Set<HostBinding>; requiresBinding?: boolean }>();
   private readonly failures: string[] = [];
   private closed = false;
 
@@ -178,7 +178,7 @@ export class ControlBroker implements RuntimeControl {
     const envelope = object(input);
     if (typeof envelope.eventId !== "string" || !envelope.eventId || envelope.eventId.length > 200) throw invalid("eventId required");
     const event = object(envelope.event);
-    const hash = canonical({ event, bindingToken: envelope.bindingToken, launchId: envelope.launchId });
+    const hash = createHash("sha256").update(canonical({ event, bindingToken: envelope.bindingToken, launchId: envelope.launchId })).digest("hex");
     const existing = this.receipts.get(envelope.eventId);
     if (existing) {
       if (existing.hash !== hash) throw new BridgeError(409, "conflicting_host_event", "An event ID cannot be reused with different content.");
@@ -206,6 +206,7 @@ export class ControlBroker implements RuntimeControl {
       if (!launch || launch.cwd !== cwd) throw new BridgeError(409, "invalid_host_launch", "Factory client SessionEnd requires its registered wrapper launch and workspace.");
       const owned = [...launch.hosts].filter((candidate) => candidate.sessionId === event.session_id && candidate.cwd === cwd);
       if (!owned.length) throw new BridgeError(409, "host_not_registered", "Factory session is not registered under this wrapper launch.");
+      if (launch.requiresBinding && owned.some((candidate) => !candidate.drained)) throw new BridgeError(409, "ambiguous_host_generation", "Expired generations require an explicit live binding for SessionEnd.");
       if (owned.length !== 1) throw new BridgeError(409, "ambiguous_host_generation", "Factory client SessionEnd cannot identify a reused session generation without its binding.");
       // An old launch's late acknowledgement must never select a newer host
       // from the global session map, even when the Factory session ID matches.
@@ -348,6 +349,7 @@ export class ControlBroker implements RuntimeControl {
         }
       }
       host.drained = true;
+      host.terminalResults.clear();
       if (errors.length) throw new AggregateError(errors, "Factory session cleanup reported failures");
     })();
     host.ending = ending;
@@ -357,6 +359,24 @@ export class ControlBroker implements RuntimeControl {
   close(): void {
     this.closed = true;
     for (const approval of this.approvals.values()) approval.finish({ behavior: "deny", message: "Controller shut down." });
+  }
+
+  prune(): void {
+    // Keep bounded ended generations for retries; never remove a live host or
+    // an incomplete cleanup. Hook receipts already have their own 10k cap.
+    const ended = [...this.tokens.values()].filter((host) => host.drained);
+    for (const host of ended.slice(0, Math.max(0, ended.length - 256))) {
+      const key = `${host.cwd}\0${host.sessionId}`;
+      if (this.hosts.get(key) === host) this.hosts.delete(key);
+      this.tokens.delete(host.token);
+      if (host.launchId) {
+        const launch = this.launches.get(host.launchId);
+        if (launch) { launch.hosts.delete(host); launch.requiresBinding = true; }
+      }
+    }
+    const endedLaunches = [...this.launches.entries()].filter(([, launch]) => launch.ended && [...launch.hosts].every((host) => host.drained));
+    for (const [id] of endedLaunches.slice(0, Math.max(0, endedLaunches.length - 256))) this.launches.delete(id);
+    if (this.failures.length > 256) this.failures.splice(0, this.failures.length - 256);
   }
 
   describe(): ObjectValue {

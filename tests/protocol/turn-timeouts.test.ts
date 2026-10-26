@@ -211,15 +211,20 @@ describe("what happens to the session after a timeout", () => {
 });
 
 describe("SSE keepalive end to end", () => {
-  it("opens the stream before the runtime produces anything and pings every 15 seconds until it ends", async () => {
+  it("defers headers until the first content, then pings every 15 seconds until it ends", async () => {
     vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
     const release = deferred<RuntimeTurn>();
-    vi.mocked(runtime.handle).mockReturnValueOnce(release.promise);
+    let begin: (() => void) | undefined;
+    vi.mocked(runtime.handle).mockImplementationOnce((_input, sink) => { begin = () => sink?.textDelta("started"); return release.promise; });
     const { app, token } = await bridge();
-    const response = await fetch(`${app.url}/v1/messages`, {
+    const opening = fetch(`${app.url}/v1/messages`, {
       method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
       body: JSON.stringify({ ...body, stream: true }),
     });
+    await vi.waitFor(() => expect(begin).toBeDefined());
+    const maintenanceTimers = vi.getTimerCount();
+    begin!();
+    const response = await opening;
     expect(response.status).toBe(200);
     const reader = response.body!.getReader();
     const decoder = new TextDecoder();
@@ -237,6 +242,6 @@ describe("SSE keepalive end to end", () => {
     await read((text) => text.includes("event: message_stop"));
     expect(raw).toContain("event: message_stop");
     await reader.read();
-    expect(vi.getTimerCount()).toBe(0);
+    expect(vi.getTimerCount()).toBe(maintenanceTimers);
   });
 });

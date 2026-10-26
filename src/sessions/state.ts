@@ -7,6 +7,8 @@ export interface SessionRecord {
   factorySessionId?: string;
   factoryCwd?: string;
   sdkSessionId?: string;
+  /** Exact accepted request that failed upstream after all host work settled. */
+  retryableRequestHash?: string;
   /** Runtime that owns sdkSessionId. Absent on Claude sessions created before Cursor coexisted. */
   provider?: ModelProvider;
   /** Persist replay safety independently of process-local callback state. */

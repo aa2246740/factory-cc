@@ -31,6 +31,7 @@ export interface DesktopDependencies {
   run: Runner;
   assertPortFree: (port: number) => Promise<void>;
   health: (port: number) => Promise<boolean>;
+  runtime?: (port: number, adminFile: string) => Promise<unknown>;
   sleep?: (ms: number) => Promise<void>;
   /** Isolated from the developer shell. Cursor status/login read this, never `process.env`, when set. */
   env?: NodeJS.ProcessEnv;
@@ -48,6 +49,30 @@ export function desktopPaths(home: string) {
     manifest: join(state, "installation.json"), models: join(state, "models.env"),
     cursorCatalog: join(state, "cursor-catalog.json"), cursorMenu: join(state, "cursor-menu.json"),
     plist: join(home, `Library/LaunchAgents/${LABEL}.plist`), settings: join(home, ".factory/settings.json") };
+}
+const shellQuote = (value: string): string => `'${value.replaceAll("'", "'\\''")}'`;
+
+/** Stored on the home volume, so launchd does not need the external cwd to exist. */
+export function desktopLauncher(install: Installation, state: string): string {
+  return `#!/bin/sh
+umask 077
+repo=${shellQuote(install.repo)}
+node=${shellQuote(install.node)}
+state=${shellQuote(state)}
+delay=5
+while :; do
+  if [ -x "$node" ] && [ -r "$repo/dist/index.js" ] && [ -r "$repo/dist/desktop-supervisor.js" ] && [ -s "$state/client-token" ] && [ -s "$state/admin-token" ] && [ -s "$state/hook-token" ]; then
+    exec "$node" "$repo/dist/desktop-supervisor.js" "$repo" "$state"
+  fi
+  # Reopen the file per write, rather than keeping launchd's old rotated fd.
+  bytes=$(/usr/bin/wc -c < "$state/stderr.log" 2>/dev/null) || bytes=0
+  if [ "$bytes" -gt 2097000 ]; then /usr/bin/tail -c 2097152 "$state/stderr.log" > "$state/stderr.log.1"; : > "$state/stderr.log"; fi
+  printf 'desktop_waiting_for_files retry_seconds=%s\\n' "$delay" >> "$state/stderr.log"
+  /bin/sleep "$delay"
+  delay=$((delay * 2))
+  if [ "$delay" -gt 60 ]; then delay=60; fi
+done
+`;
 }
 function privateFile(path: string, value: string) {
   writeFileSync(path, value, { mode: 0o600, flag: "wx" });
@@ -70,12 +95,12 @@ export function desktopPlist(deps: DesktopDependencies, install: Installation): 
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
 <key>Label</key><string>${LABEL}</string>
-<key>ProgramArguments</key><array><string>${xml(install.node)}</string><string>${xml(join(install.repo, "dist/index.js"))}</string></array>
-<key>WorkingDirectory</key><string>${xml(install.repo)}</string>
+<key>ProgramArguments</key><array><string>/bin/sh</string><string>${xml(join(paths.state, "bridge-launcher.sh"))}</string></array>
+<key>WorkingDirectory</key><string>${xml(paths.state)}</string>
 <key>EnvironmentVariables</key><dict>${Object.entries(env).map(([key, value]) => `<key>${key}</key><string>${xml(value)}</string>`).join("\n")}</dict>
 <key>RunAtLoad</key><true/><key>KeepAlive</key><true/><key>ThrottleInterval</key><integer>30</integer>
-<key>StandardOutPath</key><string>${xml(join(paths.state, "stdout.log"))}</string>
-<key>StandardErrorPath</key><string>${xml(join(paths.state, "stderr.log"))}</string>
+<key>StandardOutPath</key><string>/dev/null</string>
+<key>StandardErrorPath</key><string>/dev/null</string>
 </dict></plist>\n`;
 }
 function readInstallation(deps: DesktopDependencies): Installation {
@@ -255,7 +280,7 @@ export async function desktop(argv: string[], deps: DesktopDependencies): Promis
   if (action === "cursor") return cursorDesktop(options, deps);
   const parsed = parseOptions(action!, options);
   const paths = desktopPaths(deps.home), domain = `gui/${deps.uid}`;
-  const caveat = "The repository and Node executable must remain available. If /Volumes/Workspace is unmounted, this service cannot start.";
+  const caveat = "The service waits with backoff while /Volumes/Workspace is unmounted or required files are unavailable. Node and the repository must return at their installed paths.";
   if (action === "status") {
     const install = readInstallation(deps);
     const loaded = deps.run("launchctl", ["print", `${domain}/${LABEL}`]).status === 0;
@@ -264,7 +289,8 @@ export async function desktop(argv: string[], deps: DesktopDependencies): Promis
     const cursorStatus = cursorCredentialStatus(paths.data, env, now);
     const cursorWarning = cursorExpiryWarning(cursorStatus, now);
     return { installed: true, plistPresent: existsSync(paths.plist), loaded, port: install.port, models: install.models ?? "follow Claude Code settings",
-      repositoryPresent: existsSync(join(install.repo, "dist/index.js")), healthy: await deps.health(install.port), caveat,
+      repositoryPresent: existsSync(join(install.repo, "dist/index.js")), healthy: await deps.health(install.port),
+      runtime: deps.runtime ? await deps.runtime(install.port, paths.admin) : null, caveat,
       cursor: {
         loggedIn: cursorStatus.loggedIn, expired: cursorStatus.expired,
         expires: cursorStatus.expiresAt ?? (cursorStatus.source === "env" ? "unknown" : "none"),
@@ -306,7 +332,7 @@ export async function desktop(argv: string[], deps: DesktopDependencies): Promis
       menu = readCursorMenuFile(deps);
       cursorModels = menu ? previous.cursorModels : undefined;
     } else cursorModels = undefined;
-    const install: Installation = { ...previous, ...(parsed.models ? { models: parsed.models } : {}) };
+    const install: Installation = { ...previous, node: realpathSync(deps.node), ...(parsed.models ? { models: parsed.models } : {}) };
     if (cursorModels) install.cursorModels = cursorModels;
     else delete install.cursorModels;
     // The LaunchAgent runs dist/. Rebuild so the restarted service runs the current source, not a stale build.
@@ -315,6 +341,7 @@ export async function desktop(argv: string[], deps: DesktopDependencies): Promis
     syncModels(deps, install, menu);
     if (explicit && menu) writeCursorMenu(deps, menu, catalog);
     replacePrivateFile(paths.manifest, JSON.stringify(install, null, 2) + "\n");
+    replacePrivateFile(join(paths.state, "bridge-launcher.sh"), desktopLauncher(install, paths.state));
     replacePrivateFile(paths.plist, desktopPlist(deps, install));
     bootout(deps);
     await bootstrap(deps, paths.plist);
@@ -343,6 +370,7 @@ export async function desktop(argv: string[], deps: DesktopDependencies): Promis
     if (cursor.menu) writeCursorMenu(deps, cursor.menu, cursor.catalog);
     configured = true;
     privateFile(paths.manifest, JSON.stringify(install, null, 2) + "\n");
+    privateFile(join(paths.state, "bridge-launcher.sh"), desktopLauncher(install, paths.state));
     mkdirSync(dirname(paths.plist), { recursive: true });
     privateFile(paths.plist, desktopPlist(deps, install));
     await bootstrap(deps, paths.plist);
@@ -373,5 +401,17 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
     // Progress such as the Cursor login URL goes to stderr; stdout stays the JSON result.
     stdout: (text) => { process.stderr.write(text); },
     health: async (port) => { try { const result = await fetch(`http://127.0.0.1:${port}/healthz`, { signal: AbortSignal.timeout(2000), redirect: "error" }); const body: unknown = await result.json(); return result.ok && isDesktopHealthPayload(body); } catch { return false; } },
+    runtime: async (port, adminFile) => {
+      try {
+        const result = await fetch(`http://127.0.0.1:${port}/internal/runtime`, { headers: { authorization: `Bearer ${readFileSync(adminFile, "utf8").trim()}` }, signal: AbortSignal.timeout(3000), redirect: "error" });
+        if (!result.ok) return { available: false, status: result.status };
+        const summary = z.object({ activeNativeSessions: z.number().optional(), slotsInUse: z.number().optional(), maxSlots: z.number().optional(), oldestTurnMs: z.number().optional(),
+          upstreamBackoffs: z.array(z.object({ sessionId: z.string(), status: z.number(), retryAfter: z.number().optional(), heldForNativeWork: z.boolean(), at: z.string() })).optional(),
+          pendingHostCalls: z.number().optional(), pendingApprovals: z.number().optional(), processes: z.record(z.string(), z.unknown()).optional(),
+          activeRequests: z.number().optional(), retainedSessions: z.number().optional(), memory: z.record(z.string(), z.number()).optional(),
+          cursor: z.object({ agents: z.number().optional(), slotsInUse: z.number().optional(), pendingHostCalls: z.number().optional() }).optional() }).parse(await result.json());
+        return summary;
+      } catch { return { available: false }; }
+    },
   }).then((result) => console.log(JSON.stringify(result, null, 2))).catch((error: unknown) => { console.error(error instanceof Error ? error.message : "Desktop operation failed."); process.exitCode = 1; });
 }
