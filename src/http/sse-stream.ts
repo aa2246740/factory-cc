@@ -178,10 +178,17 @@ export class SseWriter {
 
   fail(error: unknown): void {
     if (this.finished || this.res.destroyed) return;
-    this.start();
     const detail = error instanceof BridgeError
       ? { type: error.code, message: error.message, ...error.extra }
       : { type: "internal_error", message: error instanceof Error ? error.message : String(error) };
+    if (!this.started) {
+      if (error instanceof BridgeError && typeof error.extra?.retry_after === "number") this.res.setHeader("retry-after", String(error.extra.retry_after));
+      this.res.writeHead(error instanceof BridgeError ? error.status : 500, { "Content-Type": "application/json; charset=utf-8" });
+      this.res.end(JSON.stringify({ type: "error", error: detail }));
+      this.finished = true;
+      this.dispose();
+      return;
+    }
     event(this.res, "error", { type: "error", error: detail });
     this.finished = true;
     this.res.end();

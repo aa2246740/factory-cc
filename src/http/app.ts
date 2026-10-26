@@ -13,7 +13,7 @@ import { isEnded } from "../sessions/state.js";
 import { HUMAN_WAIT_TOOLS, MISSION_SPAWN_TOOLS, MISSION_WORKER_END_TOOL } from "../runtime/mission-tools.js";
 import { compactedSummaryText, lastSummarizedToolCall, sameToolInput, summaryQuote } from "../sessions/compaction.js";
 import { hostAllowsAnyTools } from "../runtime/native-tool-policy.js";
-import { SessionStore } from "../sessions/store.js";
+import { DEFAULT_SESSION_RETENTION, SessionStore } from "../sessions/store.js";
 import { createRuntime } from "../runtime/factory.js";
 import type { BridgeRuntime, RuntimeTurn, StreamSink } from "../runtime/types.js";
 import { TurnWatchdog, type TurnTimeout } from "../runtime/turn-watchdog.js";
@@ -50,7 +50,9 @@ function listenUrl(host: string, port: number): string {
 }
 
 export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath: string, runtime: BridgeRuntime = createRuntime(config, logger, canaryPath)): BridgeApp {
-  const store = new SessionStore(join(config.dataDir, "sessions"), config.persistSessions, config.maxSessions, logger);
+  const store = new SessionStore(join(config.dataDir, "sessions"), config.persistSessions, config.maxSessions, logger, {
+    ...DEFAULT_SESSION_RETENTION, maxRecords: config.sessionMaxRecords ?? 1000, maxAgeMs: config.sessionRetentionMs ?? DEFAULT_SESSION_RETENTION.maxAgeMs,
+  });
   // Approvals wait on a person, so they get their own limit rather than the turn's idle limit.
   const control = new ControlBroker(runtime, store, config.approvalTimeoutMs);
   runtime.setControl?.(control);
@@ -64,6 +66,27 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
   const activeRequests = new Map<string, symbol>();
   let closing = false;
   let closePromise: Promise<void> | undefined;
+  let maintenanceRunning: Promise<void> | undefined;
+  const maintenance = setInterval(() => {
+    if (maintenanceRunning || closing) return;
+    maintenanceRunning = (async () => {
+      const protectedIds = new Set(store.list().filter((session) => activeRequests.has(session.bridgeSessionId)
+        || control.hasLiveHost(session.bridgeSessionId) || control.hasApprovals(session.bridgeSessionId)
+        || runtime.pendingHostCalls?.(session.bridgeSessionId).length).map((session) => session.bridgeSessionId));
+      for (const id of runtime.protectedSessionIds?.() ?? []) protectedIds.add(id);
+      const previous = new Map(store.list().map((session) => [session.bridgeSessionId, session]));
+      const removed = store.prune(protectedIds);
+      for (const id of removed) {
+        const session = previous.get(id)!;
+        // Native checkpoints can be referenced by another retained bridge record.
+        const shared = store.list().some((other) => other.sdkSessionId === session.sdkSessionId && other.provider === session.provider);
+        await runtime.forget?.({ ...session, sdkSessionId: shared ? undefined : session.sdkSessionId });
+      }
+      control.prune();
+      if (removed.length) logger.info("sessions_pruned", { count: removed.length });
+    })().catch(() => logger.error("session_maintenance_failed")).finally(() => { maintenanceRunning = undefined; });
+  }, 60_000);
+  maintenance.unref();
 
   /**
    * Run a step that takes a session slot. At the limit, free one slot first by
@@ -181,6 +204,7 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
     const now = Date.now();
     for (const [key, entry] of compactions) if (now - entry.at > COMPACTION_LINK_MS) compactions.delete(key);
     compactions.set(quote, { ...link, at: now });
+    if (compactions.size > 256) compactions.delete(compactions.keys().next().value!);
   }
   function releaseCompacted(request: MessagesRequest): void {
     const text = compactedSummaryText(request);
@@ -259,7 +283,7 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
     }
     if (req.method === "GET" && path === "/internal/runtime") {
       requireAdminToken(req.headers, config.adminToken);
-      json(res, 200, { ...runtime.describe?.(), control: control.describe(), authFailureCount });
+      json(res, 200, runtimeStatus());
       return;
     }
 
@@ -327,6 +351,7 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
     }
 
     const rawBody = await readBody(req, config.maxBodyBytes);
+    const admissionStarted = Date.now();
     const raw = parseJsonBody(rawBody);
     if (res.destroyed || req.aborted) return;
     // Shutdown may begin while an already accepted request is uploading its
@@ -353,7 +378,13 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
     releaseCompacted(request);
     const summarized = summarizedSession(request);
     const contextHash = sessionContextHash(headers, request, cwd, provider);
-    const resolved = resolveSession(store.list(), headers, request, {
+    const incomingHashes = historyMessageHashes(request.messages);
+    const requestFingerprint = createHash("sha256").update(JSON.stringify({ request, role, cwd, provider, contextHash, host: control.hostSessionId(prepared.binding) ?? null })).digest("hex");
+    const explicit = explicitSessionId(headers, request);
+    const retries = store.list().filter((session) => session.state === "IDLE" && session.hostEnded === undefined && !session.pendingToolIds.length
+      && session.retryableRequestHash === requestFingerprint && (!explicit || session.bridgeSessionId === explicit || session.droidSessionId === explicit));
+    if (retries.length > 1) throw new BridgeError(409, "ambiguous_session", "Multiple failed requests match; supply X-Bridge-Session");
+    const resolved = retries[0] ? { match: retries[0], reason: "upstream-retry" } : resolveSession(store.list(), headers, request, {
       cwd, hostSessionId: control.hostSessionId(prepared.binding), allowModelSwitch: config.models !== undefined, provider,
       // Droid desktop has no conversation ID header or hooks to disambiguate.
       continueIdenticalTranscripts: config.desktopProfile,
@@ -367,7 +398,7 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
         historyHash: historyPrefixHash(request),
         contextHash,
         reasoning: droidReasoningLevel(request),
-        requestMessageHashes: historyMessageHashes(request.messages),
+        requestMessageHashes: incomingHashes,
         toolNames: (request.tools ?? []).map((t) => t.name),
       }));
 
@@ -468,13 +499,14 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
     try {
       store.update(sessionId, {
         hostEnded: undefined,
+        retryableRequestHash: undefined,
         role,
         model: request.model,
         ...(provider === "cursor" ? { provider } : {}),
         contextHash,
         reasoning: droidReasoningLevel(request),
         historyHash: historyPrefixHash(request),
-        requestMessageHashes: historyMessageHashes(request.messages),
+        requestMessageHashes: incomingHashes,
         toolNames: (request.tools ?? []).map((t) => t.name),
       });
       record(req, true, {
@@ -497,11 +529,11 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
       res.setHeader("X-Bridge-Session", sessionId);
       res.setHeader("X-Bridge-Role", role);
       res.setHeader("X-Bridge-Mode", config.mode);
-      writer?.start();
+      logger.info("request_admitted", { sessionId, admissionMs: Date.now() - admissionStarted, messages: request.messages.length });
 
       const turn: RuntimeTurn = await Promise.race([
         interrupted,
-        runtime.handle({ request, role, session, headers }, sink),
+        runtime.handle({ request, role, session, headers, ...(resolved.reason === "upstream-retry" ? { recovery: "cold-import" as const } : {}) }, sink),
       ]);
       if (cancellationRequested || store.get(sessionId)?.cancelRequested) {
         throw new BridgeError(499, "cancelled", "session cancelled");
@@ -537,7 +569,19 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
       const current = store.get(sessionId);
       const recoverableSwitch = error instanceof BridgeError && error.status === 409
         && ["model_switch_busy", "model_switch_requires_persistence", "model_switch_unavailable", "reasoning_switch_busy", "reasoning_switch_requires_persistence", "reasoning_switch_unavailable"].includes(error.code);
-      if (recoverableSwitch) {
+      const rejectedInput = error instanceof BridgeError && [400, 409, 422].includes(error.status) && runtime.isSessionUsable?.(sessionId) === true;
+      const retryableUpstream = error instanceof BridgeError && ([429, 529].includes(error.status) || error.code === "sdk_start_timeout") && error.extra.retry_from_history === true
+        && !cancellationRequested && current && !current.cancelRequested && current.hostEnded === undefined
+        && (current.state === "GENERATING" || current.state === "RESUMING")
+        && (previous.historyMessageHashes ?? []).every((hash, index) => incomingHashes[index] === hash);
+      if (retryableUpstream) {
+        await runtime.cancel(sessionId, "upstream-backoff").catch(() => logger.error("runtime_cancel_failed", { sessionId, reason: "upstream-backoff" }));
+        if (!current.cancelRequested && current.hostEnded === undefined && activeRequests.get(sessionId) === owner
+            && (current.state === "GENERATING" || current.state === "RESUMING")) {
+          store.update(sessionId, { pendingToolIds: [], sdkSessionId: undefined, retryableRequestHash: requestFingerprint });
+          store.setState(sessionId, "IDLE");
+        }
+      } else if (recoverableSwitch || rejectedInput) {
         if (!cancellationRequested && current && !current.cancelRequested && current.hostEnded === undefined
           && (current.state === "GENERATING" || current.state === "RESUMING")) {
           // Restore only our pending request, never a later host lifecycle event.
@@ -545,6 +589,7 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
         }
       } else if (!timedOut && current?.state !== "CANCELLED" && !(error instanceof BridgeError && error.code === "host_session_ended")) {
         store.setState(sessionId, "FAILED");
+        await runtime.cancel(sessionId, "request-failed").catch(() => logger.error("runtime_cancel_failed", { sessionId, reason: "request-failed" }));
       }
       // Answer now; the slot below may still be held while a timed-out turn stops.
       if (writer) writer.fail(error);
@@ -641,10 +686,11 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
     records,
     get authFailureCount() { return authFailureCount; },
     url,
-    runtimeStatus: () => ({ ...runtime.describe?.(), control: control.describe(), authFailureCount }),
+    runtimeStatus,
     close: () => {
       if (closePromise) return closePromise;
       closing = true;
+      clearInterval(maintenance);
       for (const sessionId of [...workerEndTimers.keys()]) clearWorkerEnd(sessionId);
       flushRequestIndex();
       control.close();
@@ -653,7 +699,7 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
       const serverClosed = new Promise<void>((resolve, reject) => {
         server.close((err) => (err ? reject(err) : resolve()));
       });
-      const runtimeClosed = Promise.resolve().then(() => runtime.close?.());
+      const runtimeClosed = Promise.resolve(maintenanceRunning).then(() => runtime.close?.());
       closePromise = Promise.allSettled([serverClosed, runtimeClosed]).then((results) => {
         const errors = results.filter((result): result is PromiseRejectedResult => result.status === "rejected");
         if (errors.length === 1) throw errors[0]!.reason;
@@ -662,6 +708,12 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
       return closePromise;
     },
   };
+
+  function runtimeStatus(): Record<string, unknown> {
+    return { ...runtime.describe?.(), control: control.describe(), authFailureCount, activeRequests: activeRequests.size,
+      retainedSessions: store.list().length, workerEndTimers: workerEndTimers.size, compactionLinks: compactions.size,
+      memory: { rss: process.memoryUsage().rss, heapUsed: process.memoryUsage().heapUsed }, closing };
+  }
 }
 
 export function listen(app: BridgeApp, config: BridgeConfig): Promise<BridgeApp> {
@@ -721,6 +773,7 @@ function html(res: ServerResponse, body: string): void {
 function writeError(res: ServerResponse, error: unknown): void {
   if (res.headersSent || res.destroyed || res.writableEnded) return;
   if (error instanceof BridgeError) {
+    if (typeof error.extra?.retry_after === "number") res.setHeader("retry-after", String(error.extra.retry_after));
     json(res, error.status, {
       type: "error",
       error: { type: error.code, message: error.message, ...error.extra },

@@ -9,7 +9,7 @@ import { assistantMessage } from "../../src/protocol/messages.js";
 import { modelsFromIds } from "../../src/models.js";
 import { BridgeError } from "../../src/types.js";
 
-const runtime = vi.hoisted(() => ({ kind: "sdk", handle: vi.fn(), cancel: vi.fn(), deliverResults: vi.fn() }));
+const runtime = vi.hoisted(() => ({ kind: "sdk", handle: vi.fn(), cancel: vi.fn(async () => undefined), deliverResults: vi.fn() }));
 vi.mock("../../src/runtime/factory.js", () => ({ createRuntime: () => runtime }));
 const apps: BridgeApp[] = [];
 beforeEach(() => {

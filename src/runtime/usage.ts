@@ -78,6 +78,11 @@ export class UsageLedger {
   private drained = emptyUsage();
   private drainedRequests = 0;
   private readonly dirty = new Set<string>();
+  private archived = emptyUsage();
+  private archivedRequests = 0;
+  private archivedDirty = false;
+  private archivedKnown = new Set<Counter>(COUNTERS);
+  private readonly maxMessages = 4096;
 
   ingest(message: Record<string, unknown>): UsageLedgerEvent | undefined {
     const sdkSessionId = label(message.session_id);
@@ -170,6 +175,18 @@ export class UsageLedger {
       }
       this.messages.set(key, { usage: merged });
       if (changed) this.dirty.add(key);
+      while (this.messages.size > this.maxMessages) {
+        const oldest = this.messages.keys().next().value!;
+        const row = this.messages.get(oldest)!;
+        this.archived = addUsage(this.archived, completeUsage(row.usage));
+        this.archivedRequests++;
+        if (this.dirty.delete(oldest)) {
+          this.archivedDirty = true;
+          for (const counter of COUNTERS) if (row.usage[counter] === undefined) this.archivedKnown.delete(counter);
+        }
+        this.messages.delete(oldest);
+        for (const [lane, stream] of this.streams) if (stream.key === oldest) this.streams.delete(lane);
+      }
     }
     return {
       source: "provider_message", eventType, ...identity, messageId, model, usage,
@@ -179,7 +196,7 @@ export class UsageLedger {
   }
 
   providerTotals(): UsageSnapshot {
-    return [...this.messages.values()].reduce((sum, row) => addUsage(sum, completeUsage(row.usage)), emptyUsage());
+    return [...this.messages.values()].reduce((sum, row) => addUsage(sum, completeUsage(row.usage)), this.archived);
   }
 
   billingSnapshot(): BillingSnapshot | undefined {
@@ -189,18 +206,21 @@ export class UsageLedger {
   /** Consume only newly observed provider usage since the previous HTTP reply. */
   drainTurnUsage(): LedgerUsage {
     const total = this.providerTotals();
-    const knownFields = COUNTERS.filter((key) => this.dirty.size > 0
+    const hasDirty = this.dirty.size > 0 || this.archivedDirty;
+    const knownFields = COUNTERS.filter((key) => hasDirty && (!this.archivedDirty || this.archivedKnown.has(key))
       && [...this.dirty].every((id) => this.messages.get(id)?.usage[key] !== undefined));
-    const coverage = this.dirty.size === 0 ? "unknown" : knownFields.length === COUNTERS.length ? "complete" : "partial";
+    const coverage = !hasDirty ? "unknown" : knownFields.length === COUNTERS.length && !this.archivedRequests ? "complete" : "partial";
     const result: LedgerUsage = {
       ...subtractUsage(total, this.drained),
-      status: this.dirty.size ? "reported" : "unknown",
+      status: hasDirty ? "reported" : "unknown",
       coverage, knownFields, scope: "provider_messages", estimated: coverage !== "complete",
-      modelRequests: this.messages.size - this.drainedRequests,
+      modelRequests: this.archivedRequests + this.messages.size - this.drainedRequests,
     };
     this.drained = total;
-    this.drainedRequests = this.messages.size;
+    this.drainedRequests = this.archivedRequests + this.messages.size;
     this.dirty.clear();
+    this.archivedDirty = false;
+    this.archivedKnown = new Set(COUNTERS);
     return result;
   }
 }

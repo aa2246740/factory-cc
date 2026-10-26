@@ -25,6 +25,10 @@ export interface BridgeConfig {
   sandboxDir: string;
   maxBodyBytes: number;
   maxSessions: number;
+  maxIdleSessions?: number;
+  sdkStartTimeoutMs?: number;
+  sessionMaxRecords?: number;
+  sessionRetentionMs?: number;
   maxTurns: number;
   toolWaitMs: number;
   /** How long a session parked on a Droid tool must be idle before it may be reclaimed once session slots run out. */
@@ -183,6 +187,10 @@ export function loadConfig(overrides: Partial<BridgeConfig> = {}): BridgeConfig 
     sandboxDir: resolve(dataDir, "sandbox"),
     maxBodyBytes: overrides.maxBodyBytes ?? intEnv("BRIDGE_MAX_BODY_BYTES", 8 * 1024 * 1024),
     maxSessions: overrides.maxSessions ?? intEnv("BRIDGE_MAX_SESSIONS", 32),
+    maxIdleSessions: overrides.maxIdleSessions ?? intEnv("BRIDGE_MAX_IDLE_SESSIONS", 4),
+    sdkStartTimeoutMs: overrides.sdkStartTimeoutMs ?? intEnv("BRIDGE_SDK_START_TIMEOUT_MS", 60_000),
+    sessionMaxRecords: overrides.sessionMaxRecords ?? intEnv("BRIDGE_SESSION_MAX_RECORDS", 1000),
+    sessionRetentionMs: overrides.sessionRetentionMs ?? intEnv("BRIDGE_SESSION_RETENTION_MS", 7 * 24 * 60 * 60 * 1000),
     // 0: no limit. Droid Mission workers have made over 300 model calls on one feature.
     maxTurns: overrides.maxTurns ?? intEnv("BRIDGE_MAX_TURNS", 0),
     // A Mission orchestrator can wait hours on StartMissionRun, and AskUser on a person overnight.
@@ -207,6 +215,13 @@ export function loadConfig(overrides: Partial<BridgeConfig> = {}): BridgeConfig 
         readCursorMenu(env("BRIDGE_CURSOR_MODELS_FILE")),
       ),
   };
+  for (const [name, value, minimum] of [
+    ["BRIDGE_MAX_SESSIONS", config.maxSessions, 1], ["BRIDGE_MAX_IDLE_SESSIONS", config.maxIdleSessions, 0],
+    ["BRIDGE_SDK_START_TIMEOUT_MS", config.sdkStartTimeoutMs, 1], ["BRIDGE_SESSION_MAX_RECORDS", config.sessionMaxRecords, 1],
+    ["BRIDGE_SESSION_RETENTION_MS", config.sessionRetentionMs, 1],
+  ] as const) {
+    if (value === undefined || !Number.isSafeInteger(value) || value < minimum) throw new Error(`${name} must be an integer >= ${minimum}.`);
+  }
   if (claudeConfig) Object.defineProperty(config, "claudeConfig", { value: claudeConfig });
   return config;
 }

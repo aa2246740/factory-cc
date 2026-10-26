@@ -47,9 +47,14 @@ export function installCursorRejectionGuard(target: { on(event: string, listener
 }
 
 /** Opened only for a real SDK agent. Rooted in the bridge data dir, not the project cwd. */
-export async function openCursorAgentStore(dataDir: string, workspaceRef: string): Promise<{ dispose?: () => Promise<void> }> {
+export interface CursorAgentStore {
+  dispose?: () => Promise<void>;
+  agents?: { delete(input: { filter: { agentIds: [string] } }): Promise<void> };
+}
+
+export async function openCursorAgentStore(dataDir: string, workspaceRef: string): Promise<CursorAgentStore> {
   const require = createRequire(import.meta.url);
-  const sqlite = require("@cursor/sdk/sqlite") as { SqliteLocalAgentStore: { open(options: { workspaceRef: string; stateRoot?: string }): Promise<{ dispose?: () => Promise<void> }> } };
+  const sqlite = require("@cursor/sdk/sqlite") as { SqliteLocalAgentStore: { open(options: { workspaceRef: string; stateRoot?: string }): Promise<CursorAgentStore> } };
   return sqlite.SqliteLocalAgentStore.open({ workspaceRef, stateRoot: join(dataDir, "cursor-agent-store") });
 }
 

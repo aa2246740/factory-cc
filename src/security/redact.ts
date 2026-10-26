@@ -3,6 +3,7 @@ const SECRET_VALUE = /(?:sk-|fk-|ant-|claude-|Bearer\s+)[A-Za-z0-9._\-]{8,}/g;
 
 export function redactValue(value: string): string {
   return value.replace(SECRET_VALUE, "[redacted]")
+    .replace(/[A-Za-z0-9._%+*-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, "[email]")
     .replace(/\[factory-cc-session:[a-f0-9]{64}\]/g, "[factory-cc-session:redacted]");
 }
 

@@ -116,6 +116,21 @@ export class ToolMailbox {
     this.waiters.clear();
   }
 
+  pruneCompleted(keep = 256, maxBytes = 2 * 1024 * 1024): string[] {
+    const completed = [...this.deliveredResults].filter((id) => !this.waiters.has(id));
+    let bytes = 0;
+    const retain = new Set<string>();
+    for (const id of [...completed].reverse()) {
+      const size = Buffer.byteLength(JSON.stringify([this.calls.get(id), this.lastDelivered.get(id)]));
+      if (retain.size < keep && bytes + size <= maxBytes) { retain.add(id); bytes += size; }
+    }
+    const removed = completed.filter((id) => !retain.has(id));
+    for (const id of removed) {
+      this.calls.delete(id); this.results.delete(id); this.lastDelivered.delete(id); this.deliveredResults.delete(id);
+    }
+    return removed;
+  }
+
   rejectUnknownOrConflict(callId: string, sessionOwns: boolean, conflicting?: boolean): void {
     if (!sessionOwns) {
       throw new BridgeError(409, "cross_session_tool_result", `tool_use_id ${callId} is not owned by this session`);

@@ -1,6 +1,6 @@
 import { DESKTOP_DISALLOWED_TOOLS, DESKTOP_APPROVAL_DENIAL, DESKTOP_READ_DENIAL } from "./desktop-policy.js";
 import { mkdirSync } from "node:fs";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { isAbsolute, join } from "node:path";
 import { resolveRequestCwd } from "../workspace.js";
 import { asBlocks } from "../protocol/content.js";
@@ -22,6 +22,9 @@ import { buildChildEnv, classifyAuth, maskEmail, type AuthClassification, type A
 import { publicSelection, sdkEnv, selectionFromConfig, type UpstreamSelection } from "../upstream/providers.js";
 import { resolveRequestModel } from "../models.js";
 import { claudeReasoningKey, claudeReasoningOptions, droidReasoningLevel } from "./reasoning.js";
+import { OwnedProcesses } from "./owned-processes.js";
+import { upstreamError } from "./upstream-error.js";
+import { redactValue } from "../security/redact.js";
 
 type ModelRoute = ReturnType<typeof resolveRequestModel>;
 
@@ -123,6 +126,12 @@ interface LiveSdk {
   reasoningKey?: string;
   abort?: AbortController;
   query?: ReturnType<SdkHandle["query"]>;
+  processOwner?: string;
+  cleanup?: Promise<void>;
+  retiring?: Promise<void>;
+  turnStartedAt?: number;
+  nativeCallsThisRequest?: boolean;
+  upstreamBackoff?: { at: string; status: number; retryAfter?: number; heldForNativeWork: boolean };
   loop?: Promise<void>;
   waiter?: PendingTurn;
   outbox: RuntimeTurn[];
@@ -204,7 +213,7 @@ const TASK_BATCH_WAIT_MS = 30_000;
 /** Claude Code had not started in time; its account was never examined. */
 class SdkStartTimeout extends BridgeError {
   constructor(readonly timeoutMs: number) {
-    super(503, "sdk_start_timeout", `Claude Code did not finish starting within ${timeoutMs}ms, so its account could not be verified and no prompt was sent. Retry the request.`);
+    super(503, "sdk_start_timeout", `Claude Code did not finish starting within ${timeoutMs}ms, so its account could not be verified and no prompt was sent. Retry the request.`, { retry_after: 1 });
   }
 }
 
@@ -218,10 +227,16 @@ export class SdkRuntime implements BridgeRuntime {
   private readonly usageFile: string;
   private control?: RuntimeControl;
   private authVerification?: AuthVerification;
+  private readonly processes: OwnedProcesses;
+  private readonly maintenance: NodeJS.Timeout;
+  private closing = false;
 
   constructor(private readonly config: BridgeConfig, private readonly logger: Logger, sdk?: SdkHandle) {
     this.sdk = sdk;
     this.usageFile = join(config.logDir, "usage.jsonl");
+    this.processes = new OwnedProcesses(logger);
+    this.maintenance = setInterval(() => { void this.maintain().catch(() => logger.error("sdk_maintenance_failed")); }, 30_000);
+    this.maintenance.unref();
   }
 
   describe(): Record<string, unknown> {
@@ -231,6 +246,11 @@ export class SdkRuntime implements BridgeRuntime {
       input: "persistent SDK streaming input", includePartialMessages: true,
       approvalChannel: this.control ? "external controller" : "unavailable: fail closed",
       activeNativeSessions: [...this.lives.values()].filter((live) => !live.terminal && (live.query || live.starting)).length,
+      processes: this.processes.describe(),
+      slotsInUse: this.slotsInUse(), maxSlots: this.config.maxSessions,
+      maxIdleSessions: this.config.maxIdleSessions ?? 4,
+      upstreamBackoffs: [...this.lives.entries()].flatMap(([sessionId, live]) => !live.terminal && live.upstreamBackoff ? [{ sessionId, ...live.upstreamBackoff }] : []),
+      oldestTurnMs: Math.max(0, ...[...this.lives.values()].filter((live) => live.active && live.turnStartedAt).map((live) => Date.now() - live.turnStartedAt!)),
       activeNativeTurns: [...this.lives.values()].filter((live) => !live.terminal && live.active).length,
       pendingHostCalls: [...this.lives.values()].reduce((total, live) => total + (live.terminal ? 0 : live.pending.size), 0),
       pendingApprovals: [...this.lives.values()].reduce((total, live) => total + live.approvals.size, 0),
@@ -257,6 +277,16 @@ export class SdkRuntime implements BridgeRuntime {
     this.control = control;
   }
 
+  protectedSessionIds(): string[] {
+    return [...this.lives.entries()].filter(([, live]) => !live.terminal && (live.busy || live.active || live.starting || live.pending.size
+      || live.handlerArrivals.size || live.hostResultConsumptions.size || live.approvals.size || live.backgroundTasks.size || live.outbox.length)).map(([id]) => id);
+  }
+
+  isSessionUsable(sessionId: string): boolean {
+    const live = this.lives.get(sessionId);
+    return Boolean(live && !live.terminal && !live.hostEnding);
+  }
+
   pendingHostCalls(sessionId: string): RuntimeHostCall[] {
     const live = this.lives.get(sessionId);
     if (!live || live.terminal) return [];
@@ -271,7 +301,7 @@ export class SdkRuntime implements BridgeRuntime {
     if (call.originalName !== completion.toolName || canonicalJson(call.input) !== canonicalJson(completion.input)) {
       throw new BridgeError(409, "conflicting_host_completion", "Host completion does not match the accepted native tool invocation");
     }
-    const fingerprint = canonicalJson({ ...completion, isError: Boolean(completion.isError), terminal: Boolean(completion.terminal) });
+    const fingerprint = createHash("sha256").update(canonicalJson({ ...completion, isError: Boolean(completion.isError), terminal: Boolean(completion.terminal) })).digest("hex");
     const previous = live.hostCompletionFingerprints.get(completion.toolUseId);
     if (previous) {
       if (previous !== fingerprint) throw new BridgeError(409, "conflicting_host_completion", completion.toolUseId);
@@ -307,7 +337,7 @@ export class SdkRuntime implements BridgeRuntime {
     live.resumableAfterHostEnd = this.config.persistSessions && Boolean(live.sdkSessionId) && !live.hostEnding
       && !live.pending.size && !live.handlerArrivals.size && !live.candidates.size && !live.backgroundTasks.size;
     live.events.push({ at: now(), type: "host_session_ended", data: { reason, unresolvedToolIds: [...live.pending.keys()] } });
-    this.stop(live, new BridgeError(409, "host_session_ended", reason));
+    await this.stop(live, new BridgeError(409, "host_session_ended", reason));
     return { resumable: live.resumableAfterHostEnd, sdkSessionId: live.sdkSessionId };
   }
 
@@ -325,11 +355,18 @@ export class SdkRuntime implements BridgeRuntime {
   }
 
   async handle(input: RuntimeRequest, sink?: StreamSink): Promise<RuntimeTurn> {
+    const preparationStarted = Date.now();
+    if (this.closing) throw new BridgeError(503, "bridge_shutting_down", "Bridge is shutting down");
     // Resolve before allocating or changing a native session. A catalog typo or
     // missing explicit credential must never fall back to another model/login.
     const modelRoute = this.config.models !== undefined ? resolveRequestModel(this.config, input.request.model) : undefined;
     const id = input.session.bridgeSessionId;
     let live = this.lives.get(id);
+    if (input.recovery === "cold-import") {
+      if (live && !live.terminal) throw new BridgeError(409, "session_busy", "The previous query has not stopped");
+      live = this.createLive();
+      this.lives.set(id, live);
+    }
     if (live?.terminal?.code === "host_session_ended" && live.resumableAfterHostEnd) {
       if (input.session.pendingToolIds.length) throw new BridgeError(409, "interrupted_tool_roundtrip", "The ended host session still records unresolved tools; do not replay them");
       const previous = live;
@@ -358,13 +395,14 @@ export class SdkRuntime implements BridgeRuntime {
     live.busy = true;
     live.lastTouched = Date.now();
     live.sink = sink;
-    // An approval left pending by an earlier request still pauses this one's idle limit.
-    this.notifyApprovals(live);
-    const requestKey = JSON.stringify({ request: input.request, role: input.role, cwd: resolveCwd(input, this.config), missionDir: input.headers["x-bridge-mission-dir"] });
     let waiting: Promise<RuntimeTurn> | undefined;
     try {
+      // An approval left pending by an earlier request still pauses this one's idle limit.
+      this.notifyApprovals(live);
+      const requestKey = createHash("sha256").update(JSON.stringify({ request: input.request, role: input.role, cwd: resolveCwd(input, this.config), missionDir: input.headers["x-bridge-mission-dir"] })).digest("hex");
       if (requestKey === live.lastRequestKey && live.lastReply) return live.lastReply;
       let results = latestToolResults(input, live.active || live.pending.size > 0);
+      if (input.recovery === "cold-import") results = [];
       // A conversation imported from history has no native callbacks to answer.
       // Its tool results are earlier history when the same message carries a new
       // user turn; the cold import below presents them as reference.
@@ -404,6 +442,7 @@ export class SdkRuntime implements BridgeRuntime {
       for (const result of results) if (!live.resultFingerprints.has(result.tool_use_id)) mcpContent(result.content);
       if (continuation.length) mcpContent(continuation);
       live.current = input;
+      live.nativeCallsThisRequest = false;
       waiting = this.waitForTurn(live);
       // Attach rejection handling before startup awaits, including startup timeouts.
       void waiting.catch(() => undefined);
@@ -415,10 +454,12 @@ export class SdkRuntime implements BridgeRuntime {
         this.submitResults(live, results, continuation, followup);
         live.lastHostContext = context;
         this.flushOutbox(live);
+        this.logger.info("sdk_turn_prepared", { sessionId: id, sdkSessionId: live.sdkSessionId, kind: "tool-continuation", queryReused: true, preparationMs: Date.now() - preparationStarted });
       } else {
         // The CLI can emit init before it reads its first input. That new session ID
         // is not evidence that the supplied Droid history was already imported.
         const coldImport = !live.sentUserTurns && !live.sdkSessionId;
+        const queryReused = Boolean(live.query);
         live.active = true;
         if (!live.query) await this.startQuery(input, live);
         if (live.terminal) throw live.terminal;
@@ -432,18 +473,21 @@ export class SdkRuntime implements BridgeRuntime {
           type: "user", message: { role: "user", content },
           parent_tool_use_id: null, session_id: live.sdkSessionId ?? "", uuid: randomUUID(),
         });
+        this.logger.info("sdk_turn_prepared", { sessionId: id, sdkSessionId: live.sdkSessionId, kind: "user", queryReused, coldImport,
+          importedMessages: coldImport ? input.request.messages.length : 0, contentBytes: Buffer.byteLength(JSON.stringify(content)), preparationMs: Date.now() - preparationStarted });
       }
       const reply = await waiting;
       live.lastRequestKey = requestKey;
       live.lastReply = reply;
       return reply;
     } catch (error) {
-      if (waiting) this.stop(live, this.sdkError(error));
-      throw error;
+      if (waiting) await this.stop(live, this.sdkError(error));
+      throw live.terminal ?? this.sdkError(error);
     } finally {
       live.busy = false;
       live.sink = undefined;
       live.lastTouched = Date.now();
+      void this.trimIdle().catch(() => this.logger.error("sdk_idle_trim_failed"));
     }
   }
 
@@ -482,20 +526,15 @@ export class SdkRuntime implements BridgeRuntime {
 
   async cancel(sessionId: string, reason: string): Promise<void> {
     const live = this.lives.get(sessionId);
-    if (live) this.stop(live, new BridgeError(499, "cancelled", reason));
+    if (live) await this.stop(live, new BridgeError(499, "cancelled", reason));
   }
 
   async close(): Promise<void> {
-    for (const live of this.lives.values()) this.stop(live, new BridgeError(499, "cancelled", "bridge shutdown"));
-    // Give the SDK's process/stream cleanup time to finish before index exits.
-    // A broken transport must not keep bridge shutdown blocked indefinitely.
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    try {
-      await Promise.race([
-        Promise.allSettled([...this.lives.values()].map((live) => live.loop)),
-        new Promise<void>((resolve) => { timer = setTimeout(resolve, 2_000); timer.unref(); }),
-      ]);
-    } finally { if (timer) clearTimeout(timer); }
+    this.closing = true;
+    clearInterval(this.maintenance);
+    await Promise.all([...this.lives.values()].map((live) => this.stop(live, new BridgeError(499, "cancelled", "bridge shutdown"))));
+    await this.processes.close();
+    this.lives.clear();
   }
 
   private createLive(sdkSessionId?: string): LiveSdk {
@@ -529,29 +568,12 @@ export class SdkRuntime implements BridgeRuntime {
     // alone leaves native subagents and generator commands on the old model.
     // Retire the idle query, then resume its official transcript with one
     // consistent model/environment. Late callbacks retain the retired epoch.
-    const query = live.query, loop = live.loop;
-    live.queryEpoch++;
-    live.inputs.close();
-    live.abort?.abort();
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    try {
-      query?.close!();
-      if (loop) await Promise.race([
-        loop,
-        new Promise<never>((_resolve, reject) => {
-          timer = setTimeout(() => reject(new Error("Native query did not close")), Math.min(5_000, Math.max(1, this.config.requestTimeoutMs)));
-        }),
-      ]);
-    } catch {
-      const failure = new BridgeError(502, "model_switch_failed", "The old native query could not be closed safely; no new model was started.");
-      this.stop(live, failure);
-      throw failure;
-    } finally { if (timer) clearTimeout(timer); }
+    try { await this.retireQuery(live); }
+    catch {
+      const error = new BridgeError(502, "model_switch_failed", "The old native process could not be verified stopped; no new model was started.");
+      await this.stop(live, error); throw error;
+    }
     if (live.terminal) throw live.terminal;
-    live.inputs = new InputQueue();
-    live.query = undefined;
-    live.loop = undefined;
-    live.abort = undefined;
     live.modelRoute = route;
     live.lastReply = undefined;
     live.lastRequestKey = undefined;
@@ -583,30 +605,12 @@ export class SdkRuntime implements BridgeRuntime {
       throw new BridgeError(409, "reasoning_switch_unavailable", "The native query cannot be closed safely for a reasoning change.");
     }
     const previous = live.reasoningKey;
-    const query = live.query;
-    const loop = live.loop;
-    live.queryEpoch++;
-    live.inputs.close();
-    live.abort?.abort();
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    try {
-      query.close!();
-      if (loop) await Promise.race([
-        loop,
-        new Promise<never>((_resolve, reject) => {
-          timer = setTimeout(() => reject(new Error("Native query did not close")), Math.min(5_000, Math.max(1, this.config.requestTimeoutMs)));
-        }),
-      ]);
-    } catch {
-      const failure = new BridgeError(502, "reasoning_switch_failed", "The old native query could not be closed safely; the reasoning level was not changed.");
-      this.stop(live, failure);
-      throw failure;
-    } finally { if (timer) clearTimeout(timer); }
+    try { await this.retireQuery(live); }
+    catch {
+      const error = new BridgeError(502, "reasoning_switch_failed", "The old native process could not be verified stopped; no new reasoning level was started.");
+      await this.stop(live, error); throw error;
+    }
     if (live.terminal) throw live.terminal;
-    live.inputs = new InputQueue();
-    live.query = undefined;
-    live.loop = undefined;
-    live.abort = undefined;
     live.reasoningKey = next;
     live.lastReply = undefined;
     live.lastRequestKey = undefined;
@@ -664,12 +668,14 @@ export class SdkRuntime implements BridgeRuntime {
   }
 
   private async updateCatalog(live: LiveSdk, input: RuntimeRequest): Promise<void> {
+    const started = Date.now();
     if (!live.catalog) throw new BridgeError(503, "dynamic_tools_unavailable", "The live SDK session has no mutable Droid MCP catalog");
     if (await live.catalog.update(selectDroidMcpTools(input.request.tools, this.config.desktopProfile))) {
       await this.waitForCatalogVisibility(live);
       live.events.push({ at: now(), type: "droid_catalog_updated", data: {
         tools: live.catalog.definitions().map((tool) => tool.name), visibility: "cli_tool_names_confirmed", schemaVisibility: "revision_name_confirmed",
       } });
+      this.logger.info("droid_catalog_updated", { sdkSessionId: live.sdkSessionId, tools: live.catalog.definitions().length, catalogMs: Date.now() - started });
     }
   }
 
@@ -698,29 +704,87 @@ export class SdkRuntime implements BridgeRuntime {
   }
 
   private async startQuery(input: RuntimeRequest, live: LiveSdk): Promise<void> {
-    this.ensureQueryCapacity(live);
+    if (live.retiring) await live.retiring;
+    // Reserve synchronously, before capacity eviction or SDK import can yield.
     live.starting = true;
-    try { await this.startQueryImpl(input, live); }
-    finally { live.starting = false; }
+    try {
+      await this.ensureQueryCapacity(live);
+      if (live.terminal || this.closing) throw live.terminal ?? new BridgeError(503, "bridge_shutting_down", "Bridge is shutting down");
+      await this.startQueryImpl(input, live);
+    } finally { live.starting = false; }
   }
 
-  private ensureQueryCapacity(current: LiveSdk): void {
-    const running = [...this.lives.values()].filter((live) => live !== current && !live.terminal && (live.query || live.starting));
-    if (running.length < this.config.maxSessions) return;
-    const idle = running.filter((live) => this.config.persistSessions && live.query && live.sdkSessionId && !live.active && !live.busy && !live.outbox.length && !live.backgroundTasks.size && !live.approvals.size)
-      .sort((left, right) => left.lastTouched - right.lastTouched)[0];
-    if (!idle) throw new BridgeError(429, "sdk_session_limit", "No safely resumable idle Claude Code process is available; close a session or raise BRIDGE_MAX_SESSIONS");
-    // Preserve the official session identity and resume it if its user returns.
-    idle.queryEpoch++;
-    idle.inputs.close();
-    idle.abort?.abort();
-    try { void idle.query?.interrupt?.().catch(() => undefined); } catch { /* best effort */ }
-    try { idle.query?.close?.(); } catch { /* already closed */ }
-    idle.inputs = new InputQueue();
-    idle.query = undefined;
-    idle.loop = undefined;
-    idle.abort = undefined;
-    idle.events.push({ at: now(), type: "sdk_idle_evicted", data: { sdkSessionId: idle.sdkSessionId } });
+  private slotsInUse(): number {
+    return this.processes.size + [...this.lives.values()].filter((live) => !live.terminal && (live.query || live.starting) && (!live.processOwner || !this.processes.has(live.processOwner))).length;
+  }
+
+  private async ensureQueryCapacity(current: LiveSdk): Promise<void> {
+    const owners = new Set([...this.lives.values()].filter((live) => !live.terminal && (live.query || live.starting)).flatMap((live) => live.processOwner ? [live.processOwner] : []));
+    if (this.processes.hasOrphans(owners)) {
+      await this.processes.reap(owners);
+      if (this.processes.hasOrphans(owners)) throw new BridgeError(503, "sdk_cleanup_incomplete", "An earlier owned process could not be stopped; no new process was started", { retry_after: 1 });
+    }
+    while (this.slotsInUse() > this.config.maxSessions) {
+      const idle = this.idleLives().find((live) => live !== current);
+      if (!idle) throw new BridgeError(429, "rate_limit_error", "All Claude Code slots have live work or are still stopping. Retry after a slot is released.", { retry_after: 1 });
+      // Fence it before the first await: two admissions cannot evict the same query.
+      await this.retireQuery(idle);
+      this.logger.info("sdk_idle_evicted", { sdkSessionId: idle.sdkSessionId });
+      idle.events.push({ at: now(), type: "sdk_idle_evicted", data: { sdkSessionId: idle.sdkSessionId } });
+    }
+  }
+
+  private idleLives(): LiveSdk[] {
+    return [...this.lives.values()].filter((live) => this.config.persistSessions && live.query && live.sdkSessionId && !live.terminal && !live.active && !live.busy && !live.starting
+      && !live.pending.size && !live.handlerArrivals.size && !live.candidates.size && !live.hostResultConsumptions.size
+      && !live.outbox.length && !live.backgroundTasks.size && !live.approvals.size).sort((a, b) => a.lastTouched - b.lastTouched);
+  }
+
+  private async trimIdle(): Promise<void> {
+    const idle = this.idleLives();
+    await Promise.all(idle.slice(0, Math.max(0, idle.length - (this.config.maxIdleSessions ?? 4))).map(async (live) => {
+      await this.retireQuery(live);
+      this.logger.info("sdk_idle_evicted", { sdkSessionId: live.sdkSessionId, reason: "idle-pool-limit" });
+    }));
+  }
+
+  private retireQuery(live: LiveSdk): Promise<void> {
+    if (live.retiring) return live.retiring;
+    const query = live.query;
+    const owner = live.processOwner;
+    live.queryEpoch++;
+    live.inputs.close();
+    live.query = undefined;
+    live.loop = undefined;
+    live.inputs = new InputQueue();
+    let closeFailed = false;
+    try { query?.close?.(); } catch { closeFailed = true; }
+    live.abort?.abort();
+    live.abort = undefined;
+    const owned = owner && this.processes.has(owner);
+    const retiring = (owner ? this.processes.stop(owner) : Promise.resolve()).then(() => {
+      if (live.processOwner === owner) live.processOwner = undefined;
+      if (closeFailed && !owned) throw new Error("Cannot verify native close without process ownership");
+    }).finally(() => { if (live.retiring === retiring) live.retiring = undefined; });
+    live.retiring = retiring;
+    return retiring;
+  }
+
+  async maintain(): Promise<void> {
+    await this.trimIdle();
+    const owners = new Set([...this.lives.values()].filter((live) => !live.terminal && (live.query || live.starting)).flatMap((live) => live.processOwner ? [live.processOwner] : []));
+    await this.processes.reap(owners);
+    for (const [id, live] of this.lives) {
+      if (!live.busy && !live.starting && !live.query && !live.active && !live.pending.size && !live.approvals.size
+          && (!live.processOwner || !this.processes.has(live.processOwner))) this.lives.delete(id);
+    }
+  }
+
+  async forget({ bridgeSessionId: sessionId }: import("./types.js").RetiredSession): Promise<void> {
+    const live = this.lives.get(sessionId);
+    if (!live || live.active || live.busy || live.pending.size || live.approvals.size || live.backgroundTasks.size) return;
+    await this.stop(live, new BridgeError(409, "session_expired", "Retained session expired"));
+    this.lives.delete(sessionId);
   }
 
   private async startQueryImpl(input: RuntimeRequest, live: LiveSdk): Promise<void> {
@@ -803,7 +867,13 @@ export class SdkRuntime implements BridgeRuntime {
     }
     const abort = new AbortController();
     live.abort = abort;
+    const processOwner = randomUUID();
+    live.processOwner = processOwner;
     const options: Record<string, unknown> = {
+      spawnClaudeCodeProcess: (options: import("@anthropic-ai/claude-agent-sdk").SpawnOptions) => {
+        if (live.terminal || live.queryEpoch !== epoch || this.closing) throw new Error("Native query was retired before spawn");
+        return this.processes.spawn(processOwner, options);
+      },
       tools: { type: "preset", preset: "claude_code" }, includePartialMessages: true,
       cwd: resolveCwd(input, this.config), persistSession: this.config.persistSessions,
       ...(this.config.maxTurns > 0 ? { maxTurns: this.config.maxTurns } : {}), mcpServers: { droid: server },
@@ -838,6 +908,7 @@ export class SdkRuntime implements BridgeRuntime {
     options.hooks = { PreToolUse: [{ hooks: [async (hook: { tool_name?: string; tool_use_id?: string }) => {
         if (live.queryEpoch !== epoch) return { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: "This native query has been retired." } };
         if (live.terminal) return { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: "The host session has ended." } };
+        if (hook.tool_name && !isDroidMcpName(hook.tool_name)) live.nativeCallsThisRequest = true;
         // Droid already ran a batched Task; its handler must return what Droid reported.
         const prefetched = hook.tool_use_id !== undefined && live.prefetched.has(hook.tool_use_id);
         if (live.cancelledTurn && !prefetched) {
@@ -889,7 +960,7 @@ export class SdkRuntime implements BridgeRuntime {
       this.rejectAuth(live, mode, "unknown", `Declared BRIDGE_AUTH=${mode} but the SDK query does not expose accountInfo(). Refusing to send a prompt.`);
       return;
     }
-    const timeoutMs = Math.min(SDK_START_TIMEOUT_MS, Math.max(1, this.config.requestTimeoutMs));
+    const timeoutMs = Math.min(this.config.sdkStartTimeoutMs ?? SDK_START_TIMEOUT_MS, Math.max(1, this.config.requestTimeoutMs));
     const started = Date.now();
     let info: Record<string, unknown>;
     try {
@@ -925,7 +996,7 @@ export class SdkRuntime implements BridgeRuntime {
   private observeInheritAuth(live: LiveSdk): void {
     const query = live.query;
     if (!query?.accountInfo) return;
-    const timeoutMs = Math.min(SDK_START_TIMEOUT_MS, Math.max(1, this.config.requestTimeoutMs));
+    const timeoutMs = Math.min(this.config.sdkStartTimeoutMs ?? SDK_START_TIMEOUT_MS, Math.max(1, this.config.requestTimeoutMs));
     void withTimeout(query.accountInfo(), timeoutMs).then((info) => {
       if (live.terminal) return;
       const observed = observationFrom(info);
@@ -944,7 +1015,7 @@ export class SdkRuntime implements BridgeRuntime {
     this.authVerification = record;
     const gated = mode === "subscription" || mode === "anthropic-api";
     const ok = mode === "claude-config" ? Boolean(this.config.claudeConfig && !claudeConfigNeedsLogin(this.config.claudeConfig)) || classification.kind !== "unknown" : gated ? classification.kind === mode : true;
-    this.logger.info("auth_verified", { ...record, ok, ...startupMs !== undefined && { startupMs } });
+    this.logger.info("auth_verified", { ...record, email: undefined, ok, ...startupMs !== undefined && { startupMs } });
   }
 
   private rejectAuth(live: LiveSdk, mode: BridgeConfig["authMode"], kind: AuthClassification["kind"], message: string): never {
@@ -1164,6 +1235,21 @@ export class SdkRuntime implements BridgeRuntime {
         : iterator;
       for await (const message of source) {
         if (live.terminal || live.queryEpoch !== epoch) return;
+        if (message.type === "system" && message.subtype === "api_retry" && (message.error_status === 429 || message.error_status === 529)) {
+          const retryAfter = typeof message.retry_delay_ms === "number" && Number.isFinite(message.retry_delay_ms) && message.retry_delay_ms >= 0
+            ? Math.max(1, Math.ceil(message.retry_delay_ms / 1000)) : undefined;
+          const heldForNativeWork = !this.coldImportSafe(live);
+          live.upstreamBackoff = { at: now(), status: message.error_status, retryAfter, heldForNativeWork };
+          this.logger.warn("upstream_retry", { status: message.error_status, attempt: message.attempt, retryAfter, heldForNativeWork });
+          if (!heldForNativeWork) {
+            const mapped = upstreamError({ status: message.error_status })!;
+            throw new BridgeError(mapped.status, mapped.code, mapped.message, retryAfter === undefined ? {} : { retry_after: retryAfter });
+          }
+        } else live.upstreamBackoff = undefined;
+        if (message.type === "assistant" && message.error) {
+          const mapped = upstreamError(message.error === "rate_limit" ? "rate_limit_error" : extractText(message));
+          if (mapped) throw mapped;
+        }
         live.watchdog?.touch();
         live.sink?.activity?.();
         if (message.type === "system" && message.subtype === "init" && typeof message.apiKeySource === "string" && !live.initApiKeySource) {
@@ -1229,6 +1315,7 @@ export class SdkRuntime implements BridgeRuntime {
                 live.candidates.set(use.id, call);
               }
             } else {
+              live.nativeCallsThisRequest = true;
               live.sink?.toolTrace(use.name, claudeToolTraceDetail(use.name, use.input));
               live.events.push({ at: now(), type: "claude_code_tool", data: { name: use.name, id: use.id } });
             }
@@ -1278,6 +1365,7 @@ export class SdkRuntime implements BridgeRuntime {
             continue;
           }
           live.active = false;
+          live.turnStartedAt = undefined;
           this.publish(live, this.makeTurn(live, [], "end_turn"));
         }
       }
@@ -1300,6 +1388,11 @@ export class SdkRuntime implements BridgeRuntime {
   }
 
   private makeTurn(live: LiveSdk, extra: ContentBlock[], stop: "tool_use" | "end_turn"): RuntimeTurn {
+    for (const id of live.mailbox.pruneCompleted()) {
+      live.resultFingerprints.delete(id); live.hostCompletionFingerprints.delete(id);
+      live.claimedHandlers.delete(id); live.retiredCandidates.delete(id);
+    }
+    if (live.events.length > 1000) live.events.splice(0, live.events.length - 1000);
     const text = live.streamed.trim();
     const content: ContentBlock[] = text ? [{ type: "text", text }, ...extra] : [...live.blocks, ...extra];
     if (!content.length) content.push({ type: "text", text: "" });
@@ -1329,6 +1422,7 @@ export class SdkRuntime implements BridgeRuntime {
         onTimeout: (kind) => this.stop(live, new BridgeError(504, "sdk_turn_timeout",
           kind === "idle" ? "SDK turn made no progress and was cancelled" : "SDK turn exceeded its maximum duration and was cancelled")),
       });
+      live.turnStartedAt = Date.now();
       live.watchdog = watchdog;
       const finish = (): void => {
         watchdog.dispose();
@@ -1357,14 +1451,17 @@ export class SdkRuntime implements BridgeRuntime {
   }
 
   private sdkError(error: unknown): BridgeError {
-    const converted = asBridgeError(error);
-    const message = redactClaudeConfigText(this.config.claudeConfig, converted.message);
-    return message === converted.message ? converted : new BridgeError(converted.status, converted.code, message);
+    const converted = upstreamError(error) ?? asBridgeError(error);
+    const message = redactValue(redactClaudeConfigText(this.config.claudeConfig, converted.message));
+    return message === converted.message ? converted : new BridgeError(converted.status, converted.code, message, converted.extra);
   }
 
-  private stop(live: LiveSdk, error: BridgeError): void {
-    if (live.terminal) return;
+  private stop(live: LiveSdk, error: BridgeError): Promise<void> {
+    if (live.terminal) return live.cleanup ?? Promise.resolve();
     error = this.sdkError(error);
+    if (([429, 529].includes(error.status) || error.code === "sdk_start_timeout") && this.coldImportSafe(live)) {
+      error = new BridgeError(error.status, error.code, error.message, { ...error.extra, retry_from_history: true });
+    }
     live.terminal = error;
     live.active = false;
     live.cancelledTurn = undefined;
@@ -1378,20 +1475,41 @@ export class SdkRuntime implements BridgeRuntime {
     live.candidates.clear();
     live.prefetched.clear();
     this.settleBatches(live);
-    live.abort?.abort();
-    // Do not await interrupt before close: a dead subprocess must not delay cancellation.
-    try { void live.query?.interrupt?.().catch(() => undefined); } catch { /* best effort */ }
-    try { live.query?.close?.(); } catch { /* already closed */ }
+    try { void live.query?.interrupt?.().catch(() => undefined); } catch { /* Best effort; verified tree cleanup follows. */ }
+    live.cleanup = this.retireQuery(live).catch(() => {
+      // Ownership remains in the reaper and capacity stays occupied on failure.
+      this.logger.error("sdk_cleanup_incomplete", { sdkSessionId: live.sdkSessionId });
+      live.terminal = new BridgeError(error.status, error.code, error.message, { ...error.extra, retry_from_history: false });
+    });
     live.waiter?.reject(error);
     live.outbox.length = 0;
+    live.current = undefined;
+    live.lastReply = undefined;
+    live.lastRequestKey = undefined;
+    live.blocks = [];
+    live.streamed = "";
+    live.pending.clear();
+    live.retiredCandidates.clear();
+    live.claimedHandlers.clear();
+    live.backgroundTasks.clear();
+    live.usage = new UsageLedger();
+    return live.cleanup;
+  }
+
+  private coldImportSafe(live: LiveSdk): boolean {
+    return !live.pending.size && !live.handlerArrivals.size && !live.hostResultConsumptions.size && !live.approvals.size
+      && !live.backgroundTasks.size && !live.candidates.size && !live.nativeCallsThisRequest && !live.prefetched.size
+      && ![...live.claimedHandlers].some((id) => !live.resultFingerprints.has(id));
   }
 
   private async loadSdk(): Promise<SdkHandle> {
     if (this.sdk) return this.sdk;
     try {
+      const started = Date.now();
       const sdk = await import("@anthropic-ai/claude-agent-sdk");
       if (!sdk.query || !sdk.tool || !sdk.createSdkMcpServer) throw new Error("SDK exports missing query/tool/createSdkMcpServer");
       this.sdk = sdk as unknown as SdkHandle;
+      this.logger.info("sdk_imported", { importMs: Date.now() - started });
       return this.sdk;
     } catch (error) { throw new BridgeError(503, "sdk_unavailable", error instanceof Error ? error.message : String(error)); }
   }
@@ -1429,7 +1547,7 @@ function canonicalJson(value: unknown): string {
 }
 
 function resultFingerprint(result: DroidResult): string {
-  return JSON.stringify({ tool_use_id: result.tool_use_id, content: result.content, is_error: Boolean(result.is_error) });
+  return createHash("sha256").update(JSON.stringify({ tool_use_id: result.tool_use_id, content: result.content, is_error: Boolean(result.is_error) })).digest("hex");
 }
 
 function mcpContent(content: string | ContentBlock[]): Record<string, unknown>[] {

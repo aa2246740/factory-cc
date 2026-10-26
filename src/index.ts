@@ -42,11 +42,14 @@ export function installShutdownHandlers(
   };
   const onInterrupt = (): void => shutdown("SIGINT");
   const onTerminate = (): void => shutdown("SIGTERM");
+  const onHangup = (): void => shutdown("SIGHUP");
   process.on("SIGINT", onInterrupt);
   process.on("SIGTERM", onTerminate);
+  process.on("SIGHUP", onHangup);
   return () => {
     process.removeListener("SIGINT", onInterrupt);
     process.removeListener("SIGTERM", onTerminate);
+    process.removeListener("SIGHUP", onHangup);
     if (deadline) clearTimeout(deadline);
   };
 }

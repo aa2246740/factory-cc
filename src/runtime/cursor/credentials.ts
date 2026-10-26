@@ -42,9 +42,9 @@ export function cursorCredentialPath(dataDir: string): string {
   return join(dataDir, "cursor-auth.json");
 }
 
-export function readCursorCredential(dataDir: string): CursorCredential | undefined {
+export function readCursorCredential(dataDir: string, readOnlyFile = cursorCredentialPath(dataDir)): CursorCredential | undefined {
   try {
-    const parsed = JSON.parse(readFileSync(cursorCredentialPath(dataDir), "utf8")) as Partial<CursorCredential>;
+    const parsed = JSON.parse(readFileSync(readOnlyFile, "utf8")) as Partial<CursorCredential>;
     if (parsed?.version !== 1 || typeof parsed.apiKey !== "string" || !parsed.apiKey || typeof parsed.createdAtMs !== "number") return undefined;
     return {
       version: 1,
@@ -80,7 +80,7 @@ function expired(credential: CursorCredential | undefined, now: number): boolean
 /** An env key is used as-is. Only a stored file can be known expired before the request. */
 export function cursorStoredKeyExpired(dataDir: string, env: NodeJS.ProcessEnv, now = Date.now()): boolean {
   if (env.CURSOR_API_KEY?.trim()) return false;
-  return expired(readCursorCredential(dataDir), now);
+  return expired(readCursorCredential(dataDir, env.BRIDGE_CURSOR_AUTH_FILE), now);
 }
 
 export function cursorExpiryWarning(status: CursorCredentialStatus, now = Date.now()): string | undefined {
@@ -94,13 +94,13 @@ export function cursorExpiryWarning(status: CursorCredentialStatus, now = Date.n
 export function cursorApiKey(dataDir: string, env: NodeJS.ProcessEnv, now = Date.now()): string | undefined {
   const fromEnv = env.CURSOR_API_KEY?.trim();
   if (fromEnv) return fromEnv;
-  const stored = readCursorCredential(dataDir);
+  const stored = readCursorCredential(dataDir, env.BRIDGE_CURSOR_AUTH_FILE);
   if (!stored || expired(stored, now)) return undefined;
   return stored.apiKey;
 }
 
 export function cursorCredentialStatus(dataDir: string, env: NodeJS.ProcessEnv, now = Date.now()): CursorCredentialStatus {
-  const stored = readCursorCredential(dataDir);
+  const stored = readCursorCredential(dataDir, env.BRIDGE_CURSOR_AUTH_FILE);
   const fileExpired = expired(stored, now);
   if (env.CURSOR_API_KEY?.trim()) {
     return { source: "env", loggedIn: true, expired: false, accountPresent: Boolean(stored?.email) && !fileExpired, ...(stored?.apiKeyExpiresAtMs && !fileExpired ? { expiresAt: new Date(stored.apiKeyExpiresAtMs).toISOString() } : {}) };

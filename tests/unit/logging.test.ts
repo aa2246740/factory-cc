@@ -32,8 +32,8 @@ describe("bridge log files", () => {
     expect(readFileSync(old, "utf8")).toBe("earlier line\nnext line\n");
   });
 
-  it("default to a 50 MB limit and do not rotate below it", () => {
-    expect(DEFAULT_LOG_MAX_BYTES).toBe(50 * 1024 * 1024);
+  it("default to a 10 MB limit and do not rotate below it", () => {
+    expect(DEFAULT_LOG_MAX_BYTES).toBe(10 * 1024 * 1024);
     const file = join(dir, "turns.jsonl");
     for (let line = 0; line < 50; line += 1) appendLogLine(file, `line ${line}`);
     expect(readFileSync(file, "utf8").trim().split("\n")).toHaveLength(50);
@@ -60,13 +60,14 @@ describe("bridge log files", () => {
     expect(mode(file)).toBe(0o600);
   });
 
-  it("rotate through the logger too, and a line longer than the limit is still written", () => {
+  it("rotate through the logger and replace an oversized record with a bounded marker", () => {
     vi.stubEnv("BRIDGE_LOG_MAX_BYTES", "120");
     const logger = createLogger(dir);
     for (let index = 0; index < 6; index += 1) logger.info("event", { index });
     expect(statSync(join(dir, "bridge.jsonl.1")).size).toBeGreaterThan(0);
     logger.info("huge", { note: "y".repeat(500) });
-    expect(readFileSync(join(dir, "bridge.jsonl"), "utf8")).toContain("y".repeat(500));
+    expect(readFileSync(join(dir, "bridge.jsonl"), "utf8")).toContain("log_record_omitted");
+    expect(statSync(join(dir, "bridge.jsonl")).size).toBeLessThanOrEqual(120);
   });
 
   it("ignores a nonsensical limit override", () => {
@@ -75,4 +76,13 @@ describe("bridge log files", () => {
     for (let line = 0; line < 5; line += 1) appendLogLine(file, `line ${line}`);
     expect(() => statSync(`${file}.1`)).toThrow();
   });
+});
+
+it("caps oversized legacy archives when the configured limit is lowered", () => {
+  vi.stubEnv("BRIDGE_LOG_MAX_BYTES", "100");
+  const file = join(dir, "legacy.jsonl");
+  writeFileSync(`${file}.1`, "old archive\n".repeat(50));
+  appendLogLine(file, "new record");
+  expect(statSync(`${file}.1`).size).toBeLessThanOrEqual(100);
+  expect(readFileSync(`${file}.1`, "utf8")).not.toContain("archiveold");
 });

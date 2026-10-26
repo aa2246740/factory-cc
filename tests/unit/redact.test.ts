@@ -15,3 +15,7 @@ describe("redaction", () => {
     expect(raw.messages[0]!.content).toContain(token);
   });
 });
+
+it("keeps account addresses out of diagnostics", () => {
+  expect(JSON.stringify(redactJson({ note: "account fixture@example.invalid" }))).not.toContain("fixture@example.invalid");
+});
