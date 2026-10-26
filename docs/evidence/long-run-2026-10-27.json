@@ -1,0 +1,145 @@
+{
+  "schemaVersion": 1,
+  "baselineCommit": "bef7703",
+  "runtimeCommit": "2c3e337f8aaee3c5e48dbf7c40bbe4ef50d2bf62",
+  "harnessCommit": "60a2145f165b2c4b16b5f0791e7910f69ad9bd3c",
+  "commit": "2c3e337f8aaee3c5e48dbf7c40bbe4ef50d2bf62",
+  "distTreeSha256": "012a3c4455e49c1a6c058e409da34dc1f14bc01700b06f1c4a7f180f684c1b19",
+  "node": "v26.7.0",
+  "checks": {
+    "typecheck": "PASS",
+    "build": "PASS",
+    "testPassed": 885,
+    "testSkipped": 3,
+    "testFilesPassed": 82,
+    "testFilesSkipped": 1
+  },
+  "acceleratedSoak": {
+    "sessions": 1000,
+    "errors": 0,
+    "childProcesses": 1000,
+    "verifiedDeaths": 1000,
+    "leakedProcesses": 0,
+    "slotsAfterClose": 0,
+    "retainedSessions": 32,
+    "gc": true,
+    "heapGrowthBytes": 2080088,
+    "steadyHeapGrowthBytes": 542496,
+    "elapsedMs": 281422,
+    "fixture": "fake SDK protocol, real owned Node children",
+    "logFileMaxBytes": 65536,
+    "largestLogGenerationBytes": 65424
+  },
+  "realSdkLocalhost": {
+    "realSdk": true,
+    "provider": "localhost fixture",
+    "warmTurns": 3,
+    "errorCases": [
+      {
+        "expected": 429,
+        "actual": 429,
+        "retryAfter": null
+      },
+      {
+        "expected": 529,
+        "actual": 529,
+        "retryAfter": "1"
+      }
+    ],
+    "cancelAfterContent": true,
+    "realCliProcesses": 6,
+    "observedOwnedPids": 15,
+    "leakedProcesses": 0,
+    "slotsAfterClose": 0,
+    "providerRequests": 9
+  },
+  "providerMission": {
+    "auth": "existing helper-backed claude-config gateway; no official billing assertion",
+    "orchestrator": "haiku alias",
+    "workers": "Cursor Composer 2.5",
+    "maxSessions": 4,
+    "gates": {
+      "droidSuccessful": true,
+      "missionCompleted": true,
+      "featuresDone": true,
+      "validatorsCompleted": true,
+      "handoffsObserved": true,
+      "validationGreen": true,
+      "productTests": true,
+      "testsPreserved": true
+    },
+    "completedWorkers": 3,
+    "failedWorkerAttempts": 1,
+    "shutdown": {
+      "step": "normal-SIGTERM",
+      "bridgeExit": 0,
+      "childrenRemainingBeforeHarnessCleanup": 0
+    },
+    "cleanup": {
+      "step": "cleanup",
+      "leakedProcesses": 0,
+      "port18797Free": true,
+      "elapsedMs": 766483
+    },
+    "retryObservation": "Droid recorded one model_rate_limited worker outcome; its orchestrator retried and all completion gates passed."
+  },
+  "bridgeTelemetry": {
+    "admission": {
+      "count": 92,
+      "minMs": 3,
+      "medianMs": 12.0,
+      "p95Ms": 30,
+      "maxMs": 78
+    },
+    "preparation": {
+      "count": 23,
+      "minMs": 2,
+      "medianMs": 5,
+      "p95Ms": 552,
+      "maxMs": 613
+    },
+    "accountInfoStartup": {
+      "count": 2,
+      "minMs": 416,
+      "medianMs": 447.5,
+      "p95Ms": 479,
+      "maxMs": 479
+    },
+    "sdkImport": {
+      "count": 1,
+      "minMs": 79,
+      "medianMs": 79,
+      "p95Ms": 79,
+      "maxMs": 79
+    },
+    "changedCatalog": {
+      "count": 1,
+      "minMs": 81,
+      "medianMs": 81,
+      "p95Ms": 81,
+      "maxMs": 81
+    },
+    "warmPreparations": 21,
+    "coldImports": 2,
+    "cursorEvents": {
+      "cursor_run_params": 13
+    }
+  },
+  "historicalUnknowns": [
+    "Old roughly 30-child tree cannot be reconstructed; baseline already aborted/interrupted/closed the SDK query.",
+    "No retained diagnostic explains reported 54 launchd runs / EX_CONFIG 78."
+  ],
+  "limits": [
+    "Accelerated and isolated CLI acceptance is not weeks of production uptime or desktop approval UI acceptance.",
+    "Official Anthropic billing remains BLOCKED_AUTH.",
+    "An early isolation mistake wrote one test transcript under real Claude state; it was left untouched and subsequent runs used isolated CLI state."
+  ],
+  "evidenceTrail": "/Volumes/Workspace/Scratch/factory-cc-provider-feasibility/long-run/EVIDENCE.md",
+  "identityAudit": {
+    "recordedUniquePids": 2334,
+    "finalLiveResultWrittenAt": "2026-10-26T19:13:13.032582+00:00",
+    "ownedSurvivors": 0,
+    "pidReuseMatches": 12,
+    "signalSent": false
+  }
+}

@@ -46,9 +46,11 @@ npm run desktop -- uninstall
 
 卸载先停止服务，撤销自己拥有的模型和选择，保留安装后用户添加或修改的其它设置，再删除 plist 和自己的状态目录，包括 Bridge 会话与日志。未改动的 settings 会还原首次备份。
 
-当前仓库位于外置卷 `/Volumes/Workspace`。该卷未挂载时服务无法启动；Node 安装路径也必须继续存在。移动或归档这个 worktree 前先卸载，再从固定位置重新安装。`status` 会报告 plist、launchd、仓库入口和本端口 `/healthz` 的情况；健康响应不证明上游认证或真实工具审批已通过。
+当前仓库位于外置卷 `/Volumes/Workspace`。该卷未挂载时启动器会等待并退避重试；Node 安装路径也必须继续存在。移动或归档这个 worktree 前先卸载，再从固定位置重新安装。`status` 会报告 plist、launchd、仓库入口和本端口 `/healthz` 的情况；健康响应不证明上游认证或真实工具审批已通过。
 
 离线测试没有验证真实桌面流程。安装后请在 Droid desktop 刷新或重启，确认 Claude Code 模型出现；在两个不同项目分别询问当前目录，核对各自路径；用一次文件编辑和命令运行核对 Droid 的审批 UI；在 spec mode 确认未批准前不能写入或执行，并检查退出 spec 后才执行。最后修改模型映射并运行 restart，检查菜单同步。这些 live checks 会调用你自己的模型配置，请由你在本机执行。
+
+长期运行默认最多保留 4 个可恢复的空闲进程；释放时核实本 bridge 所有进程树退出后再归还槽位。外置盘或启动文件缺失时，启动器等待并退避重试；日志轮转，过期空闲会话定期裁剪。`status` 增加需要 admin 认证的进程、槽位、待处理回调和 reaper 状态。升级和排障见 [OPERATIONS](docs/OPERATIONS.md)，事故核实见 [LONG-RUN-INCIDENT](docs/LONG-RUN-INCIDENT.md)。
 
 ## 已有 Claude Code 和 Droid：直接启动
 
@@ -195,7 +197,7 @@ npm run configure-hooks -- --hooks "$PROJECT/.factory/hooks.json" --config "$PWD
 
 `configure-hooks` 读取 `BRIDGE_HOOK_TOKEN`，它必须和正在运行的 Bridge 一致，用法和 `BRIDGE_ADMIN_TOKEN` 相同。这个令牌只接受 `POST /internal/host-events`；其他 `/internal/*` 只接受管理员令牌。Bridge 与 wrapper 需共享同一组 `BRIDGE_ADMIN_TOKEN` / `BRIDGE_CLIENT_TOKEN` / `BRIDGE_HOOK_TOKEN`，并把 `BRIDGE_SDK_CWD` 指向目标项目。wrapper 保留 `HOME`，通过 `FACTORY_HOME_OVERRIDE` 隔离 Factory 数据；退出或取消时只清理本次启动拥有的会话。交互启动请使用 wrapper：Factory UI 的退出 hook 无法继承 Agent 进程里的会话绑定，需要本次启动的身份才能准确结束对应会话。进程被强制杀死、来不及发送结束事件时，应使用控制页取消遗留会话。
 
-`BRIDGE_REQUEST_TIMEOUT_MS`（默认 10 分钟）现在是**空闲**期限，不再是单次响应的绝对期限：每条 SDK 消息、文本增量或工具事件都会重新计时，只有持续没有进展才超时；等待控制页审批期间暂停计时，审批自己的期限是 `BRIDGE_APPROVAL_TIMEOUT_MS`（默认 30 分钟）。另有绝对上限 `BRIDGE_TURN_MAX_MS`（默认 2 小时）。超时先调用 SDK `interrupt()`：5 秒内收尾则会话回到 IDLE 并可续接，否则标记 FAILED 并终止进程。流式响应立即发送 `message_start`，之后每 15 秒发送一次 `event: ping`。注意：原生工具若长时间既不输出也不结束（例如跑超过 10 分钟的测试），同样算空闲，需要时调大该值。会话停在外部工具往返上（Droid 在跑长工具，或 Mission worker 在运行）时不会因空闲被停止，只受单个工具 14 天的绝对上限约束（`BRIDGE_TOOL_WAIT_MS`）。只有名额用尽（`BRIDGE_MAX_SESSIONS`，默认 32）、新请求本会得到 429 时，Bridge 才回收一个会话，并且它必须同时满足：停在工具上且没有请求在处理；自上次状态更新起空闲至少 `BRIDGE_TOOL_WAIT_TIMEOUT_MS`（默认 12 小时）；没有绑定存活的 Factory 主机；不在等 `StartMissionRun`、`ProposeMission`、`Task`，也不在等人回答的 `AskUser`。符合条件的取最久未活动的一个，标记为中断；没有符合条件的就照常返回 429。被回收、被取消或 Bridge 重启后的会话，其工具调用不会重放：Droid 之后再回传同一个结果得到 409，新的文本消息则新建会话，并把此前历史作为参考导入。官方结束事件会提前释放会话，无需等计时器。
+`BRIDGE_REQUEST_TIMEOUT_MS`（默认 10 分钟）现在是**空闲**期限，不再是单次响应的绝对期限：每条 SDK 消息、文本增量或工具事件都会重新计时，只有持续没有进展才超时；等待控制页审批期间暂停计时，审批自己的期限是 `BRIDGE_APPROVAL_TIMEOUT_MS`（默认 30 分钟）。另有绝对上限 `BRIDGE_TURN_MAX_MS`（默认 2 小时）。超时先调用 SDK `interrupt()`：5 秒内收尾则会话回到 IDLE 并可续接，否则标记 FAILED 并终止进程。流式响应随第一段内容发送 `message_start`，之后每 15 秒发送一次 `event: ping`；内容发送前的错误保留真实 HTTP 状态和已知 Retry-After。注意：原生工具若长时间既不输出也不结束（例如跑超过 10 分钟的测试），同样算空闲，需要时调大该值。会话停在外部工具往返上（Droid 在跑长工具，或 Mission worker 在运行）时不会因空闲被停止，只受单个工具 14 天的绝对上限约束（`BRIDGE_TOOL_WAIT_MS`）。只有名额用尽（`BRIDGE_MAX_SESSIONS`，默认 32）、新请求本会得到 429 时，Bridge 才回收一个会话，并且它必须同时满足：停在工具上且没有请求在处理；自上次状态更新起空闲至少 `BRIDGE_TOOL_WAIT_TIMEOUT_MS`（默认 12 小时）；没有绑定存活的 Factory 主机；不在等 `StartMissionRun`、`ProposeMission`、`Task`，也不在等人回答的 `AskUser`。符合条件的取最久未活动的一个，标记为中断；没有符合条件的就照常返回 429。被回收、被取消或 Bridge 重启后的会话，其工具调用不会重放：Droid 之后再回传同一个结果得到 409，新的文本消息则新建会话，并把此前历史作为参考导入。官方结束事件会提前释放会话，无需等计时器。
 
 这些默认值按以往 Droid Mission 的实际数据放宽：worker 做一个 feature 最多调用模型 342 次（42% 超过 64 次），orchestrator 在 `StartMissionRun` 上最长等了 4.7 小时、在 `AskUser` 上等了 5.2 小时，一个 orchestrator 会话前后跨了 238 小时并压缩了 14 次。所以 `BRIDGE_MAX_TURNS` 默认 0，即不限制 Claude Code 每条消息的模型调用次数；设为正数才启用上限。
 
@@ -203,7 +205,7 @@ Droid 压缩长对话时，先把对话以文本交给不带工具的摘要请�
 
 Mission worker 用 `EndFeatureRun` 报告 feature 完成后，Droid 立即结束这个 worker，并把这次调用记为取消，不会再把结果回传。这样 worker 的 Claude Code 进程就会一直等着。所以会话只剩 `EndFeatureRun` 待返回、没有请求在处理、没有待决审批、也没有绑定存活的 Factory 主机时，过 `BRIDGE_WORKER_END_GRACE_MS`（默认 2 分钟）就释放进程，日志记为 `mission_worker_released`。`EndFeatureRun` 失败时 Droid 会在几秒内回传错误，worker 继续工作，计时随之取消。之后若 Droid 仍回传那个结果，得到的是和其它中断会话一样的 409。
 
-日志在数据目录的 `logs/`，文件权限 `0600`，单个文件超过 50 MB 时轮转为 `.1`（只保留一代）。请求日志默认只记录请求体的 SHA-256、字节数和工具名，不含消息或提示词；需要完整请求体（已脱敏）时设置 `BRIDGE_LOG_BODIES=1`。
+日志在数据目录的 `logs/`，文件权限 `0600`，单个文件达到 10 MiB 前轮转为 `.1`（只保留一代），超大单行改记省略标记。请求日志默认只记录请求体的 SHA-256、字节数和工具名，不含消息或提示词；需要完整请求体（已脱敏）时设置 `BRIDGE_LOG_BODIES=1`。
 
 在目标项目安装自定义 Agent 生成入口：
 
