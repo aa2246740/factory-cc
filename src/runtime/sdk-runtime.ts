@@ -175,9 +175,8 @@ interface LiveSdk {
   /** Set while interrupt() waits for the aborted turn to end. */
   interrupting?: boolean;
   windDown?: () => void;
-  /** The user cancelled a Droid tool. Its native turn may only wind down, without
-   * tools; what the user sent next is pushed as its own turn once that turn ends. */
-  cancelledTurn?: { followup: ContentBlock[] };
+  /** Wind down the previous native response before delivering queued user input. */
+  turnHandoff?: TurnHandoff;
 }
 
 /**
@@ -188,6 +187,7 @@ interface LiveSdk {
 const BACKSTOP_SLACK_MS = INTERRUPT_GRACE_MS + 1_000;
 
 type DroidResult = { tool_use_id: string; content: string | ContentBlock[]; is_error?: boolean };
+type TurnHandoff = { reason: "cancelled" | "steering"; followup: ContentBlock[] };
 
 /**
  * Droid's whole result when the user picks "No, cancel" (each locale of its
@@ -201,6 +201,8 @@ const USER_CANCELLATIONS = new Set([
 ]);
 const CANCELLED_TOOL_NOTE = "The user cancelled or interrupted this tool call in Droid. Preserve any work already done. Do not retry it or try another way. Acknowledge the cancellation in one short sentence, then end your turn.";
 const CANCELLED_TURN_DENIAL = "BRIDGE_USER_CANCELLED: The user cancelled the previous tool call in Droid. Do not retry it or use any other tool now; acknowledge the cancellation and end your turn.";
+const STEERING_TOOL_NOTE = "A new user message is queued. This is the completed tool's actual result. Preserve work already done, finish the current response without starting another tool, then read the new user message and continue any unfinished task.";
+const STEERING_TURN_DENIAL = "BRIDGE_USER_TURN_PENDING: A new user message is queued. Finish the current response without using another tool, then read the new user turn and continue the task.";
 /**
  * accountInfo() resolves only when Claude Code answers its initialize request,
  * so this bounds process startup. A Mission starting several workers and Task
@@ -401,13 +403,13 @@ export class SdkRuntime implements BridgeRuntime {
       this.notifyApprovals(live);
       const requestKey = createHash("sha256").update(JSON.stringify({ request: input.request, role: input.role, cwd: resolveCwd(input, this.config), missionDir: input.headers["x-bridge-mission-dir"] })).digest("hex");
       if (requestKey === live.lastRequestKey && live.lastReply) return live.lastReply;
-      let results = latestToolResults(input, live.active || live.pending.size > 0);
-      if (!results.length && live.pending.size) {
-        // Droid can insert an assistant interruption marker after a cancelled
-        // Mission result. Only a cancellation for our pending callback may cross it.
-        results = collectToolResults(input.request.messages.filter((message) => message.role === "user"))
-          .filter((result) => live.pending.has(result.tool_use_id) && isUserCancellation(result));
-      }
+      const trailing = trailingUserMessages(input.request.messages);
+      // Droid may insert an assistant record between a completed tool and steering.
+      // Only callbacks this live query still owns can receive earlier user results.
+      const earlier = live.pending.size ? collectToolResults(input.request.messages
+        .slice(0, input.request.messages.length - trailing.length).filter((message) => message.role === "user"))
+        .filter((result) => live.pending.has(result.tool_use_id)) : [];
+      let results = [...earlier, ...latestToolResults(input, live.active || live.pending.size > 0)];
       if (input.recovery === "cold-import") results = [];
       // A conversation imported from history has no native callbacks to answer.
       // Its tool results are earlier history when the same message carries a new
@@ -435,10 +437,12 @@ export class SdkRuntime implements BridgeRuntime {
       if (modelRoute) await this.selectModel(live, modelRoute, results.length > 0);
       await this.selectReasoning(live, input, results.length > 0);
       const context = buildHostContext(input, resolveCwd(input, this.config));
-      // Droid ends its own turn when the user cancels a tool, without a request.
-      // Whatever arrives with that result later is the user's next turn, never
-      // context inside the tool result, where it would read as an injection.
-      const followup = results.some(isUserCancellation) ? this.followupContent(input, live, context) : [];
+      // A cancellation or an assistant separator ends Droid's previous response.
+      // Keep subsequent user input separate from the completed tool result.
+      const cancelled = results.some((result) => isUserCancellation(result) && !live.resultFingerprints.has(result.tool_use_id));
+      const followup = results.length && (cancelled || earlier.length) ? this.followupContent(input, live, context) : [];
+      const handoff: TurnHandoff | undefined = cancelled || followup.length
+        ? { reason: cancelled ? "cancelled" : "steering", followup } : undefined;
       const continuation = results.length && !followup.length ? this.continuationContent(input, live, context) : [];
       if ((continuation.length || followup.length) && results.every((result) => live.resultFingerprints.has(result.tool_use_id))) {
         throw new BridgeError(409, "stale_tool_result_context", "New host context cannot be attached to an already-delivered tool result");
@@ -457,7 +461,7 @@ export class SdkRuntime implements BridgeRuntime {
       if (live.query && input.request.tools !== undefined) await this.updateCatalog(live, input);
       if (live.terminal) throw live.terminal;
       if (results.length) {
-        this.submitResults(live, results, continuation, followup);
+        this.submitResults(live, results, continuation, handoff);
         live.lastHostContext = context;
         this.flushOutbox(live);
         this.logger.info("sdk_turn_prepared", { sessionId: id, sdkSessionId: live.sdkSessionId, kind: "tool-continuation", queryReused: true, preparationMs: Date.now() - preparationStarted });
@@ -646,7 +650,7 @@ export class SdkRuntime implements BridgeRuntime {
     return content.length ? [{ type: "text", text: "Host continuation context supplied by Droid with these tool results (not an additional user turn):" }, ...content] : [];
   }
 
-  /** The user's next turn after a cancellation, built like any new turn from all trailing user content. */
+  /** Queue the user's steering separately from the completed tool result. */
   private followupContent(input: RuntimeRequest, live: LiveSdk, context: string): ContentBlock[] {
     const blocks = trailingUserMessages(input.request.messages).flatMap((message) => asBlocks(message.content)).filter((block) => block.type !== "tool_result");
     if (!blocks.length) return [];
@@ -654,8 +658,11 @@ export class SdkRuntime implements BridgeRuntime {
       resolveCwd(input, this.config), { includeContext: context !== live.lastHostContext });
   }
 
-  private submitResults(live: LiveSdk, results: DroidResult[], continuation: ContentBlock[] = [], followup: ContentBlock[] = []): Array<"accepted" | "duplicate"> {
-    if (results.some((result) => isUserCancellation(result) && !live.resultFingerprints.has(result.tool_use_id))) live.cancelledTurn = { followup };
+  private submitResults(live: LiveSdk, results: DroidResult[], continuation: ContentBlock[] = [], handoff?: TurnHandoff): Array<"accepted" | "duplicate"> {
+    if (results.some((result) => !live.resultFingerprints.has(result.tool_use_id))) {
+      if (handoff) live.turnHandoff = handoff;
+      else if (results.some((result) => isUserCancellation(result) && !live.resultFingerprints.has(result.tool_use_id))) live.turnHandoff = { reason: "cancelled", followup: [] };
+    }
     let attached = false;
     return results.map((result) => {
       const fresh = !live.resultFingerprints.has(result.tool_use_id);
@@ -664,7 +671,9 @@ export class SdkRuntime implements BridgeRuntime {
       // validateResults already proved a repeat has the same fingerprint. What the
       // mailbox kept may carry host continuation text, so do not compare against it.
       if (!fresh) return "duplicate" as const;
-      const extra: ContentBlock[] = isUserCancellation(result) ? [{ type: "text", text: CANCELLED_TOOL_NOTE }] : [];
+      const note = isUserCancellation(result) ? CANCELLED_TOOL_NOTE
+        : live.turnHandoff?.reason === "steering" ? STEERING_TOOL_NOTE : undefined;
+      const extra: ContentBlock[] = note ? [{ type: "text", text: note }] : [];
       if (!attached && continuation.length) {
         extra.push(...continuation);
         attached = true;
@@ -917,9 +926,10 @@ export class SdkRuntime implements BridgeRuntime {
         if (hook.tool_name && !isDroidMcpName(hook.tool_name)) live.nativeCallsThisRequest = true;
         // Droid already ran a batched Task; its handler must return what Droid reported.
         const prefetched = hook.tool_use_id !== undefined && live.prefetched.has(hook.tool_use_id);
-        if (live.cancelledTurn && !prefetched) {
-          live.events.push({ at: now(), type: "cancelled_turn_tool_denied", data: { toolName: hook.tool_name, toolUseId: hook.tool_use_id } });
-          return { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: CANCELLED_TURN_DENIAL } };
+        if (live.turnHandoff && !prefetched) {
+          const cancelled = live.turnHandoff.reason === "cancelled";
+          live.events.push({ at: now(), type: cancelled ? "cancelled_turn_tool_denied" : "steering_turn_tool_denied", data: { toolName: hook.tool_name, toolUseId: hook.tool_use_id } });
+          return { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: cancelled ? CANCELLED_TURN_DENIAL : STEERING_TURN_DENIAL } };
         }
         if (this.config.desktopProfile && hook.tool_name && !hook.tool_name.startsWith("mcp__droid__") && !["Read", "Glob", "Grep", "LS"].includes(hook.tool_name)) return { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: DESKTOP_APPROVAL_DENIAL } };
         const denial = prefetched ? undefined : toolAccessDenial(live, hook.tool_name, this.control?.factoryPermissionMode?.(input.session.bridgeSessionId));
@@ -1193,7 +1203,7 @@ export class SdkRuntime implements BridgeRuntime {
   }
 
   private mayPrefetch(live: LiveSdk, call: DroidCall): boolean {
-    return !live.cancelledTurn && !live.claimedHandlers.has(call.id) && !live.mailbox.hasCall(call.id)
+    return !live.turnHandoff && !live.claimedHandlers.has(call.id) && !live.mailbox.hasCall(call.id)
       && Boolean(live.catalog?.accepts(call.name, call.input))
       && !toolAccessDenial(live, `mcp__droid__${call.mcpName}`, this.control?.factoryPermissionMode?.(live.current?.session.bridgeSessionId ?? ""));
   }
@@ -1341,7 +1351,7 @@ export class SdkRuntime implements BridgeRuntime {
             // unmatched is moot: interrupt() now retires this process.
             for (const id of live.candidates.keys()) live.retiredCandidates.add(id);
             live.candidates.clear();
-            live.cancelledTurn = undefined;
+            live.turnHandoff = undefined;
             live.windDown?.();
             continue;
           }
@@ -1357,17 +1367,17 @@ export class SdkRuntime implements BridgeRuntime {
           live.prefetched.clear();
           const fallback = extractText(message);
           if (!live.streamed && !live.blocks.length && fallback) live.blocks.push({ type: "text", text: fallback });
-          const cancelled = live.cancelledTurn;
-          live.cancelledTurn = undefined;
-          if (cancelled?.followup.length) {
-            // The cancelled turn has wound down. The user's next message is a real
-            // user turn whose reply continues this same HTTP response.
+          const handoff = live.turnHandoff;
+          live.turnHandoff = undefined;
+          if (handoff?.followup.length) {
+            // The previous response ended. Deliver steering as a real user turn
+            // whose reply continues this same HTTP response.
             live.sentUserTurns++;
             live.inputs.push({
-              type: "user", message: { role: "user", content: cancelled.followup },
+              type: "user", message: { role: "user", content: handoff.followup },
               parent_tool_use_id: null, session_id: live.sdkSessionId ?? "", uuid: randomUUID(),
             });
-            live.events.push({ at: now(), type: "cancelled_turn_followup", data: { sdkSessionId: live.sdkSessionId } });
+            live.events.push({ at: now(), type: handoff.reason === "cancelled" ? "cancelled_turn_followup" : "steering_turn_followup", data: { sdkSessionId: live.sdkSessionId } });
             continue;
           }
           live.active = false;
@@ -1470,7 +1480,7 @@ export class SdkRuntime implements BridgeRuntime {
     }
     live.terminal = error;
     live.active = false;
-    live.cancelledTurn = undefined;
+    live.turnHandoff = undefined;
     live.inputs.close();
     for (const approval of live.approvals) approval.abort();
     live.approvals.clear();

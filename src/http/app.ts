@@ -558,8 +558,8 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
         usage: turn.response.usage,
         sdkBillingUsage: turn.sdkBillingUsage,
         compactMetadata: turn.compactMetadata,
-        // Cancellation and Task batch events carry only IDs and tool names: how a cancelled Droid tool was handled, which Task calls went to Droid together.
-        events: (turn.events ?? []).filter((event) => /usage|compact|cancelled_turn|task_batch/i.test(event.type)),
+        // Handoff and Task batch events carry only IDs and tool names: how pending tools finished and which calls went to Droid together.
+        events: (turn.events ?? []).filter((event) => /usage|compact|cancelled_turn|steering_turn|task_batch/i.test(event.type)),
       })));
       completed = true;
       if (writer) writer.finish(turn.response);
