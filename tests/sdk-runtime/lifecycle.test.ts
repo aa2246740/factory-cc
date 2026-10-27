@@ -1736,3 +1736,14 @@ describe("Task calls of one assistant message reach Droid together", () => {
     expect(toolUseIds(second.response.content)).toEqual(["cmd-b"]);
   });
 });
+
+it("reports the loaded Claude profile origin without helper commands or URL secrets", () => {
+  const sdk = new FakeSdk(async function* () { yield success("unused"); });
+  const { runtime } = create(sdk, { authMode: "claude-config", claudeConfig: {
+    path: "/fixture/japan/settings.json", env: { ANTHROPIC_BASE_URL: "http://127.0.0.1:18319/private?key=HIDDEN-QUERY", CLAUDE_CODE_OAUTH_TOKEN: "HIDDEN-OAUTH" },
+    helper: "HIDDEN-HELPER-COMMAND", literalNames: [], ignored: [], credentialSource: "helper",
+  } });
+  expect(runtime.describe().claudeProfile).toEqual({ settingsPath: "/fixture/japan/settings.json", upstreamOrigin: "http://127.0.0.1:18319" });
+  expect(JSON.stringify(runtime.describe())).not.toMatch(/HIDDEN|private/);
+  expect(sdk.calls).toHaveLength(0);
+});

@@ -3,7 +3,7 @@ import { randomBytes } from "node:crypto";
 import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { homedir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { z } from "zod";
 import { modelsFromIds, parseModelIds, type BridgeModel } from "../src/models.js";
@@ -17,6 +17,7 @@ const LABEL = "ai.factory-cc.bridge";
 const installationSchema = z.object({ version: z.literal(1), port: z.number().int().min(1).max(65535), repo: z.string(), node: z.string(), path: z.string(),
   // Explicit Droid menu models; absent means follow the Claude Code settings aliases.
   models: z.array(z.string()).optional(),
+  claudeConfigDir: z.string().refine(isAbsolute, "Claude profile directory must be absolute").optional(),
   // Cursor menu selector (`default`, `first-party`, or an explicit list). The key stays out of this file.
   cursorModels: z.string().min(1).max(4000).optional() });
 type Installation = z.infer<typeof installationSchema>;
@@ -88,6 +89,7 @@ export function desktopPlist(deps: DesktopDependencies, install: Installation): 
   const env = { HOME: deps.home, PATH: install.path, BRIDGE_MODE: "sdk", BRIDGE_AUTH: "claude-config",
     BRIDGE_PERMISSION: "ask", BRIDGE_DESKTOP: "1", BRIDGE_HOST: "127.0.0.1", BRIDGE_PORT: String(install.port),
     BRIDGE_DATA_DIR: paths.data, BRIDGE_CLIENT_TOKEN_FILE: paths.token,
+    ...(install.claudeConfigDir ? { CLAUDE_CONFIG_DIR: install.claudeConfigDir } : {}),
     BRIDGE_ADMIN_TOKEN_FILE: paths.admin, BRIDGE_HOOK_TOKEN_FILE: paths.hook,
     ...(install.models ? { BRIDGE_MODELS: install.models.join(",") } : {}),
     ...(install.cursorModels ? { BRIDGE_CURSOR_MODELS_FILE: paths.cursorMenu } : {}) };
@@ -132,10 +134,16 @@ async function bootstrap(deps: DesktopDependencies, plist: string) {
     await (deps.sleep ?? ((ms) => new Promise<void>((resolve) => setTimeout(resolve, ms))))(1000);
   }
 }
+function readDesktopClaudeConfig(deps: DesktopDependencies, install: Installation) {
+  return readClaudeConfig({ HOME: deps.home, PATH: install.path,
+    ...(install.claudeConfigDir ? { CLAUDE_CONFIG_DIR: install.claudeConfigDir } : {}),
+  }, `127.0.0.1:${install.port}`, { requireSettings: Boolean(install.claudeConfigDir) });
+}
+
 function syncModels(deps: DesktopDependencies, install: Installation, cursorMenu?: BridgeModel[]) {
   const paths = desktopPaths(deps.home);
   // Deliberately use exactly the environment launchd will receive. Never inherit shell credentials.
-  const config = readClaudeConfig({ HOME: deps.home, PATH: install.path }, `127.0.0.1:${install.port}`);
+  const config = readDesktopClaudeConfig(deps, install);
   assertClaudeCredential(config);
   const claude = install.models ? modelsFromIds(install.models, "claude-config").map(explicitLabel)
     : claudeConfigModels(config).models.map((model) => ({ ...model, displayName: `Claude Code · ${model.displayName.replace(/^Claude /, "")}` }));
@@ -160,14 +168,19 @@ function explicitLabel(model: BridgeModel): BridgeModel {
   const name = match ? `${match[1]![0]!.toUpperCase()}${match[1]!.slice(1)} ${match[2]}.${match[3]} (${model.id})` : model.id;
   return { ...model, displayName: `Claude Code · ${name}` };
 }
-function parseOptions(action: string, options: string[]): { port?: number; models?: string[]; cursorModels?: string } {
-  const parsed: { port?: number; models?: string[]; cursorModels?: string } = {};
+type DesktopOptions = Partial<Pick<Installation, "port" | "models" | "cursorModels" | "claudeConfigDir">>;
+function parseOptions(action: string, options: string[]): DesktopOptions {
+  const parsed: DesktopOptions = {};
   for (let index = 0; index < options.length; index += 2) {
     const [flag, value] = [options[index], options[index + 1]];
     if (flag === "--port" && action === "install" && parsed.port === undefined && /^\d+$/.test(value ?? "")) parsed.port = Number(value);
     else if (flag === "--models" && ["install", "restart"].includes(action) && parsed.models === undefined && value) parsed.models = parseModelIds(value);
     else if (flag === "--cursor-models" && ["install", "restart"].includes(action) && parsed.cursorModels === undefined && value) parsed.cursorModels = value;
-    else throw new Error("Options: install [--port <1..65535>] [--models id,id,...] [--cursor-models default|first-party|id,id,...]; restart [--models id,id,...] [--cursor-models ...].");
+    else if (flag === "--claude-config-dir" && ["install", "restart"].includes(action) && parsed.claudeConfigDir === undefined && value) {
+      if (!isAbsolute(value)) throw new Error("--claude-config-dir must be an absolute profile directory.");
+      parsed.claudeConfigDir = realpathSync(value);
+    }
+    else throw new Error("Options: install [--port <1..65535>] [--models id,id,...] [--cursor-models default|first-party|id,id,...] [--claude-config-dir /absolute/profile]; restart [--models id,id,...] [--cursor-models ...] [--claude-config-dir /absolute/profile].");
   }
   return parsed;
 }
@@ -275,7 +288,7 @@ async function cursorDesktop(args: string[], deps: DesktopDependencies): Promise
 }
 export async function desktop(argv: string[], deps: DesktopDependencies): Promise<Record<string, unknown>> {
   const [action, ...options] = argv;
-  if (!["install", "uninstall", "status", "restart", "cursor"].includes(action ?? "")) throw new Error("Usage: npm run desktop -- install [--port 18787] [--models id,id,...] [--cursor-models default|first-party|id,id,...] | uninstall | status | restart [--models id,id,...] [--cursor-models ...] | cursor login | cursor status | cursor models [filter]");
+  if (!["install", "uninstall", "status", "restart", "cursor"].includes(action ?? "")) throw new Error("Usage: npm run desktop -- install [--port 18787] [--models id,id,...] [--cursor-models default|first-party|id,id,...] [--claude-config-dir /absolute/profile] | uninstall | status | restart [--models id,id,...] [--cursor-models ...] [--claude-config-dir /absolute/profile] | cursor login | cursor status | cursor models [filter]");
   if (deps.platform !== "darwin") throw new Error("Desktop LaunchAgent installation requires macOS.");
   if (action === "cursor") return cursorDesktop(options, deps);
   const parsed = parseOptions(action!, options);
@@ -288,7 +301,7 @@ export async function desktop(argv: string[], deps: DesktopDependencies): Promis
     const { env, now } = cursorClock(deps);
     const cursorStatus = cursorCredentialStatus(paths.data, env, now);
     const cursorWarning = cursorExpiryWarning(cursorStatus, now);
-    return { installed: true, plistPresent: existsSync(paths.plist), loaded, port: install.port, models: install.models ?? "follow Claude Code settings",
+    return { installed: true, plistPresent: existsSync(paths.plist), loaded, port: install.port, claudeConfigDir: install.claudeConfigDir ?? join(deps.home, ".claude"), models: install.models ?? "follow Claude Code settings",
       repositoryPresent: existsSync(join(install.repo, "dist/index.js")), healthy: await deps.health(install.port),
       runtime: deps.runtime ? await deps.runtime(install.port, paths.admin) : null, caveat,
       cursor: {
@@ -332,7 +345,8 @@ export async function desktop(argv: string[], deps: DesktopDependencies): Promis
       menu = readCursorMenuFile(deps);
       cursorModels = menu ? previous.cursorModels : undefined;
     } else cursorModels = undefined;
-    const install: Installation = { ...previous, node: realpathSync(deps.node), ...(parsed.models ? { models: parsed.models } : {}) };
+    const install: Installation = { ...previous, node: realpathSync(deps.node), ...(parsed.models ? { models: parsed.models } : {}),
+      ...(parsed.claudeConfigDir ? { claudeConfigDir: parsed.claudeConfigDir } : {}) };
     if (cursorModels) install.cursorModels = cursorModels;
     else delete install.cursorModels;
     // The LaunchAgent runs dist/. Rebuild so the restarted service runs the current source, not a stale build.
@@ -353,8 +367,9 @@ export async function desktop(argv: string[], deps: DesktopDependencies): Promis
   const cursor: { menu?: BridgeModel[]; warning?: string; catalog?: readonly CursorCatalogItem[] } = parsed.cursorModels
     ? await resolveCursorMenu(deps, parsed.cursorModels)
     : cursorLoggedIn(deps) ? {} : { warning: cursorAbsentNotice() };
-  const install: Installation = { version: 1, port, repo: realpathSync(deps.repo), node: realpathSync(deps.node), path: deps.path, ...(parsed.models ? { models: parsed.models } : {}), ...(cursor.menu ? { cursorModels: parsed.cursorModels } : {}) };
-  assertClaudeCredential(readClaudeConfig({ HOME: deps.home, PATH: deps.path }, `127.0.0.1:${port}`));
+  const install: Installation = { version: 1, port, repo: realpathSync(deps.repo), node: realpathSync(deps.node), path: deps.path, ...(parsed.models ? { models: parsed.models } : {}), ...(cursor.menu ? { cursorModels: parsed.cursorModels } : {}),
+    ...(parsed.claudeConfigDir ? { claudeConfigDir: parsed.claudeConfigDir } : {}) };
+  assertClaudeCredential(readDesktopClaudeConfig(deps, install));
   checkedRun(deps, deps.node, [join(deps.repo, "node_modules/typescript/bin/tsc"), "-p", join(deps.repo, "tsconfig.build.json")]);
   if (!existsSync(join(install.repo, "dist/index.js"))) throw new Error("Missing built dist/index.js. Run npm run build.");
   await deps.assertPortFree(port);

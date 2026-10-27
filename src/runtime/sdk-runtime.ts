@@ -244,6 +244,10 @@ export class SdkRuntime implements BridgeRuntime {
   describe(): Record<string, unknown> {
     return {
       kind: "sdk", authMode: this.config.authMode, permissionMode: this.config.permissionMode,
+      ...(this.config.claudeConfig ? { claudeProfile: {
+        settingsPath: this.config.claudeConfig.path,
+        upstreamOrigin: this.config.claudeConfig.env.ANTHROPIC_BASE_URL ? new URL(this.config.claudeConfig.env.ANTHROPIC_BASE_URL).origin : "https://api.anthropic.com",
+      } } : {}),
       prompt: describePromptLayout(), tools: "preset:claude_code + droid-exclusive MCP",
       input: "persistent SDK streaming input", includePartialMessages: true,
       approvalChannel: this.control ? "external controller" : "unavailable: fail closed",
