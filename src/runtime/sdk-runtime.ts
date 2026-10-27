@@ -3,7 +3,7 @@ import { mkdirSync } from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
 import { isAbsolute, join } from "node:path";
 import { resolveRequestCwd } from "../workspace.js";
-import { asBlocks } from "../protocol/content.js";
+import { asBlocks, collectToolResults } from "../protocol/content.js";
 import { assistantMessage } from "../protocol/messages.js";
 import { ToolMailbox } from "../relay/mailbox.js";
 import type { BridgeConfig } from "../config.js";
@@ -199,7 +199,7 @@ const USER_CANCELLATIONS = new Set([
   "사용자가 도구 실행을 취소했습니다", "Esecuzione dello strumento annullata dall'utente",
   "Tool execution was interrupted", "Request interrupted by user",
 ]);
-const CANCELLED_TOOL_NOTE = "The user cancelled this tool call in Droid, so it did not run. Do not retry it or try another way. Acknowledge the cancellation in one short sentence, then end your turn.";
+const CANCELLED_TOOL_NOTE = "The user cancelled or interrupted this tool call in Droid. Preserve any work already done. Do not retry it or try another way. Acknowledge the cancellation in one short sentence, then end your turn.";
 const CANCELLED_TURN_DENIAL = "BRIDGE_USER_CANCELLED: The user cancelled the previous tool call in Droid. Do not retry it or use any other tool now; acknowledge the cancellation and end your turn.";
 /**
  * accountInfo() resolves only when Claude Code answers its initialize request,
@@ -402,6 +402,12 @@ export class SdkRuntime implements BridgeRuntime {
       const requestKey = createHash("sha256").update(JSON.stringify({ request: input.request, role: input.role, cwd: resolveCwd(input, this.config), missionDir: input.headers["x-bridge-mission-dir"] })).digest("hex");
       if (requestKey === live.lastRequestKey && live.lastReply) return live.lastReply;
       let results = latestToolResults(input, live.active || live.pending.size > 0);
+      if (!results.length && live.pending.size) {
+        // Droid can insert an assistant interruption marker after a cancelled
+        // Mission result. Only a cancellation for our pending callback may cross it.
+        results = collectToolResults(input.request.messages.filter((message) => message.role === "user"))
+          .filter((result) => live.pending.has(result.tool_use_id) && isUserCancellation(result));
+      }
       if (input.recovery === "cold-import") results = [];
       // A conversation imported from history has no native callbacks to answer.
       // Its tool results are earlier history when the same message carries a new

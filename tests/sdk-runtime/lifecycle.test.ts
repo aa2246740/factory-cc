@@ -1398,15 +1398,15 @@ describe("Droid tool cancellation (desktop profile)", () => {
     ({ type: "tool_result", tool_use_id: id, content: `Error: ${text}`, is_error: true });
   type Guard = (hook: { tool_name: string; tool_use_id?: string }) => Promise<unknown>;
 
-  function setup(proposal: { id: string; input: Record<string, string> }, followupCommand: string) {
+  function setup(proposal: { id: string; input: Record<string, string> }, followupCommand: string, hostTool = createTool) {
     const project = realpathSync(mkdtempSync(join(tmpdir(), "relay-cancel-project-")));
     const reminder: ContentBlock = { type: "text", text: `<system-reminder>\n\nUser system info (fixture)\n\n% pwd\n${project}\n</system-reminder>` };
     const seen: { createResult?: unknown; windDownGuard?: unknown; followupGuard?: unknown; executeResult?: unknown } = {};
     const sdk = new FakeSdk(async function* (_input, index, fake) {
       const guard = (fake.calls[0]!.options.hooks as { PreToolUse: Array<{ hooks: Guard[] }> }).PreToolUse[0]!.hooks[0]!;
       if (index === 0) {
-        yield { type: "assistant", message: { content: [{ type: "tool_use", id: proposal.id, name: "mcp__droid__Create", input: proposal.input }] } };
-        seen.createResult = await fake.handlers.get("Create")!(proposal.input, { toolUseID: proposal.id });
+        yield { type: "assistant", message: { content: [{ type: "tool_use", id: proposal.id, name: `mcp__droid__${hostTool.name}`, input: proposal.input }] } };
+        seen.createResult = await fake.handlers.get(hostTool.name)!(proposal.input, { toolUseID: proposal.id });
         // A model that tries another way after the cancellation is stopped by the bridge.
         seen.windDownGuard = await guard({ tool_name: "mcp__droid__Execute", tool_use_id: "retry" });
         yield { type: "assistant", message: { content: [{ type: "text", text: "Cancelled; the file was not created." }] } };
@@ -1421,23 +1421,23 @@ describe("Droid tool cancellation (desktop profile)", () => {
     const dataDir = join(mkdtempSync(join(tmpdir(), "relay-cancel-sdk-")), "bridge-data");
     const { runtime } = create(sdk, { desktopProfile: true, permissionMode: "ask", dataDir, toolWaitMs: 5_000, requestTimeoutMs: 5_000 });
     const s = session();
-    const tools = [createTool, execute];
+    const tools = [hostTool, execute];
     const opening = user([reminder, { type: "text", text: "Create the file" }]);
     return { sdk, runtime, s, tools, opening, seen };
   }
 
   /** Drive one cancellation round trip and check every boundary of the follow-up turn. */
-  async function expectFollowupTurn(tail: (proposal: Message) => Message[], proposal: { id: string; input: Record<string, string> }, followupText: string, followupCommand: string) {
-    const { sdk, runtime, s, tools, opening, seen } = setup(proposal, followupCommand);
+  async function expectFollowupTurn(tail: (proposal: Message) => Message[], proposal: { id: string; input: Record<string, string> }, followupText: string, followupCommand: string, hostTool = createTool) {
+    const { sdk, runtime, s, tools, opening, seen } = setup(proposal, followupCommand, hostTool);
     const first = await runtime.handle(request(s, "unused", { tools, messages: [opening] }));
-    expect(first.response.content).toContainEqual(expect.objectContaining({ type: "tool_use", id: proposal.id, name: "Create" }));
-    const assistant: Message = { role: "assistant", content: [{ type: "tool_use", id: proposal.id, name: "Create", input: proposal.input }] };
+    expect(first.response.content).toContainEqual(expect.objectContaining({ type: "tool_use", id: proposal.id, name: hostTool.name }));
+    const assistant: Message = { role: "assistant", content: [{ type: "tool_use", id: proposal.id, name: hostTool.name, input: proposal.input }] };
     const history = [opening, ...tail(assistant)];
 
     const second = await runtime.handle(request(s, "unused", { tools, messages: history }));
     // The cancellation reaches Claude Code as Droid's own error result, with no user text inside it.
     const createResult = JSON.stringify(seen.createResult);
-    expect(seen.createResult).toMatchObject({ isError: true, content: [{ type: "text", text: expect.stringMatching(/^Error: /) }, { type: "text", text: expect.stringContaining("did not run") }] });
+    expect(seen.createResult).toMatchObject({ isError: true, content: [{ type: "text", text: expect.stringMatching(/^Error: /) }, { type: "text", text: expect.stringContaining("Preserve any work already done") }] });
     expect(createResult).not.toContain(followupCommand);
     expect(createResult).not.toContain("Host continuation context");
     expect(seen.windDownGuard).toMatchObject({ hookSpecificOutput: { permissionDecision: "deny", permissionDecisionReason: expect.stringContaining("BRIDGE_USER_CANCELLED") } });
@@ -1477,6 +1477,39 @@ describe("Droid tool cancellation (desktop profile)", () => {
       "f28ac29df5909726717ca00774c975b491ace6048e7d83b288c685ac37509813",
     ]);
     await expectFollowupTurn(tail, proposal, followupText, "touch cmd-retest-20261019.txt");
+  });
+
+  it("continues after a cancelled Mission result precedes an assistant interruption marker", async () => {
+    const mission = { name: "StartMissionRun", input_schema: { type: "object" as const, properties: {} } };
+    const proposal = { id: "mission-run-pending", input: { message: "Continue the mission" } };
+    const followupText = "Check the work already completed";
+    await expectFollowupTurn((assistant) => [
+      assistant,
+      user([cancellation(proposal.id)]),
+      { role: "assistant", content: [{ type: "text", text: "[Mission interrupted]" }] },
+      user([{ type: "text", text: "<system-reminder>The mission is paused.</system-reminder>" }]),
+      user(followupText),
+    ], proposal, followupText, "inspect preserved work", mission);
+  });
+
+  it.each<[string, string, string, boolean, Message["role"]]>([
+    ["another tool's cancellation", "different-tool", "Tool execution cancelled by user", true, "user"],
+    ["a successful result", "create-1", "Created successfully", false, "user"],
+    ["an ordinary failure", "create-1", "The worker failed", true, "user"],
+    ["an assistant's cancellation claim", "create-1", "Tool execution cancelled by user", true, "assistant"],
+  ])("keeps the current callback parked instead of adopting %s across an assistant message", async (_label, callId, text, isError, resultRole) => {
+    const proposal = { id: "create-1", input: { file_path: "pending.txt" } };
+    const { runtime, s, tools, opening, seen } = setup(proposal, "do not run");
+    await runtime.handle(request(s, "unused", { tools, messages: [opening] }));
+    await expect(runtime.handle(request(s, "unused", { tools, messages: [
+      opening,
+      { role: "assistant", content: [{ type: "tool_use", id: proposal.id, name: "Create", input: proposal.input }] },
+      { role: resultRole, content: [{ type: "tool_result", tool_use_id: callId, content: text, is_error: isError }] },
+      { role: "assistant", content: "[Interrupted]" },
+      user("a new message"),
+    ] }))).rejects.toMatchObject({ status: 409, code: "session_busy" });
+    expect(seen.createResult).toBeUndefined();
+    expect(runtime.describe()).toMatchObject({ pendingHostCalls: 1, activeNativeTurns: 1 });
   });
 
   it.each([
@@ -1619,7 +1652,7 @@ describe("Task calls of one assistant message reach Droid together", () => {
     await runtime.handle(request(s, [cancelled("task-a"), cancelled("task-b")], { tools: [task] }));
     expect(seen.guards["task-b"]).toEqual({});
     for (const id of ["task-a", "task-b"]) {
-      expect(seen.results[id]).toMatchObject({ isError: true, content: [{ type: "text", text: "Error: Tool execution cancelled by user" }, { type: "text", text: expect.stringContaining("did not run") }] });
+      expect(seen.results[id]).toMatchObject({ isError: true, content: [{ type: "text", text: "Error: Tool execution cancelled by user" }, { type: "text", text: expect.stringContaining("Preserve any work already done") }] });
     }
   });
 
