@@ -20,13 +20,13 @@ export interface ClaudeConfig {
   credentialSource: string;
 }
 
-export function readClaudeConfig(source: NodeJS.ProcessEnv, bridgeListen = ""): ClaudeConfig {
+export function readClaudeConfig(source: NodeJS.ProcessEnv, bridgeListen = "", options: { requireSettings?: boolean } = {}): ClaudeConfig {
   const path = join(source.CLAUDE_CONFIG_DIR ?? join(source.HOME ?? homedir(), ".claude"), "settings.json");
   let settings: z.infer<typeof record> = {};
   try {
     settings = record.parse(JSON.parse(readFileSync(path, "utf8")));
   } catch (error) {
-    if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw new Error("Claude Code settings are unreadable or invalid JSON.");
+    if (options.requireSettings || !(error instanceof Error && "code" in error && error.code === "ENOENT")) throw new Error("Claude Code settings are unreadable or invalid JSON.");
   }
   const parsed = record.safeParse(settings.env === undefined ? {} : settings.env);
   if (!parsed.success) throw new Error("Claude Code settings env must be an object.");

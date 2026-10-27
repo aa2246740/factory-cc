@@ -145,3 +145,16 @@ describe("Claude Code settings auth resolution", () => {
   });
 
 });
+
+it("refuses missing settings in an explicitly required profile instead of selecting default login", () => {
+  const f = fixture();
+  expect(claudeConfigNeedsLogin(readClaudeConfig(f.env))).toBe(true);
+  expect(() => readClaudeConfig({ ...f.env, CLAUDE_CONFIG_DIR: f.dir }, "127.0.0.1:18787", { requireSettings: true })).toThrow("settings are unreadable");
+});
+
+it("fails desktop startup when its selected profile settings are missing", () => {
+  const f = fixture();
+  vi.stubEnv("HOME", f.root);
+  vi.stubEnv("CLAUDE_CONFIG_DIR", f.dir);
+  expect(() => loadConfig({ authMode: "claude-config", desktopProfile: true, dataDir: join(f.root, "bridge-data") })).toThrow("settings are unreadable");
+});

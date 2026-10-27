@@ -268,3 +268,56 @@ it("restart retries bootstrap while launchd is still removing the old job", asyn
   expect(run.mock.calls.filter(([, args]) => args[0] === "bootstrap").slice(-3)).toEqual(Array(3).fill(["launchctl", ["bootstrap", "gui/501", paths.plist]]));
   expect(deps.sleep).toHaveBeenCalledTimes(2);
 });
+
+function japanProfile(root: string) {
+  const directory = join(root, "japan profile &");
+  mkdirSync(directory);
+  writeFileSync(join(directory, "settings.json"), JSON.stringify({
+    apiKeyHelper: `touch ${join(root, "JAPAN-HELPER-RAN")}`,
+    env: { ANTHROPIC_BASE_URL: "http://127.0.0.1:18319", ANTHROPIC_DEFAULT_OPUS_MODEL: "japan-opus" },
+  }));
+  return realpathSync(directory);
+}
+
+it("persists the selected Claude profile through restart instead of following global Air settings", async () => {
+  const { deps, paths, root } = fixture();
+  const profile = japanProfile(root);
+  await desktop(["install", "--claude-config-dir", profile], deps);
+  const models = () => JSON.parse(readFileSync(paths.settings, "utf8")).customModels.map((model: { model: string }) => model.model);
+  expect(models()).toEqual(["opus"]);
+  expect(JSON.parse(readFileSync(paths.manifest, "utf8")).claudeConfigDir).toBe(profile);
+  const globalSettings = JSON.stringify({ apiKeyHelper: "never-run", env: { ANTHROPIC_BASE_URL: "http://127.0.0.1:18317", ANTHROPIC_DEFAULT_SONNET_MODEL: "air-sonnet" } });
+  writeFileSync(join(deps.home, ".claude/settings.json"), globalSettings);
+  await desktop(["restart"], deps);
+  expect(models()).toEqual(["opus"]);
+  expect(readFileSync(paths.plist, "utf8")).toContain(`<key>CLAUDE_CONFIG_DIR</key><string>${profile.replaceAll("&", "&amp;")}</string>`);
+  expect(await desktop(["status"], deps)).toMatchObject({ claudeConfigDir: profile });
+  expect(readFileSync(join(deps.home, ".claude/settings.json"), "utf8")).toBe(globalSettings);
+  expect(existsSync(join(root, "HELPER-RAN"))).toBe(false);
+  expect(existsSync(join(root, "JAPAN-HELPER-RAN"))).toBe(false);
+});
+
+it("pins a Claude profile on an existing desktop installation and keeps it on later restarts", async () => {
+  const { deps, paths, root } = fixture();
+  await desktop(["install"], deps);
+  const profile = japanProfile(root);
+  await desktop(["restart", "--claude-config-dir", profile], deps);
+  await desktop(["restart"], deps);
+  expect(JSON.parse(readFileSync(paths.manifest, "utf8")).claudeConfigDir).toBe(profile);
+  expect(JSON.parse(readFileSync(paths.settings, "utf8")).customModels.map((model: { model: string }) => model.model)).toEqual(["opus"]);
+  expect(readFileSync(paths.plist, "utf8")).toContain("CLAUDE_CONFIG_DIR");
+  expect(existsSync(join(root, "JAPAN-HELPER-RAN"))).toBe(false);
+});
+
+it("refuses a missing pinned Claude profile before replacing the running service or settings", async () => {
+  const { deps, paths, root, run } = fixture();
+  const profile = japanProfile(root);
+  await desktop(["install", "--claude-config-dir", profile], deps);
+  const files = [paths.manifest, paths.plist, paths.settings];
+  const before = files.map(path => readFileSync(path, "utf8"));
+  rmSync(join(profile, "settings.json"));
+  run.mockClear();
+  await expect(desktop(["restart"], deps)).rejects.toThrow(/settings.*unreadable|profile.*missing/i);
+  expect(files.map(path => readFileSync(path, "utf8"))).toEqual(before);
+  expect(run.mock.calls.some(([, args]) => args[0] === "bootout")).toBe(false);
+});

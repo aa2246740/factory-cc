@@ -130,7 +130,8 @@ function tokenEnv(name: string): string | undefined {
 
 export function loadConfig(overrides: Partial<BridgeConfig> = {}): BridgeConfig {
   const authMode = parseAuthMode(overrides.authMode ?? env("BRIDGE_AUTH", "byok"));
-  const claudeConfig = authMode === "claude-config" ? overrides.claudeConfig ?? readClaudeConfig(process.env, `${overrides.host ?? env("BRIDGE_HOST", "127.0.0.1")}:${overrides.port ?? intEnv("BRIDGE_PORT", 18787)}`) : undefined;
+  const desktopProfile = overrides.desktopProfile ?? env("BRIDGE_DESKTOP") === "1";
+  const claudeConfig = authMode === "claude-config" ? overrides.claudeConfig ?? readClaudeConfig(process.env, `${overrides.host ?? env("BRIDGE_HOST", "127.0.0.1")}:${overrides.port ?? intEnv("BRIDGE_PORT", 18787)}`, { requireSettings: desktopProfile && Boolean(process.env.CLAUDE_CONFIG_DIR) }) : undefined;
   if (claudeConfig) assertClaudeCredential(claudeConfig);
   const dataDir = resolve(overrides.dataDir ?? env("BRIDGE_DATA_DIR", resolve(process.cwd(), "tmp/bridge-data"))!);
   ensurePrivateDir(dataDir);
@@ -170,7 +171,6 @@ export function loadConfig(overrides: Partial<BridgeConfig> = {}): BridgeConfig 
     ? permissionRaw
     : "ask") as "bypass" | "ask";
 
-  const desktopProfile = overrides.desktopProfile ?? env("BRIDGE_DESKTOP") === "1";
   if (desktopProfile && (permissionMode !== "ask" || !isLoopbackHost(host))) throw new Error("Desktop profile requires ask permissions and loopback binding.");
   const config: BridgeConfig = {
     desktopProfile,

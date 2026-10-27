@@ -18,6 +18,8 @@ npm run desktop -- install
 
 The installer reads `~/.claude/settings.json` offline, validates the existing `claude-config` allowlist, does not execute `apiKeyHelper`, and does not contact model services. It builds `dist/index.js`, installs an always-on Bridge that runs after login, and merges Claude Code models into the shared model menu used by Droid desktop. The default address is `127.0.0.1:18787`; to change the port, run `npm run desktop -- install --port 19876`. If the port is in use, it fails immediately without scanning other ports or processes.
 
+To bind Droid to a separate Claude profile, run `npm run desktop -- install --claude-config-dir /absolute/profile` or update an existing installation with `npm run desktop -- restart --claude-config-dir /absolute/profile`. The directory must contain `settings.json`. The installer saves its canonical path in `installation.json` and the LaunchAgent, so later restarts keep that profile even if the global Claude settings change. A missing selected profile stops startup or restart instead of falling back to another account or route. `desktop -- status` reports the selected directory; `/internal/runtime` reports the loaded settings path and upstream origin without helper commands or credentials.
+
 Installation modifies or creates the following paths and prints their absolute paths in the command output:
 
 - `~/Library/LaunchAgents/ai.factory-cc.bridge.plist`, which runs the Node binary used at install time and `dist/index.js` from the current repository, saving the install-time `HOME` and `PATH` without storing credentials or upstream helper commands.
