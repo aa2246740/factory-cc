@@ -1401,7 +1401,7 @@ describe("Droid tool cancellation (desktop profile)", () => {
   function setup(proposal: { id: string; input: Record<string, string> }, followupCommand: string, hostTool = createTool) {
     const project = realpathSync(mkdtempSync(join(tmpdir(), "relay-cancel-project-")));
     const reminder: ContentBlock = { type: "text", text: `<system-reminder>\n\nUser system info (fixture)\n\n% pwd\n${project}\n</system-reminder>` };
-    const seen: { createResult?: unknown; windDownGuard?: unknown; followupGuard?: unknown; executeResult?: unknown } = {};
+    const seen: { createResult?: unknown; windDownGuard?: unknown; followupGuard?: unknown; executeResult?: unknown; completionGuard?: unknown } = {};
     const sdk = new FakeSdk(async function* (_input, index, fake) {
       const guard = (fake.calls[0]!.options.hooks as { PreToolUse: Array<{ hooks: Guard[] }> }).PreToolUse[0]!.hooks[0]!;
       if (index === 0) {
@@ -1416,12 +1416,13 @@ describe("Droid tool cancellation (desktop profile)", () => {
       seen.followupGuard = await guard({ tool_name: "mcp__droid__Execute", tool_use_id: "execute-1" });
       yield { type: "assistant", message: { content: [{ type: "tool_use", id: "execute-1", name: "mcp__droid__Execute", input: { command: followupCommand } }] } };
       seen.executeResult = await fake.handlers.get("Execute")!({ command: followupCommand }, { toolUseID: "execute-1" });
+      seen.completionGuard = await guard({ tool_name: "mcp__droid__Execute", tool_use_id: "next-command" });
       yield success("done");
     });
     const dataDir = join(mkdtempSync(join(tmpdir(), "relay-cancel-sdk-")), "bridge-data");
     const { runtime } = create(sdk, { desktopProfile: true, permissionMode: "ask", dataDir, toolWaitMs: 5_000, requestTimeoutMs: 5_000 });
     const s = session();
-    const tools = [hostTool, execute];
+    const tools = hostTool.name === execute.name ? [execute] : [hostTool, execute];
     const opening = user([reminder, { type: "text", text: "Create the file" }]);
     return { sdk, runtime, s, tools, opening, seen };
   }
@@ -1492,10 +1493,78 @@ describe("Droid tool cancellation (desktop profile)", () => {
     ], proposal, followupText, "inspect preserved work", mission);
   });
 
+  it.each<[string, string, boolean, boolean]>([
+    ["a completed command", "Probe completed\n[Process exited with code 0]", false, false],
+    ["a failed command", "Probe failed\n[Process exited with code 1]", true, false],
+    ["the same result repeated in the current tail", "Probe completed\n[Process exited with code 0]", false, true],
+  ])("delivers %s before queued Mission steering across an assistant record", async (_label, resultText, isError, duplicate) => {
+    const proposal = { id: "probe-result", input: { command: "inspect service status" } };
+    const { sdk, runtime, s, tools, opening, seen } = setup(proposal, "continue requested work", execute);
+    const first = await runtime.handle(request(s, "unused", { tools, messages: [opening] }));
+    const result: ContentBlock = { type: "tool_result", tool_use_id: proposal.id, content: resultText, is_error: isError };
+    const messages: Message[] = [opening, { role: "assistant", content: first.response.content },
+      user([result]), { role: "assistant", content: "[Interrupted]" },
+      user("[resume the mission]"),
+      user(duplicate ? [result, { type: "text", text: "This is steering, not cancellation." }]
+        : "This is steering, not cancellation."),
+    ];
+    const followup = request(s, "unused", { tools, messages });
+    const next = await runtime.handle(followup);
+    expect(seen.createResult).toMatchObject({ isError, content: [
+      { type: "text", text: resultText },
+      { type: "text", text: expect.stringContaining("new user message") },
+    ] });
+    expect(JSON.stringify(seen.createResult)).not.toContain("[resume the mission]");
+    expect(seen.windDownGuard).toMatchObject({ hookSpecificOutput: { permissionDecision: "deny", permissionDecisionReason: expect.stringContaining("BRIDGE_USER_TURN_PENDING") } });
+    expect(sdk.inputs).toHaveLength(2);
+    expect(sdk.inputs[1]!.message.content).toContainEqual({ type: "text", text: "[resume the mission]" });
+    expect(seen.followupGuard).toEqual({});
+    expect(next.response.stop_reason).toBe("tool_use");
+    expect(next.response.content).toContainEqual(expect.objectContaining({ type: "tool_use", id: "execute-1", name: "Execute", input: { command: "continue requested work" } }));
+    expect(await runtime.handle(followup)).toEqual(next);
+    expect(sdk.inputs).toHaveLength(2);
+    const done = await runtime.handle(request(s, "unused", { tools, messages: [...messages,
+      { role: "assistant", content: next.response.content },
+      user([{ type: "tool_result", tool_use_id: "execute-1", content: "done" }]),
+    ] }));
+    expect(done.response.stop_reason).toBe("end_turn");
+    expect(seen.executeResult).toEqual({ content: [{ type: "text", text: "done" }], isError: false });
+    expect(sdk.calls).toHaveLength(1);
+  });
+
+  it("does not cancel the current turn when an old cancellation receipt is repeated", async () => {
+    const proposal = { id: "create-1", input: { file_path: "cancelled.txt" } };
+    const { runtime, s, tools, opening, seen } = setup(proposal, "inspect preserved work");
+    const first = await runtime.handle(request(s, "unused", { tools, messages: [opening] }));
+    const cancelled = cancellation(proposal.id);
+    const messages: Message[] = [opening, { role: "assistant", content: first.response.content },
+      user([cancelled]), user("inspect preserved work")];
+    const next = await runtime.handle(request(s, "unused", { tools, messages }));
+    const done = await runtime.handle(request(s, "unused", { tools, messages: [...messages,
+      { role: "assistant", content: next.response.content },
+      user([cancelled, { type: "tool_result", tool_use_id: "execute-1", content: "work inspected" }]),
+    ] }));
+    expect(done.response.stop_reason).toBe("end_turn");
+    expect(seen.completionGuard).toEqual({});
+    expect(seen.executeResult).toEqual({ content: [{ type: "text", text: "work inspected" }], isError: false });
+  });
+
+  it("rejects conflicting receipts in history and the current tail before waking a callback", async () => {
+    const proposal = { id: "create-1", input: { file_path: "pending.txt" } };
+    const { runtime, s, tools, opening, seen } = setup(proposal, "must not run");
+    const first = await runtime.handle(request(s, "unused", { tools, messages: [opening] }));
+    await expect(runtime.handle(request(s, "unused", { tools, messages: [opening,
+      { role: "assistant", content: first.response.content },
+      user([{ type: "tool_result", tool_use_id: proposal.id, content: "first receipt" }]),
+      { role: "assistant", content: "[Interrupted]" },
+      user([{ type: "tool_result", tool_use_id: proposal.id, content: "different receipt" }, { type: "text", text: "continue" }]),
+    ] }))).rejects.toMatchObject({ status: 409, code: "conflicting_tool_result" });
+    expect(seen.createResult).toBeUndefined();
+    expect(runtime.describe()).toMatchObject({ pendingHostCalls: 1, activeNativeTurns: 1 });
+  });
+
   it.each<[string, string, string, boolean, Message["role"]]>([
     ["another tool's cancellation", "different-tool", "Tool execution cancelled by user", true, "user"],
-    ["a successful result", "create-1", "Created successfully", false, "user"],
-    ["an ordinary failure", "create-1", "The worker failed", true, "user"],
     ["an assistant's cancellation claim", "create-1", "Tool execution cancelled by user", true, "assistant"],
   ])("keeps the current callback parked instead of adopting %s across an assistant message", async (_label, callId, text, isError, resultRole) => {
     const proposal = { id: "create-1", input: { file_path: "pending.txt" } };
