@@ -11,18 +11,29 @@ import { COMPACTION_SUMMARY } from "../workspace.js";
 
 export interface SummarizedToolCall { name: string; input: unknown }
 
-const TOOL_CALL = /^TOOL_CALL: (\S+) input=(\{.*\})$/gm;
+const TOOL_CALL = /^TOOL_CALL: (\S+) input=(\{.*\})$/;
 
 /** The last tool call a summarizer transcript shows answered, or undefined. */
 export function lastSummarizedToolCall(request: MessagesRequest): SummarizedToolCall | undefined {
   const text = request.messages.filter((message) => message.role === "user")
     .flatMap((message) => asBlocks(message.content))
     .map((block) => (block.type === "text" && typeof block.text === "string" ? block.text : "")).join("\n");
-  let last: RegExpExecArray | undefined;
-  for (const match of text.matchAll(TOOL_CALL)) last = match;
-  if (!last || !text.slice(last.index! + last[0].length).includes("TOOL_RESULT")) return undefined;
+  let actor: string | undefined;
+  let last: { match: RegExpExecArray; answered: boolean } | undefined;
+  for (const row of text.split(/\r?\n/)) {
+    const header = /^(USER|ASSISTANT|TOOL): /.exec(row);
+    if (header) actor = header[1];
+    const line = header ? row.slice(header[0].length) : row;
+    // Calls inside a tool's returned transcript are data, not outer host calls.
+    if (actor === "ASSISTANT" || actor === undefined) {
+      const match = TOOL_CALL.exec(line);
+      if (match) last = { match, answered: false };
+    }
+    if (last && (actor === "TOOL" || actor === undefined) && /^TOOL_RESULT\b/.test(line)) last.answered = true;
+  }
+  if (!last?.answered) return undefined;
   try {
-    return { name: last[1]!, input: JSON.parse(last[2]!) };
+    return { name: last.match[1]!, input: JSON.parse(last.match[2]!) };
   } catch {
     return undefined;
   }

@@ -11,6 +11,23 @@ export interface ProcessIdentity {
   state: string;
 }
 
+interface ProcessTableFailure {
+  code: string | number | null;
+  signal: string | null;
+  killed: boolean;
+  timedOut: boolean;
+  elapsedMs: number;
+  spawnMs: number;
+  stdoutBytes: number;
+  stderrBytes: number;
+}
+
+class ProcessTableReadError extends Error {
+  constructor(readonly details: ProcessTableFailure) { super("Process table read failed"); }
+}
+
+const PROCESS_TABLE_IDLE_MS = 10_000;
+
 let reading: Promise<Map<number, ProcessIdentity>> | undefined;
 
 /** Identity metadata only: never inspect process arguments or environments. */
@@ -34,13 +51,63 @@ async function readTable(): Promise<Map<number, ProcessIdentity>> {
     return rows;
   }
   if (process.platform !== "darwin") throw new Error("Owned process trees require macOS or Linux");
-  const output = await new Promise<string>((resolve, reject) => {
-    execFile("/bin/ps", ["-axo", "pid=,ppid=,pgid=,lstart=,stat="], { encoding: "utf8", timeout: 3000, maxBuffer: 8 * 1024 * 1024 }, (error, stdout) => error ? reject(error) : resolve(stdout));
+  const started = performance.now();
+  const snapshot = await new Promise<{ output: string; details: ProcessTableFailure }>((resolve, reject) => {
+    let deadline: NodeJS.Timeout | undefined;
+    let check: NodeJS.Immediate | undefined;
+    let escalation: NodeJS.Timeout | undefined;
+    let lastOutput = started;
+    let spawnMs = 0;
+    let timedOut = false;
+    const child = execFile("/bin/ps", ["-axo", "pid=,ppid=,pgid=,lstart=,stat="], { encoding: "utf8", maxBuffer: 8 * 1024 * 1024 }, (error, stdout, stderr) => {
+      if (deadline) clearTimeout(deadline);
+      if (check) clearImmediate(check);
+      if (escalation) clearTimeout(escalation);
+      const details: ProcessTableFailure = {
+        code: typeof error?.code === "number" || (typeof error?.code === "string" && /^E[A-Z0-9_]{1,63}$/.test(error.code)) ? error.code : null,
+        signal: typeof error?.signal === "string" && /^SIG[A-Z0-9]{1,20}$/.test(error.signal) ? error.signal : null,
+        killed: error?.killed === true || timedOut,
+        timedOut,
+        elapsedMs: Math.round(performance.now() - started),
+        spawnMs,
+        stdoutBytes: Buffer.byteLength(stdout), stderrBytes: Buffer.byteLength(stderr),
+      };
+      if (error || timedOut) reject(new ProcessTableReadError(details));
+      else resolve({ output: stdout, details });
+    });
+    lastOutput = performance.now();
+    spawnMs = Math.round(lastOutput - started);
+    child.stdout?.on("data", () => { lastOutput = performance.now(); });
+    child.stderr?.on("data", () => { lastOutput = performance.now(); });
+    const arm = (): void => {
+      deadline = setTimeout(() => {
+        deadline = undefined;
+        // Let ready output/exit events run before judging a delayed timer.
+        check = setImmediate(() => {
+          check = undefined;
+          if (child.exitCode !== null || child.signalCode !== null) return;
+          if (performance.now() - lastOutput < PROCESS_TABLE_IDLE_MS) arm();
+          else {
+            timedOut = child.kill("SIGTERM");
+            if (timedOut) {
+              escalation = setTimeout(() => {
+                escalation = undefined;
+                if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+              }, 1000);
+              escalation.unref();
+            }
+          }
+        });
+      }, Math.max(1, PROCESS_TABLE_IDLE_MS - (performance.now() - lastOutput)));
+      deadline.unref();
+    };
+    arm();
   });
-  for (const line of output.split("\n")) {
+  for (const line of snapshot.output.split("\n")) {
     const match = /^\s*(\d+)\s+(\d+)\s+(\d+)\s+(.{24})\s+(\S+)/.exec(line);
     if (match) rows.set(Number(match[1]), { pid: Number(match[1]), parent: Number(match[2]), group: Number(match[3]), started: match[4]!, state: match[5]! });
   }
+  if (!rows.has(process.pid)) throw new ProcessTableReadError({ ...snapshot.details, code: "ERR_PROCESS_TABLE_INCOMPLETE" });
   return rows;
 }
 
@@ -66,11 +133,14 @@ export class OwnedProcesses {
   private closed = false;
   private reaped = 0;
   private failures = 0;
+  private scanFailures = 0;
+  private cleanupFailures = 0;
+  private lastScanFailure?: ({ at: string; kind: "process-table" } & ProcessTableFailure) | { at: string; kind: "scan" };
   private lastScanAt?: string;
   private lastProcessCount = 0;
 
   constructor(private readonly logger: Logger, private readonly deadlines = DEFAULT_DEADLINES, intervalMs = 1000) {
-    this.timer = setInterval(() => { void this.scan().catch(() => { this.failures++; }); }, intervalMs);
+    this.timer = setInterval(() => { void this.scan().catch(() => undefined); }, intervalMs);
     this.timer.unref();
   }
 
@@ -97,7 +167,8 @@ export class OwnedProcesses {
 
   describe(): Record<string, unknown> {
     return { ownedTrees: this.trees.size, liveProcesses: this.lastProcessCount, stoppingTrees: [...this.trees.values()].filter((tree) => tree.stopping).length,
-      reaperKills: this.reaped, reaperFailures: this.failures, lastScanAt: this.lastScanAt ?? null };
+      reaperKills: this.reaped, reaperFailures: this.failures, scanFailures: this.scanFailures, cleanupFailures: this.cleanupFailures,
+      lastScanAt: this.lastScanAt ?? null, lastScanFailure: this.lastScanFailure ?? null };
   }
 
   get size(): number { return this.trees.size; }
@@ -117,7 +188,14 @@ export class OwnedProcesses {
         this.lastProcessCount += this.alive(tree, rows).length;
       }
       this.lastScanAt = new Date().toISOString();
-    })().finally(() => { this.scanning = undefined; });
+    })().catch((error: unknown) => {
+      this.failures++;
+      this.scanFailures++;
+      const at = new Date().toISOString();
+      this.lastScanFailure = error instanceof ProcessTableReadError ? { at, kind: "process-table", ...error.details } : { at, kind: "scan" };
+      this.logger.error("sdk_process_scan_failed", { ...this.lastScanFailure });
+      throw error;
+    }).finally(() => { this.scanning = undefined; });
     return this.scanning;
   }
 
@@ -134,7 +212,11 @@ export class OwnedProcesses {
       if (liveOwners.has(owner) || tree.stopping) continue;
       this.logger.warn("sdk_orphan_reaped", { owner, pid: tree.pid });
       try { await this.stop(owner); this.reaped++; }
-      catch { this.failures++; }
+      catch (error: unknown) {
+        this.failures++;
+        this.cleanupFailures++;
+        this.logger.error("sdk_process_reap_failed", { owner, pid: tree.pid, ...(error instanceof ProcessTableReadError ? error.details : {}) });
+      }
     }
   }
 
