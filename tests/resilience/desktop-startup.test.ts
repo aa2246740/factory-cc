@@ -35,6 +35,7 @@ it("waits outside the repository until the external checkout becomes available",
   expect(plist).toContain("/bin/sh");
   expect(plist).not.toContain(`<key>WorkingDirectory</key><string>${repo}</string>`);
   expect(plist).toContain("<key>ThrottleInterval</key><integer>30</integer>");
+  expect(plist).toContain("<key>ProcessType</key><string>Interactive</string>");
 });
 it("backs off repeated configuration failures up to 60 seconds", () => {
   expect([1, 2, 3, 4, 5, 9].map(restartBackoff)).toEqual([5000, 10000, 20000, 40000, 60000, 60000]);

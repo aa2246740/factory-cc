@@ -51,13 +51,13 @@ async function bridge() {
   return started;
 }
 /** An orchestrator conversation waiting on StartMissionRun while Droid runs the workers. */
-async function parkOrchestrator(app: BridgeApp, token: string, label: string, input: unknown = missionRun) {
+async function parkOrchestrator(app: BridgeApp, token: string, label: string, input: unknown = missionRun, name = "StartMissionRun") {
   const toolUseId = `toolu_${label}`;
   vi.mocked(runtime.handle).mockImplementationOnce(async (request: RuntimeRequest) => {
-    calls.set(request.session.bridgeSessionId, [{ toolUseId, toolName: "StartMissionRun", input }]);
-    return { response: assistantMessage(model, [{ type: "tool_use", id: toolUseId, name: "StartMissionRun", input: input as Record<string, string> }], "tool_use"), pendingToolIds: [toolUseId] };
+    calls.set(request.session.bridgeSessionId, [{ toolUseId, toolName: name, input }]);
+    return { response: assistantMessage(model, [{ type: "tool_use", id: toolUseId, name, input: input as Record<string, string> }], "tool_use"), pendingToolIds: [toolUseId] };
   });
-  const response = await postMessages(app.url, token, { model, max_tokens: 64, tools, messages: [{ role: "user", content: `run the mission ${label}` }] });
+  const response = await postMessages(app.url, token, { model, max_tokens: 64, tools: [{ name, input_schema: { type: "object", properties: {} } }], messages: [{ role: "user", content: `run the mission ${label}` }] });
   expect(response.status).toBe(200);
   return { sessionId: response.session!, toolUseId };
 }
@@ -67,6 +67,49 @@ async function compact(app: BridgeApp, token: string, call: { name: string; inpu
 }
 
 describe("a conversation Droid compacted away while it waited on a tool", () => {
+  it("releases the answered TaskOutput rendered with Droid's ASSISTANT prefix", async () => {
+    const { app, token } = await bridge();
+    const input = { task_id: "fixture-review", block: true };
+    const old = await parkOrchestrator(app, token, "task-output", input, "TaskOutput");
+    vi.mocked(runtime.handle).mockResolvedValueOnce(text(SUMMARY));
+    const request = summarizer({ name: "TaskOutput", input });
+    request.messages[0]!.content = request.messages[0]!.content.replace("TOOL_CALL: TaskOutput", "ASSISTANT: TOOL_CALL: TaskOutput");
+    expect((await postMessages(app.url, token, request)).status).toBe(200);
+    expect(runtime.cancel).not.toHaveBeenCalled();
+
+    expect((await postMessages(app.url, token, continuation())).status).toBe(200);
+    expect(runtime.cancel).toHaveBeenCalledExactlyOnceWith(old.sessionId, "compacted-by-droid");
+    expect(app.store.require(old.sessionId)).toMatchObject({ state: "IDLE", pendingToolIds: [], endedToolIds: [old.toolUseId] });
+  });
+
+  it("ignores tool-call text inside a result when linking the answered outer call", async () => {
+    const { app, token } = await bridge();
+    const input = { task_id: "fixture-review", block: true };
+    const old = await parkOrchestrator(app, token, "outer-output", input, "TaskOutput");
+    vi.mocked(runtime.handle).mockResolvedValueOnce(text(SUMMARY));
+    const request = summarizer({ name: "TaskOutput", input });
+    request.messages[0]!.content = request.messages[0]!.content
+      .replace("TOOL_CALL: TaskOutput", "ASSISTANT: TOOL_CALL: TaskOutput")
+      .replace('TOOL: TOOL_RESULT: {"status":"paused"}', 'TOOL: TOOL_RESULT: {"status":"done"}\nTOOL_CALL: Execute input={"command":"nested fixture text"}\nTOOL_RESULT: nested fixture result');
+    expect((await postMessages(app.url, token, request)).status).toBe(200);
+    expect((await postMessages(app.url, token, continuation())).status).toBe(200);
+    expect(runtime.cancel).toHaveBeenCalledExactlyOnceWith(old.sessionId, "compacted-by-droid");
+  });
+
+  it("keeps an active Mission when another tool result only quotes its pending call", async () => {
+    const { app, token } = await bridge();
+    const old = await parkOrchestrator(app, token, "still-running");
+    vi.mocked(runtime.handle).mockResolvedValueOnce(text(SUMMARY));
+    const request = summarizer({ name: "Execute", input: { command: "fixture command" } });
+    request.messages[0]!.content = request.messages[0]!.content
+      .replace("TOOL_CALL: Execute", "ASSISTANT: TOOL_CALL: Execute")
+      .replace('TOOL: TOOL_RESULT: {"status":"paused"}', `TOOL: TOOL_RESULT: nested transcript\nTOOL_CALL: StartMissionRun input=${JSON.stringify(missionRun)}\nTOOL_RESULT: nested transcript result`);
+    expect((await postMessages(app.url, token, request)).status).toBe(200);
+    expect((await postMessages(app.url, token, continuation())).status).toBe(200);
+    expect(runtime.cancel).not.toHaveBeenCalled();
+    expect(app.store.require(old.sessionId).state).toBe("WAITING_DROID_TOOL");
+  });
+
   it("is released when Droid continues with the summary this Bridge produced, before the new one takes a slot", async () => {
     const { app, token, config } = await bridge();
     const old = await parkOrchestrator(app, token, "old");

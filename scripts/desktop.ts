@@ -100,6 +100,7 @@ export function desktopPlist(deps: DesktopDependencies, install: Installation): 
 <key>ProgramArguments</key><array><string>/bin/sh</string><string>${xml(join(paths.state, "bridge-launcher.sh"))}</string></array>
 <key>WorkingDirectory</key><string>${xml(paths.state)}</string>
 <key>EnvironmentVariables</key><dict>${Object.entries(env).map(([key, value]) => `<key>${key}</key><string>${xml(value)}</string>`).join("\n")}</dict>
+<key>ProcessType</key><string>Interactive</string>
 <key>RunAtLoad</key><true/><key>KeepAlive</key><true/><key>ThrottleInterval</key><integer>30</integer>
 <key>StandardOutPath</key><string>/dev/null</string>
 <key>StandardErrorPath</key><string>/dev/null</string>
