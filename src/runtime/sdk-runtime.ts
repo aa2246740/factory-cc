@@ -13,7 +13,7 @@ import { appendLogLine, type Logger } from "../logging.js";
 import { claudeToolTraceDetail, isDroidMcpName, selectDroidMcpTools } from "./droid-tools.js";
 import { DroidMcpCatalog, StableDroidToolNames } from "./droid-mcp-catalog.js";
 import { hostAllowsAnyTools, nativeToolAllowed } from "./native-tool-policy.js";
-import { buildDynamicUserContent, buildHostContext, buildInitialUserContent, buildPresetSystemPrompt, describePromptLayout, trailingUserMessages } from "./system-prompt.js";
+import { buildDroidSystemPrompt, buildDynamicUserContent, buildHostContext, buildInitialUserContent, buildPresetSystemPrompt, describePromptLayout, trailingUserMessages } from "./system-prompt.js";
 import { UsageLedger } from "./usage.js";
 import { INTERRUPT_GRACE_MS, TurnWatchdog } from "./turn-watchdog.js";
 import type { BridgeRuntime, RuntimeApprovalRequest, RuntimeControl, RuntimeEvent, RuntimeHostCall, RuntimeHostCompletion, RuntimeHostEnd, RuntimePermissionDecision, RuntimeRequest, RuntimeTurn, StreamSink } from "./types.js";
@@ -361,6 +361,7 @@ export class SdkRuntime implements BridgeRuntime {
   }
 
   async handle(input: RuntimeRequest, sink?: StreamSink): Promise<RuntimeTurn> {
+    if (this.config.promptMode === "droid") input = { ...input, droidPrompt: true };
     const preparationStarted = Date.now();
     if (this.closing) throw new BridgeError(503, "bridge_shutting_down", "Bridge is shutting down");
     // Resolve before allocating or changing a native session. A catalog typo or
@@ -689,7 +690,7 @@ export class SdkRuntime implements BridgeRuntime {
   private async updateCatalog(live: LiveSdk, input: RuntimeRequest): Promise<void> {
     const started = Date.now();
     if (!live.catalog) throw new BridgeError(503, "dynamic_tools_unavailable", "The live SDK session has no mutable Droid MCP catalog");
-    if (await live.catalog.update(selectDroidMcpTools(input.request.tools, this.config.desktopProfile))) {
+    if (await live.catalog.update(selectDroidMcpTools(input.request.tools, this.config.desktopProfile, this.config.promptMode === "droid"))) {
       await this.waitForCatalogVisibility(live);
       live.events.push({ at: now(), type: "droid_catalog_updated", data: {
         tools: live.catalog.definitions().map((tool) => tool.name), visibility: "cli_tool_names_confirmed", schemaVisibility: "revision_name_confirmed",
@@ -812,7 +813,7 @@ export class SdkRuntime implements BridgeRuntime {
     const selection = route ? route.selection : await this.ensureSelection();
     if (selection) this.selection = selection;
     if (live.terminal) throw live.terminal;
-    const droidTools = input.request.tools !== undefined ? selectDroidMcpTools(input.request.tools, this.config.desktopProfile) : live.catalog?.definitions() ?? [];
+    const droidTools = input.request.tools !== undefined ? selectDroidMcpTools(input.request.tools, this.config.desktopProfile, this.config.promptMode === "droid") : live.catalog?.definitions() ?? [];
     const names = live.names ?? new StableDroidToolNames();
     live.names = names;
     live.policyKey = queryPolicy(input, this.config);
@@ -893,7 +894,8 @@ export class SdkRuntime implements BridgeRuntime {
         if (live.terminal || live.queryEpoch !== epoch || this.closing) throw new Error("Native query was retired before spawn");
         return this.processes.spawn(processOwner, options);
       },
-      tools: { type: "preset", preset: "claude_code" }, includePartialMessages: true,
+      // Droid mode: no native tools, so Droid runs (and approves) every Read, Edit and Execute itself.
+      tools: this.config.promptMode === "droid" ? [] : { type: "preset", preset: "claude_code" }, includePartialMessages: true,
       cwd: resolveCwd(input, this.config), persistSession: this.config.persistSessions,
       ...(this.config.maxTurns > 0 ? { maxTurns: this.config.maxTurns } : {}), mcpServers: { droid: server },
       // Permit the dynamic host namespace only. Droid executes these operations
@@ -901,7 +903,7 @@ export class SdkRuntime implements BridgeRuntime {
       allowedTools: ["mcp__droid__*"],
       env, permissionMode: this.config.desktopProfile || this.config.permissionMode === "ask" ? "default" : "bypassPermissions",
       allowDangerouslySkipPermissions: !this.config.desktopProfile && this.config.permissionMode !== "ask", abortController: abort,
-      systemPrompt: buildPresetSystemPrompt(this.config.desktopProfile),
+      systemPrompt: this.config.promptMode === "droid" ? buildDroidSystemPrompt(input) : buildPresetSystemPrompt(this.config.desktopProfile),
       canUseTool: async (name: string, toolInput: Record<string, unknown>, context?: NativePermissionContext) => live.queryEpoch === epoch
         ? this.canUseTool(live, name, toolInput, context)
         : { behavior: "deny", message: "This native query has been retired." },

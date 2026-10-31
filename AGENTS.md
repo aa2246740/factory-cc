@@ -10,7 +10,7 @@ Local Anthropic Messages bridge from Factory Droid BYOK into the official Claude
 - Do not read `~/.claude` tokens or commit credential files.
 - Official Claude billing stays `BLOCKED_AUTH`. Non-Claude BYOK (MiniMax/GLM) e2e may be marked PASS when those providers actually ran.
 - `BRIDGE_AUTH` is `byok` (server default), `claude-config` (local launcher default), `subscription`, `anthropic-api`, `cloud`, or `inherit`. The child environment must match that declaration. `subscription` refuses API-key and cloud-router variables instead of inheriting them. The server default stays `byok`.
-- SDK mode uses `claude_code` preset + append. Do not go back to `tools: []` or a full custom system prompt.
+- SDK mode has two prompt modes. `BRIDGE_PROMPT=claude-code` (default) uses the `claude_code` preset + append with Claude Code's tools. `BRIDGE_PROMPT=droid` (opt-in) uses Droid's own system prompt with no native tools, so every tool runs in Droid. Do not mix them.
 - `FACTORY_AIRGAP_ENABLED=1` is an experiment, not an official public-CLI entitlement.
 
 ## Commands

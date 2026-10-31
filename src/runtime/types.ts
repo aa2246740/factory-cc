@@ -8,6 +8,8 @@ export interface RuntimeRequest {
   headers: Record<string, string | string[] | undefined>;
   /** Trusted host policy supplied by the controller, never raw Messages metadata. */
   factoryPermissionMode?: string;
+  /** Set by the SDK runtime in BRIDGE_PROMPT=droid: Droid's prompt is the system prompt and every Droid tool runs in Droid. */
+  droidPrompt?: boolean;
   /** Trusted HTTP retry receipt. Prior results become reference history, never callbacks. */
   recovery?: "cold-import";
 }

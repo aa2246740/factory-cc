@@ -25,6 +25,7 @@ Claude Code and Droid must already be installed and available on PATH.
   --base-url <URL>  Anthropic-compatible BYOK endpoint (prompted if omitted)
   --model <ID>      Default model (prompted for byok if omitted)
   --models <IDs>    Actual model choices, e.g. glm-5.2,glm-4.7 or sonnet,opus,haiku
+  --prompt <MODE>   claude-code (default): Claude Code's prompt and tools; droid: Droid's prompt, Droid runs every tool
   --key-env <NAME>  Read the byok/claude-config key from this environment variable
   -h, --help       Show help without changing any files
 
@@ -51,7 +52,7 @@ admin-token file. FACTORY_AIRGAP_ENABLED=1 remains an experimental Factory CLI m
 const LOCAL_AUTH = ["claude-config", "byok", "subscription", "anthropic-api"] as const;
 type LocalAuth = (typeof LOCAL_AUTH)[number];
 
-export interface LocalArgs { project: string; baseUrl?: string; model?: string; models?: string[]; keyEnv?: string; auth: LocalAuth; help: boolean }
+export interface LocalArgs { project: string; baseUrl?: string; model?: string; models?: string[]; prompt?: "claude-code" | "droid"; keyEnv?: string; auth: LocalAuth; help: boolean }
 
 function endpoint(value: string): string {
   let url: URL;
@@ -79,7 +80,7 @@ export function parseLocalArgs(argv: string[]): LocalArgs {
       if (/[\x00-\x1f\x7f]/.test(flag)) throw new Error("Project path cannot contain control characters.");
       result.project = resolve(flag); continue;
     }
-    if (!["--base-url", "--model", "--models", "--key-env", "--auth"].includes(flag)) throw new Error("Unknown local option; use --help. Credentials must not appear in command arguments.");
+    if (!["--base-url", "--model", "--models", "--prompt", "--key-env", "--auth"].includes(flag)) throw new Error("Unknown local option; use --help. Credentials must not appear in command arguments.");
     if (seen.has(flag)) throw new Error(`Duplicate option ${flag}.`);
     seen.add(flag);
     const value = argv[++index];
@@ -87,6 +88,10 @@ export function parseLocalArgs(argv: string[]): LocalArgs {
     if (flag === "--base-url") result.baseUrl = endpoint(value);
     else if (flag === "--model") result.model = modelId(value);
     else if (flag === "--models") result.models = parseModelIds(value);
+    else if (flag === "--prompt") {
+      if (value !== "claude-code" && value !== "droid") throw new Error("--prompt must be claude-code or droid.");
+      result.prompt = value;
+    }
     else if (flag === "--auth") {
       if (!(LOCAL_AUTH as readonly string[]).includes(value)) throw new Error("--auth must be claude-config, byok, subscription or anthropic-api.");
       result.auth = value as LocalAuth;
@@ -312,7 +317,7 @@ export async function runLocal(argv: string[], env: NodeJS.ProcessEnv = process.
     if (args.auth === "byok") setEnv(runtimeKey, key);
     setEnv("BRIDGE_DROID_HOME", home); setEnv("BRIDGE_SDK_CWD", project); setEnv("BRIDGE_WAIT_FOR_MISSION_DIR", undefined);
     const clientToken = randomBytes(24).toString("hex"), adminToken = randomBytes(24).toString("hex"), hookToken = randomBytes(24).toString("hex");
-    const config = loadConfig({ mode: "sdk", authMode: args.auth, permissionMode: "ask", host: "127.0.0.1", port: 0,
+    const config = loadConfig({ mode: "sdk", authMode: args.auth, permissionMode: "ask", promptMode: args.prompt ?? "claude-code", host: "127.0.0.1", port: 0,
       clientToken, adminToken, hookToken, dataDir: join(state, "bridge-data"), sdkCwd: project, persistSessions: true,
       maxBodyBytes: 8 * 1024 * 1024, maxSessions: 32, maxTurns: 160, toolWaitMs: 8 * 60 * 60 * 1000, requestTimeoutMs: 10 * 60 * 1000,
       claudeExecutable: env.BRIDGE_CLAUDE_EXECUTABLE ?? "claude", models: catalog, claudeConfig,

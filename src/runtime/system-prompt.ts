@@ -20,6 +20,16 @@ export const STABLE_DROID_APPEND = [
   "When a Droid MCP tool is required, call it and wait; Droid will execute it and return the result.",
 ].join(" ");
 
+/** Droid's tools reach Claude as MCP tools, so their names gain a prefix Droid's prompt does not mention. */
+export const DROID_TOOL_NAME_NOTE = "Tool names: every tool named in these instructions is available with the mcp__droid__ prefix, for example Read is mcp__droid__Read and Execute is mcp__droid__Execute.";
+
+/** BRIDGE_PROMPT=droid: Droid's own system prompt replaces Claude Code's preset. */
+export function buildDroidSystemPrompt(input: RuntimeRequest): string {
+  const host = systemText(input.request.system).trim();
+  if (!host) throw new BridgeError(400, "missing_host_system_prompt", "BRIDGE_PROMPT=droid needs Droid's system prompt in the request.");
+  return `${host}\n\n${DROID_TOOL_NAME_NOTE}`;
+}
+
 export interface PresetSystemPrompt {
   type: "preset";
   preset: "claude_code";
@@ -54,6 +64,8 @@ export function buildHostContext(input: RuntimeRequest, cwd?: string): string {
   const host = systemText(input.request.system);
   const header = input.headers["x-bridge-mission-dir"];
   const missionDir = Array.isArray(header) ? header[0] : header;
+  // Droid's prompt is already the system prompt and Claude has no native tools: only the workspace is added.
+  if (input.droidPrompt) return cwd ? buildWorkspaceAppendix(cwd, missionDir) : "";
   // X-Bridge-Role identifies a model configuration, which Factory Task subagents
   // can inherit. The host's actual instructions own roles, skills and workflow.
   const roleContext = host.trim()

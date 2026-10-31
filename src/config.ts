@@ -49,10 +49,18 @@ export interface BridgeConfig {
   authMode: AuthMode;
   claudeConfig?: ClaudeConfig;
   permissionMode: "bypass" | "ask";
+  /** Whose system prompt drives Claude: Claude Code's preset (default), or Droid's own prompt with Droid's tools only. */
+  promptMode: "claude-code" | "droid";
   upstreamBaseUrl?: string;
   upstreamModel?: string;
   upstreamTokenEnv?: string;
   models?: BridgeModel[];
+}
+
+function promptModeEnv(): "claude-code" | "droid" {
+  const value = env("BRIDGE_PROMPT", "claude-code");
+  if (value !== "claude-code" && value !== "droid") throw new Error("BRIDGE_PROMPT must be claude-code or droid.");
+  return value;
 }
 
 function env(name: string, fallback?: string): string | undefined {
@@ -206,6 +214,7 @@ export function loadConfig(overrides: Partial<BridgeConfig> = {}): BridgeConfig 
     logBodies: overrides.logBodies ?? env("BRIDGE_LOG_BODIES") === "1",
     authMode,
     permissionMode,
+    promptMode: overrides.promptMode ?? promptModeEnv(),
     upstreamBaseUrl: overrides.upstreamBaseUrl ?? env("BRIDGE_UPSTREAM_BASE_URL"),
     upstreamModel: overrides.upstreamModel ?? env("BRIDGE_UPSTREAM_MODEL"),
     upstreamTokenEnv: overrides.upstreamTokenEnv ?? env("BRIDGE_UPSTREAM_TOKEN_ENV"),

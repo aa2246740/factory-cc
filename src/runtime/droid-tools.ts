@@ -70,8 +70,9 @@ export function isReadOnlyBuiltin(name: string): boolean {
  * writes and shells, so Droid's own Create/Edit/Execute must be exposed for Droid to run. */
 const NATIVE_READS = new Set(["Read", "LS", "Grep", "Glob"]);
 
-export function selectDroidMcpTools(tools: ToolDefinition[] | undefined, desktopProfile = false): ToolDefinition[] {
+export function selectDroidMcpTools(tools: ToolDefinition[] | undefined, desktopProfile = false, allTools = false): ToolDefinition[] {
   if (!tools?.length) return [];
+  if (allTools) return tools;
   return tools.filter((tool) => desktopProfile ? !NATIVE_READS.has(tool.name) : isDroidExclusive(tool.name));
 }
 

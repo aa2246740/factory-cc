@@ -109,6 +109,24 @@ describe("official SDK streaming-input lifecycle (injected offline SDK)", () => 
     expect(sdk.close).not.toHaveBeenCalled();
   });
 
+  it("BRIDGE_PROMPT=droid sends Droid's prompt as the system prompt and every Droid tool through MCP", async () => {
+    const sdk = new FakeSdk(async function* (_input, index) { yield success(`reply-${index}`); });
+    const { runtime } = create(sdk, { promptMode: "droid" });
+    const s = session();
+    const tools = ["Read", "Edit", "Execute", "TaskOutput"].map((name) => ({ name, input_schema: { type: "object" as const, properties: {} } }));
+    const droid = (text: string) => request(s, text, { system: "You are Droid, built by Factory.", tools });
+    await runtime.handle(droid("first"));
+    await runtime.handle(droid("second"));
+    const options = sdk.calls[0]!.options;
+    expect(options.tools).toEqual([]);
+    expect(options.systemPrompt).toContain("You are Droid, built by Factory.");
+    expect(options.systemPrompt).toContain("mcp__droid__Read");
+    expect([...sdk.handlers.keys()].sort()).toEqual(["Edit", "Execute", "Read", "TaskOutput"]);
+    // Droid's prompt is not repeated as host context, and the native-tool note is gone.
+    expect(JSON.stringify(sdk.inputs)).not.toContain("You are Droid");
+    expect(JSON.stringify(sdk.inputs)).not.toContain("Allowed native tool equivalents");
+  });
+
   it("sets no turn limit unless BRIDGE_MAX_TURNS asks for one", async () => {
     const unlimited = new FakeSdk(async function* () { yield success("ok"); });
     await create(unlimited).runtime.handle(request(session(), "go"));
