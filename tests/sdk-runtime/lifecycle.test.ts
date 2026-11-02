@@ -209,6 +209,12 @@ describe("official SDK streaming-input lifecycle (injected offline SDK)", () => 
     expect(JSON.stringify(sdk.inputs)).not.toContain("Allowed native tool equivalents");
   });
 
+  it("lets Claude Code forward Droid tool descriptions uncut", async () => {
+    const sdk = new FakeSdk(async function* () { yield success("ok"); });
+    await create(sdk).runtime.handle(request(session(), "go"));
+    expect(sdk.calls[0]!.options.env).toMatchObject({ CLAUDE_CODE_MAX_MCP_DESCRIPTION_LENGTH: process.env.CLAUDE_CODE_MAX_MCP_DESCRIPTION_LENGTH ?? "1000000" });
+  });
+
   it("sets no turn limit unless BRIDGE_MAX_TURNS asks for one", async () => {
     const unlimited = new FakeSdk(async function* () { yield success("ok"); });
     await create(unlimited).runtime.handle(request(session(), "go"));

@@ -203,6 +203,8 @@ const STEERING_TURN_DENIAL = "BRIDGE_USER_TURN_PENDING: A new user message is qu
  * subagents at once has taken over 10s. Until it answers, no prompt is sent.
  */
 const SDK_START_TIMEOUT_MS = 60_000;
+/** Characters; far above any Droid tool description, including Script's nested reference. */
+const DROID_TOOL_DESCRIPTION_LIMIT = "1000000";
 /** Longest a Task waits for the rest of its message before it goes to Droid alone. */
 const TASK_BATCH_WAIT_MS = 30_000;
 
@@ -904,6 +906,10 @@ export class SdkRuntime implements BridgeRuntime {
     if (route) env.BRIDGE_MODEL_ID = route.id;
     else delete env.BRIDGE_MODEL_ID;
     env.BRIDGE_CONTROL_URL = `http://${clientHost.includes(":") && !clientHost.startsWith("[") ? `[${clientHost}]` : clientHost}:${this.config.port}`;
+    // Claude Code cuts MCP tool descriptions at about 4 KB by default. Droid sends
+    // its own tool descriptions uncut, and in Script mode the whole nested tool
+    // reference lives in the Script description, so forward them in full.
+    env.CLAUDE_CODE_MAX_MCP_DESCRIPTION_LENGTH = process.env.CLAUDE_CODE_MAX_MCP_DESCRIPTION_LENGTH ?? DROID_TOOL_DESCRIPTION_LIMIT;
     // The native worker receives its provider credential, never the host
     // controller's authority or Factory lifecycle generation.
     for (const name of ["BRIDGE_ADMIN_TOKEN", "BRIDGE_FACTORY_BINDING", "BRIDGE_FACTORY_LAUNCH_ID", "BRIDGE_LAUNCH_ID"]) delete env[name];

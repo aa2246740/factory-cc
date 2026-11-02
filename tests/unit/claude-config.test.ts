@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { loadConfig } from "../../src/config.js";
 import { buildChildEnv, MODEL_SLOT_NAMES, parseAuthMode } from "../../src/upstream/auth-env.js";
-import { assertClaudeCredential, claudeConfigModels, claudeConfigNeedsLogin, claudeConfigSummary, needsClaudeCredential, readClaudeConfig, supplyClaudeCredential } from "../../src/upstream/claude-config.js";
+import { assertClaudeCredential, claudeAliasUpstream, claudeConfigModels, claudeConfigNeedsLogin, claudeConfigSummary, needsClaudeCredential, readClaudeConfig, supplyClaudeCredential, withClaudeUpstream, type ClaudeConfig } from "../../src/upstream/claude-config.js";
 
 const owned: string[] = [];
 afterEach(() => { vi.unstubAllEnvs(); for (const dir of owned.splice(0)) rmSync(dir, { recursive: true, force: true }); });
@@ -157,4 +157,26 @@ it("fails desktop startup when its selected profile settings are missing", () =>
   vi.stubEnv("HOME", f.root);
   vi.stubEnv("CLAUDE_CONFIG_DIR", f.dir);
   expect(() => loadConfig({ authMode: "claude-config", desktopProfile: true, dataDir: join(f.root, "bridge-data") })).toThrow("settings are unreadable");
+});
+
+describe("alias upstream for Droid base models", () => {
+  const settings = (env: Record<string, string>) => ({ env }) as unknown as ClaudeConfig;
+  it("knows opus only on Anthropic's own endpoint or through an explicit remap", () => {
+    expect(claudeAliasUpstream(settings({}), "opus")).toBe("claude-opus-5-5");
+    expect(claudeAliasUpstream(settings({ ANTHROPIC_BASE_URL: "https://api.anthropic.com" }), "opus")).toBe("claude-opus-5-5");
+    expect(claudeAliasUpstream(settings({ ANTHROPIC_BASE_URL: "https://gateway.example" }), "opus")).toBeUndefined();
+    expect(claudeAliasUpstream(settings({ ANTHROPIC_DEFAULT_OPUS_MODEL: "other-model" }), "opus")).toBe("other-model");
+    expect(claudeAliasUpstream(settings({ ANTHROPIC_BASE_URL: "https://gateway.example", ANTHROPIC_DEFAULT_OPUS_MODEL: "claude-opus-5-5" }), "opus")).toBe("claude-opus-5-5");
+    expect(claudeAliasUpstream(settings({}), "haiku")).toBeUndefined();
+    expect(claudeAliasUpstream(settings({}), "claude-opus-5-5")).toBeUndefined();
+  });
+
+  it("annotates only Claude entries", () => {
+    const models = withClaudeUpstream(settings({}), [
+      { id: "opus", model: "opus", displayName: "Claude Code · Opus" },
+      { id: "cursor:composer-2.5", model: "composer-2.5", provider: "cursor", displayName: "Cursor · Composer 2.5", cursor: { id: "composer-2.5", params: [] } },
+    ]);
+    expect(models[0]).toMatchObject({ upstream: "claude-opus-5-5" });
+    expect(models[1]).not.toHaveProperty("upstream");
+  });
 });

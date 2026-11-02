@@ -19,6 +19,8 @@ export interface BridgeModel {
   displayName: string;
   /** Set for Cursor menu entries. Claude entries leave this unset so older catalogs stay identical. */
   provider?: ModelProvider;
+  /** Claude only: the model an alias such as `opus` really runs, when the Claude Code settings make it known. */
+  upstream?: string;
   /** Full explicit Cursor selection. Required when provider is cursor. */
   cursor?: { id: string; params: CursorModelParameter[]; parameters?: CursorParameterValues[] };
 }
@@ -77,7 +79,11 @@ export function validateModels(models: BridgeModel[]): BridgeModel[] {
     }
     const cursor = item.provider === "cursor" ? normalizeCursorSelection(item.cursor) : undefined;
     seen.add(item.id);
+    if (item.upstream !== undefined && ((item.provider ?? "claude") !== "claude" || !validId(item.upstream))) {
+      throw new BridgeError(400, "invalid_model_catalog", "Only Claude entries may name an upstream model, and it must be a model ID.");
+    }
     return { id: item.id, model: item.model, displayName: item.displayName.trim(),
+      ...(item.upstream ? { upstream: item.upstream } : {}),
       ...(item.provider === "cursor" ? { provider: "cursor" as const, cursor } : item.provider === "claude" ? { provider: "claude" as const } : {}) };
   });
 }

@@ -5,7 +5,7 @@ import { dirname, join, resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { Writable } from "node:stream";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { readClaudeConfig, needsClaudeCredential, supplyClaudeCredential, claudeConfigModels, claudeConfigSummary, type ClaudeConfig } from "../src/upstream/claude-config.js";
+import { readClaudeConfig, needsClaudeCredential, supplyClaudeCredential, claudeConfigModels, claudeConfigSummary, withClaudeUpstream, type ClaudeConfig } from "../src/upstream/claude-config.js";
 import { loadConfig } from "../src/config.js";
 import { isAnthropicHost, preflightAuth } from "../src/upstream/auth-env.js";
 import { installFactoryHooks, removeFactoryHooks } from "../src/control/factory-hooks.js";
@@ -279,7 +279,7 @@ export async function runLocal(argv: string[], env: NodeJS.ProcessEnv = process.
         supplyClaudeCredential(claudeConfig, key, args.keyEnv ? `--key-env ${args.keyEnv}` : "typed at launch");
       }
       const resolved = claudeConfigModels(claudeConfig);
-      catalog = args.models || args.model ? modelsFromIds(args.models ?? [args.model!], args.auth) : resolved.models;
+      catalog = withClaudeUpstream(claudeConfig, args.models || args.model ? modelsFromIds(args.models ?? [args.model!], args.auth) : resolved.models);
       ids = catalog.map((item) => item.id); model = args.model ?? (ids.includes(resolved.defaultModel) ? resolved.defaultModel : ids[0]!);
       preflightAuth(args.auth, env, undefined, { claudeConfig, bridgeListen: "127.0.0.1:18787" });
       process.stdout.write(claudeConfigSummary(claudeConfig, catalog, model));
