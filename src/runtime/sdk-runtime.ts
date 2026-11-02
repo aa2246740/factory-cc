@@ -15,16 +15,17 @@ import { DroidMcpCatalog, StableDroidToolNames } from "./droid-mcp-catalog.js";
 import { hostAllowsAnyTools, nativeToolAllowed } from "./native-tool-policy.js";
 import { CANCELLED_TOOL_NOTE, CANCELLED_TURN_DENIAL, allToolsCancelled, isUserCancellation as isCancellationResult } from "./cancellation.js";
 import { buildDroidSystemPrompt, buildDynamicUserContent, buildHostContext, buildInitialUserContent, buildPresetSystemPrompt, describePromptLayout, trailingUserMessages } from "./system-prompt.js";
-import { UsageLedger } from "./usage.js";
+import { UsageLedger, type LedgerUsage } from "./usage.js";
 import { INTERRUPT_GRACE_MS, TurnWatchdog } from "./turn-watchdog.js";
-import type { BridgeRuntime, RuntimeApprovalRequest, RuntimeControl, RuntimeEvent, RuntimeHostCall, RuntimeHostCompletion, RuntimeHostEnd, RuntimePermissionDecision, RuntimeRequest, RuntimeTurn, StreamSink } from "./types.js";
+import type { BridgeRuntime, Continuity, RuntimeApprovalRequest, RuntimeControl, RuntimeEvent, RuntimeHostCall, RuntimeHostCompletion, RuntimeHostEnd, RuntimePermissionDecision, RuntimeRequest, RuntimeTurn, StreamSink } from "./types.js";
 import { redactClaudeConfigText, claudeConfigNeedsLogin, CLAUDE_LOGIN_REQUIRED } from "../upstream/claude-config.js";
 import { buildChildEnv, classifyAuth, maskEmail, type AuthClassification, type AuthObservation } from "../upstream/auth-env.js";
 import { publicSelection, sdkEnv, selectionFromConfig, type UpstreamSelection } from "../upstream/providers.js";
 import { resolveRequestModel } from "../models.js";
 import { claudeReasoningKey, claudeReasoningOptions, droidReasoningLevel } from "./reasoning.js";
 import { OwnedProcesses } from "./owned-processes.js";
-import { upstreamError } from "./upstream-error.js";
+import { contextOverflowError, isContextOverflowText, upstreamError } from "./upstream-error.js";
+import { compactedSummaryText } from "../sessions/compaction.js";
 import { redactValue } from "../security/redact.js";
 
 type ModelRoute = ReturnType<typeof resolveRequestModel>;
@@ -36,6 +37,7 @@ export interface SdkHandle {
     close?: () => void;
     mcpServerStatus?: () => Promise<Array<{ name: string; status: string; tools?: Array<{ name: string; description?: string }> }>>;
     accountInfo?: () => Promise<Record<string, unknown>>;
+    getContextUsage?: (options?: { detail?: "summary" | "full" }) => Promise<Record<string, unknown>>;
   };
   tool(name: string, description: string, schema: unknown, handler: (args: Record<string, unknown>, extra?: unknown) => Promise<unknown>, extras?: Record<string, unknown>): unknown;
   createSdkMcpServer(options: Record<string, unknown>): unknown;
@@ -178,6 +180,11 @@ interface LiveSdk {
   windDown?: () => void;
   /** Wind down the previous native response before delivering queued user input. */
   turnHandoff?: TurnHandoff;
+  /** Claude Code compacted this conversation itself: it no longer holds what Droid sent. */
+  diverged?: string;
+  /** Why this live replaced a diverged one; the next cold import is a deliberate re-seed. */
+  reseedReason?: string;
+  continuity?: Continuity;
 }
 
 /**
@@ -228,6 +235,8 @@ export class SdkRuntime implements BridgeRuntime {
   private readonly processes: OwnedProcesses;
   private readonly maintenance: NodeJS.Timeout;
   private closing = false;
+  /** Claude Code's reported compaction policy, checked once per model per bridge run. */
+  private readonly contextPolicies = new Map<string, Record<string, unknown>>();
 
   constructor(private readonly config: BridgeConfig, private readonly logger: Logger, sdk?: SdkHandle) {
     this.sdk = sdk;
@@ -244,7 +253,10 @@ export class SdkRuntime implements BridgeRuntime {
         settingsPath: this.config.claudeConfig.path,
         upstreamOrigin: this.config.claudeConfig.env.ANTHROPIC_BASE_URL ? new URL(this.config.claudeConfig.env.ANTHROPIC_BASE_URL).origin : "https://api.anthropic.com",
       } } : {}),
-      prompt: describePromptLayout(), tools: "preset:claude_code + droid-exclusive MCP",
+      prompt: describePromptLayout(this.config.promptMode),
+      tools: this.config.promptMode === "droid" ? "no native tools; every Droid tool through MCP" : "preset:claude_code + droid-exclusive MCP",
+      compaction: this.config.upstreamCompaction === "upstream" ? "Claude Code auto-compaction on" : "Droid only (Claude Code auto-compaction off)",
+      contextPolicy: Object.fromEntries(this.contextPolicies),
       input: "persistent SDK streaming input", includePartialMessages: true,
       approvalChannel: this.control ? "external controller" : "unavailable: fail closed",
       activeNativeSessions: [...this.lives.values()].filter((live) => !live.terminal && (live.query || live.starting)).length,
@@ -384,6 +396,16 @@ export class SdkRuntime implements BridgeRuntime {
       live.sentUserTurns = previous.sentUserTurns;
       this.lives.set(id, live);
     }
+    if (live?.diverged && !live.terminal && this.config.upstreamCompaction !== "upstream" && this.canReseed(live, input)) {
+      // Claude Code summarized on its own, so the model no longer sees Droid's
+      // history. At the next new user turn, rebuild from what Droid sent.
+      const reason = live.diverged;
+      await this.stop(live, new BridgeError(409, "session_reseeded", "Claude Code compacted this conversation on its own; it was rebuilt from Droid's history."));
+      this.logger.warn("sdk_session_reseeded", { sessionId: id, sdkSessionId: live.sdkSessionId, reason });
+      live = this.createLive();
+      live.reseedReason = reason;
+      this.lives.set(id, live);
+    }
     if (!live && input.session.pendingToolIds.length) {
       throw new BridgeError(409, "interrupted_tool_roundtrip", "The bridge restarted while a Droid tool was pending. Start a new session; the tool will not be replayed.");
     }
@@ -494,6 +516,7 @@ export class SdkRuntime implements BridgeRuntime {
       if (live.query && input.request.tools !== undefined) await this.updateCatalog(live, input);
       if (live.terminal) throw live.terminal;
       if (results.length) {
+        this.noteContinuity(live, { kind: "reused", ...(input.continuityReason ? { reason: input.continuityReason } : {}) });
         this.submitResults(live, results, continuation, handoff);
         live.lastHostContext = context;
         this.flushOutbox(live);
@@ -507,6 +530,13 @@ export class SdkRuntime implements BridgeRuntime {
         if (!live.query) await this.startQuery(input, live);
         if (live.terminal) throw live.terminal;
         const cwd = resolveCwd(input, this.config);
+        const imported = input.request.messages.length - trailing.length;
+        const summary = compactedSummaryText(input.request) !== undefined;
+        const reason = live.reseedReason ?? (summary ? "droid-compaction" : input.continuityReason ?? input.recovery);
+        this.noteContinuity(live, coldImport
+          ? { kind: summary || live.reseedReason ? "reseeded" : imported > 0 ? "cold-import" : "new", ...(reason ? { reason } : {}), ...(imported > 0 ? { importedMessages: imported } : {}) }
+          : { kind: queryReused ? "reused" : "resumed", ...(input.continuityReason ? { reason: input.continuityReason } : {}) });
+        live.reseedReason = undefined;
         const content = coldImport
           ? buildInitialUserContent(input, cwd)
           : buildDynamicUserContent(input, cwd, { includeContext: live.lastHostContext !== context });
@@ -578,6 +608,19 @@ export class SdkRuntime implements BridgeRuntime {
     await Promise.all([...this.lives.values()].map((live) => this.stop(live, new BridgeError(499, "cancelled", "bridge shutdown"))));
     await this.processes.close();
     this.lives.clear();
+  }
+
+  /** A new user turn on an idle live, with nothing native that a fresh session would lose. */
+  private canReseed(live: LiveSdk, input: RuntimeRequest): boolean {
+    if (live.busy || live.active || live.starting || input.session.pendingToolIds.length || input.recovery) return false;
+    const latest = input.request.messages.at(-1);
+    if (latest?.role !== "user" || asBlocks(latest.content).some((block) => block.type === "tool_result")) return false;
+    return this.coldImportSafe(live) && !live.outbox.length;
+  }
+
+  private noteContinuity(live: LiveSdk, continuity: Continuity): void {
+    live.continuity = continuity;
+    live.sink?.continuity?.(continuity);
   }
 
   private createLive(sdkSessionId?: string): LiveSdk {
@@ -950,15 +993,21 @@ export class SdkRuntime implements BridgeRuntime {
       options.settingSources = [];
       options.strictMcpConfig = true;
     }
-    if (this.config.authMode === "claude-config" && this.config.claudeConfig?.helper) options.settings = { apiKeyHelper: this.config.claudeConfig.helper };
+    // SDK 0.3.300 loads this object as the --settings flag layer, above filesystem settings.
+    const settings: Record<string, unknown> = {};
+    if (this.config.authMode === "claude-config" && this.config.claudeConfig?.helper) settings.apiKeyHelper = this.config.claudeConfig.helper;
     if (this.config.authMode === "anthropic-api") {
       const helper = process.env.BRIDGE_API_KEY_HELPER?.trim();
       if (helper) {
         if (!isAbsolute(helper)) throw new BridgeError(400, "invalid_api_key_helper", "BRIDGE_API_KEY_HELPER must be an absolute path.");
-        // SDK 0.3.300 loads this object as the --settings flag layer, above filesystem settings.
-        options.settings = { apiKeyHelper: helper };
+        settings.apiKeyHelper = helper;
       }
     }
+    // Droid compacts the conversation it owns. A second, silent compaction inside
+    // Claude Code (near 200K on 1M models, below Droid's own threshold) would leave
+    // the model with Claude Code's summary instead of what Droid sent.
+    if (this.config.upstreamCompaction !== "upstream") settings.autoCompactEnabled = false;
+    if (Object.keys(settings).length) options.settings = settings;
     // The host can change its tool capability between turns without rebuilding
     // native history. Check at invocation, including under native bypass mode.
     options.hooks = { PreToolUse: [{ hooks: [async (hook: { tool_name?: string; tool_use_id?: string }) => {
@@ -999,10 +1048,39 @@ export class SdkRuntime implements BridgeRuntime {
       live.loop = this.consume(live, live.query, live.queryEpoch, expectedResumeId);
       // Gate before this method returns, so handle() has not pushed a user message yet.
       await this.verifyDeclaredAuth(live, input.session.bridgeSessionId);
+      this.checkContextPolicy(live, typeof options.model === "string" ? options.model : undefined);
     } catch (error) {
       this.stop(live, this.sdkError(error));
       throw this.sdkError(error);
     }
+  }
+
+  /**
+   * Ask Claude Code once per model whether it would still compact on its own, and
+   * at which window. Logged as sdk_context_policy and shown in describe(); a warning
+   * if auto-compaction is on although this bridge switched it off.
+   */
+  private checkContextPolicy(live: LiveSdk, model: string | undefined): void {
+    const key = model ?? "default";
+    const query = live.query;
+    if (this.contextPolicies.has(key) || !query?.getContextUsage) return;
+    this.contextPolicies.set(key, { status: "pending" });
+    let timer: NodeJS.Timeout | undefined;
+    const timeout = new Promise<never>((_resolve, reject) => { timer = setTimeout(() => reject(new Error("timeout")), 15_000); timer.unref(); });
+    void Promise.race([query.getContextUsage({ detail: "summary" }), timeout]).then((usage) => {
+      const number = (value: unknown) => typeof value === "number" && Number.isFinite(value) ? value : null;
+      const policy = {
+        autoCompactEnabled: typeof usage.isAutoCompactEnabled === "boolean" ? usage.isAutoCompactEnabled : null,
+        autoCompactThreshold: number(usage.autoCompactThreshold), rawMaxTokens: number(usage.rawMaxTokens), maxTokens: number(usage.maxTokens),
+      };
+      this.contextPolicies.set(key, policy);
+      const unexpected = this.config.upstreamCompaction !== "upstream" && policy.autoCompactEnabled === true;
+      if (unexpected) this.logger.warn("sdk_auto_compact_still_on", { model: key, ...policy });
+      else this.logger.info("sdk_context_policy", { model: key, ...policy });
+    }).catch((error: unknown) => {
+      this.contextPolicies.delete(key);
+      this.logger.warn("sdk_context_policy_unavailable", { model: key, message: error instanceof Error ? error.message : String(error) });
+    }).finally(() => clearTimeout(timer));
   }
 
   private async verifyDeclaredAuth(live: LiveSdk, sessionId: string): Promise<void> {
@@ -1304,7 +1382,10 @@ export class SdkRuntime implements BridgeRuntime {
           }
         } else live.upstreamBackoff = undefined;
         if (message.type === "assistant" && message.error) {
-          const mapped = upstreamError(message.error === "rate_limit" ? "rate_limit_error" : extractText(message));
+          const text = extractText(message);
+          // Droid compacts and retries on "prompt is too long"; a 502 would be retried unchanged.
+          if (!message.parent_tool_use_id && isContextOverflowText(text)) throw contextOverflowError(text);
+          const mapped = upstreamError(message.error === "rate_limit" ? "rate_limit_error" : text);
           if (mapped) throw mapped;
         }
         live.watchdog?.touch();
@@ -1325,7 +1406,12 @@ export class SdkRuntime implements BridgeRuntime {
         if (live.events.length > 1000) live.events.splice(0, live.events.length - 1000);
         if (message.subtype === "compact_boundary" && message.compact_metadata && typeof message.compact_metadata === "object") {
           live.compactMetadata = structuredClone(message.compact_metadata as Record<string, unknown>);
-          this.logger.info("sdk_compact_boundary", { sdkSessionId: live.sdkSessionId, ...live.compactMetadata });
+          if (this.config.upstreamCompaction === "upstream") {
+            this.logger.info("sdk_compact_boundary", { sdkSessionId: live.sdkSessionId, ...live.compactMetadata });
+          } else {
+            live.diverged = `claude-code-compaction:${String(live.compactMetadata.trigger ?? "unknown")}`;
+            this.logger.warn("sdk_upstream_compacted", { sdkSessionId: live.sdkSessionId, ...live.compactMetadata });
+          }
         }
         this.noteUsage(live, message);
         if (message.type === "system" && message.subtype === "task_started" && typeof message.task_id === "string") live.backgroundTasks.add(message.task_id);
@@ -1398,7 +1484,11 @@ export class SdkRuntime implements BridgeRuntime {
           }
           if (message.is_error === true || (typeof message.subtype === "string" && message.subtype !== "success")) {
             const errors = Array.isArray(message.errors) ? message.errors.filter((item): item is string => typeof item === "string").join("; ") : "";
-            throw new BridgeError(502, "sdk_execution_error", errors || extractText(message) || String(message.subtype ?? "SDK execution failed"));
+            const detail = errors || extractText(message) || String(message.subtype ?? "SDK execution failed");
+            if (message.terminal_reason === "prompt_too_long" || message.terminal_reason === "blocking_limit" || isContextOverflowText(detail)) {
+              throw contextOverflowError(detail);
+            }
+            throw new BridgeError(502, "sdk_execution_error", detail);
           }
           if (!live.active) continue;
           if (live.pending.size || live.handlerArrivals.size) throw new BridgeError(502, "sdk_unfinished_tools", "SDK ended a turn while Droid tools were unresolved");
@@ -1453,11 +1543,13 @@ export class SdkRuntime implements BridgeRuntime {
     const text = live.streamed.trim();
     const content: ContentBlock[] = text ? [{ type: "text", text }, ...extra] : [...live.blocks, ...extra];
     if (!content.length) content.push({ type: "text", text: "" });
-    const usage = live.usage.drainTurnUsage() as Usage;
+    const drained = live.usage.drainTurnUsage();
     const turn: RuntimeTurn = {
-      response: assistantMessage(live.current!.request.model, content, stop, usage),
+      response: assistantMessage(live.current!.request.model, content, stop, replyUsage(drained)),
       pendingToolIds: [...live.pending.keys()], sdkSessionId: live.sdkSessionId,
       compactMetadata: live.compactMetadata, sdkBillingUsage: live.usage.billingSnapshot(), events: [...live.events],
+      ...(live.continuity ? { continuity: live.continuity } : {}),
+      turnUsage: { ...drained, lastCall: undefined },
     };
     live.blocks = [];
     live.streamed = "";
@@ -1718,3 +1810,26 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
 }
 
 function now(): string { return new Date().toISOString(); }
+
+/**
+ * The usage a reply reports. Droid's context meter and automatic compaction follow
+ * each reply's usage as one model call's prompt, so this is the latest main-agent
+ * call, not the sum over every call (native tool loops, subagents) since the previous
+ * reply, which overstated the context. When no new main call was seen, the previous
+ * one still describes the context best; zero would blank the context meter.
+ */
+export function replyUsage(drained: LedgerUsage): Usage {
+  const last = drained.lastCall;
+  if (last) {
+    return {
+      input_tokens: last.input_tokens, output_tokens: last.output_tokens,
+      cache_creation_input_tokens: last.cache_creation_input_tokens, cache_read_input_tokens: last.cache_read_input_tokens,
+      estimated: !last.fresh || !last.complete,
+    };
+  }
+  return {
+    input_tokens: drained.input_tokens, output_tokens: drained.output_tokens,
+    cache_creation_input_tokens: drained.cache_creation_input_tokens, cache_read_input_tokens: drained.cache_read_input_tokens,
+    estimated: true,
+  };
+}

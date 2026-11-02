@@ -12,6 +12,26 @@ export interface RuntimeRequest {
   droidPrompt?: boolean;
   /** Trusted HTTP retry receipt. Prior results become reference history, never callbacks. */
   recovery?: "cold-import";
+  /** Why the HTTP layer chose this session (its match reason), reported back as continuity. */
+  continuityReason?: string;
+}
+
+/**
+ * How the upstream conversation relates to the history Droid sent this turn:
+ * - new: a first turn with no earlier history
+ * - reused: the live native conversation continues
+ * - resumed: a persisted native conversation was reopened
+ * - reseeded: a fresh native conversation was built from Droid's history on purpose
+ *   (after a Droid compaction, or after the upstream compacted on its own)
+ * - cold-import: Droid's earlier history was imported as reference text because no
+ *   native conversation could continue it (a downgrade worth surfacing)
+ */
+export type ContinuityKind = "new" | "reused" | "resumed" | "reseeded" | "cold-import";
+
+export interface Continuity {
+  kind: ContinuityKind;
+  reason?: string;
+  importedMessages?: number;
 }
 
 export interface RuntimeTurn {
@@ -23,6 +43,9 @@ export interface RuntimeTurn {
   sdkBillingUsage?: Record<string, unknown>;
   events?: RuntimeEvent[];
   notes?: string[];
+  continuity?: Continuity;
+  /** Every upstream call since the previous reply, summed; for logs only (response usage is the last call). */
+  turnUsage?: Record<string, unknown>;
 }
 
 export interface StreamSink {
@@ -33,6 +56,8 @@ export interface StreamSink {
   activity?(): void;
   /** Human approvals now pending for this session. The idle timeout is suspended while any is. */
   approvalsPending?(count: number): void;
+  /** Decided before any output streams, so the HTTP layer can still set headers. */
+  continuity?(continuity: Continuity): void;
 }
 
 export interface RuntimeEvent {

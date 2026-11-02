@@ -183,7 +183,14 @@ export function buildDynamicUserPrompt(input: RuntimeRequest, cwd?: string): str
   return textFromBlocks(buildDynamicUserContent(input, cwd));
 }
 
-export function describePromptLayout(): Record<string, string> {
+export function describePromptLayout(promptMode: "claude-code" | "droid" = "claude-code"): Record<string, string> {
+  if (promptMode === "droid") {
+    return {
+      systemPrompt: "Droid's own system prompt (BRIDGE_PROMPT=droid)",
+      dynamicPlacement: "user input on initial turn or context change",
+      tools: "no Claude Code built-ins; every Droid tool through MCP",
+    };
+  }
   return {
     systemPrompt: "preset:claude_code + stable append",
     dynamicPlacement: "user input on initial turn or context change",

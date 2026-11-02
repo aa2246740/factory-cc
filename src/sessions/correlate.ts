@@ -8,6 +8,7 @@ import { droidReasoningLevel, requestAtReasoningLevel, requestWithoutReasoningLe
 import { allToolsCancelled } from "../runtime/cancellation.js";
 import { isEnded, type SessionRecord } from "./state.js";
 import { canonicalWorkspacePath, resolveRequestCwd } from "../workspace.js";
+import { compactionSummaryKey } from "./compaction.js";
 
 type Headers = Record<string, string | string[] | undefined>;
 
@@ -79,7 +80,9 @@ export function resolveSession(
   sessions: SessionRecord[],
   headers: Headers,
   request: MessagesRequest,
-  options: { cwd?: string; hostSessionId?: string; allowModelSwitch?: boolean; allowCancelledModelSwitch?: boolean; continueIdenticalTranscripts?: boolean; provider?: ModelProvider } = {},
+  options: { cwd?: string; hostSessionId?: string; allowModelSwitch?: boolean; allowCancelledModelSwitch?: boolean; continueIdenticalTranscripts?: boolean; provider?: ModelProvider;
+    /** Droid owns compaction (BRIDGE_UPSTREAM_COMPACTION=off): a new Droid summary starts a new native conversation. */
+    reseedOnDroidCompaction?: boolean } = {},
 ): { match?: SessionRecord; reason: string } {
   const explicit = explicitSessionId(headers, request);
   const requestProvider = options.provider ?? providerFromModelId(request.model);
@@ -256,8 +259,14 @@ export function resolveSession(
   // exact user/assistant tail, followed by exactly one new user message. Neither
   // a summary-looking prompt nor a host ID alone can establish continuity.
   // Tool-free auxiliary requests remain independent, even if they copy context.
+  // When Droid owns compaction, a request continuing from a summary the native
+  // conversation was not seeded with must not reuse it: that conversation still
+  // holds the full pre-compaction transcript and never sees Droid's summary, so
+  // the model and Droid's context meter would drift apart until an overflow.
+  const summaryKey = options.reseedOnDroidCompaction ? compactionSummaryKey(request) : undefined;
   const authenticatedTail = sessions.filter((session) => {
       return hasAuthenticatedTail(session) && historyContextMatches(session)
+        && (!summaryKey || session.summaryKey === summaryKey)
         // Identify a genuine model-switch continuation before rejecting busy
         // state; filtering it out would silently fork the native conversation.
         && (switchingModel(session) || canChangeReasoningLevel(session) || (session.state === "IDLE" && !session.cancelRequested && session.pendingToolIds.length === 0))

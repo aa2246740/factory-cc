@@ -153,7 +153,8 @@ describe("auth verification gate", () => {
       const sdk = new FakeSdk(async () => ({ apiKeySource: "ANTHROPIC_API_KEY" }));
       const runtime = create(sdk, "anthropic-api");
       await expect(runtime.handle(request())).resolves.toMatchObject({ response: { stop_reason: "end_turn" } });
-      expect(sdk.calls[0]!.options.settings).toBeUndefined();
+      // Only Droid compacts; no helper is configured here.
+      expect(sdk.calls[0]!.options.settings).toEqual({ autoCompactEnabled: false });
     } finally { restoreApi(); }
   });
 
@@ -175,7 +176,7 @@ describe("auth verification gate", () => {
       const sdk = new FakeSdk(async () => ({ apiKeySource: "apiKeyHelper" }));
       const runtime = create(sdk, "anthropic-api");
       await runtime.handle(request());
-      expect(sdk.calls[0]!.options.settings).toEqual({ apiKeyHelper: "/tmp/relay-auth-helper" });
+      expect(sdk.calls[0]!.options.settings).toEqual({ apiKeyHelper: "/tmp/relay-auth-helper", autoCompactEnabled: false });
       expect(sdk.calls[0]!.options.settingSources).toEqual([]);
     } finally { restore(); }
   });

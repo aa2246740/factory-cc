@@ -167,6 +167,11 @@ function revertDroid(settingsPath: string, backup: string, absentMarker: string,
  * built-in share this direct-tool base.
  */
 export const DROID_BASE_MODEL = "claude-sonnet-5-5";
+/**
+ * Output ceiling written for every route. The old 4096 only made Droid ask for short
+ * replies; the bridge cannot enforce max_tokens through Claude Code anyway.
+ */
+export const DROID_MAX_OUTPUT_TOKENS = 128_000;
 
 /**
  * Claude models that get their own built-in base. Matched on the model the route
@@ -224,7 +229,7 @@ export function configureDroid(argv: string[], env: NodeJS.ProcessEnv = process.
   const owned = ownedModels(existing, previous);
   const kept = existing.filter((item) => !owned.has(item));
   const incoming: CustomModel[] = configured.map((model) => ({ model: model.id, displayName: model.displayName, baseUrl, apiKey: token,
-    baseModelId: droidBaseModel(model), provider: "anthropic", authMode: "bearer", maxOutputTokens: 4096 }));
+    baseModelId: droidBaseModel(model), provider: "anthropic", authMode: "bearer", maxOutputTokens: DROID_MAX_OUTPUT_TOKENS }));
   const combined = [...kept, ...incoming], oldIds = selectionIds(existing), newIds = selectionIds(combined);
   const defaultSelection = newIds[kept.length + configured.findIndex((model) => model.id === defaultId)]!;
   const canonicalForModel = new Map(configured.map((model, index) => [model.id, newIds[kept.length + index]!]));

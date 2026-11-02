@@ -37,6 +37,8 @@ Inspect these runtime values together:
 - `pendingHostCalls`, `pendingApprovals`, `activeNativeTurns`, and `oldestTurnMs` distinguish a generation from a parked Mission. An old turn with a live tool callback is not evidence of a wedged process.
 - `processes.reaperKills` counts orphan-owner reclamations, and `reaperFailures` reports failed cleanup or sampling. `cursor.cleanupTimeouts` reports cancellation or store-disposal deadlines.
 - `activeRequests`, `retainedSessions`, `workerEndTimers`, `compactionLinks`, and `memory` expose other retained work and process memory.
+- `upstreamCompaction` and `continuity` show who compacts and how each reply related to Droid's history since start (`new`, `reused`, `resumed`, `reseeded`, `cold-import`). The SDK section's `contextPolicy` holds Claude Code's reported auto-compact state and window per model.
+- Log events for context fidelity: `continuity` / `continuity_downgrade`, `sdk_context_policy` / `sdk_auto_compact_still_on`, `sdk_upstream_compacted`, `sdk_session_reseeded`.
 
 The bridge samples only PID, PPID, process group, birth identity, and process state. It does not scan process arguments or environments. New Claude queries use the official SDK spawn hook and a dedicated process group. Release closes the SDK/input, waits up to 2 seconds, sends TERM, waits up to 2 seconds, then sends KILL and verifies for up to 1 second. Escalation uses process identity rather than Node's `child.killed` flag. The periodic reaper retries registered owners no live query owns. It never uses `pkill claude` or adopts another application's CLI.
 

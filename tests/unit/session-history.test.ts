@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { explicitSessionId, historyMessageHashes, resolveSession, sessionContextHash } from "../../src/sessions/correlate.js";
 import type { SessionRecord } from "../../src/sessions/state.js";
 import type { Message, MessagesRequest } from "../../src/types.js";
+import { compactionSummaryKey } from "../../src/sessions/compaction.js";
+import { COMPACTION_SUMMARY } from "../../src/workspace.js";
 
 const headers = { "x-bridge-role": "chat" };
 const cwd = "/tmp/project-a";
@@ -525,6 +527,28 @@ describe("conversation continuity and isolation", () => {
     it("keeps the native session after prefix rewriting using the exact retained complete turn", () => {
       const record = owned();
       expect(resolveOwned([record])).toMatchObject({ match: record, reason: "authenticated-history-tail" });
+    });
+
+    it("starts a new native conversation for a new Droid summary when Droid owns compaction", () => {
+      const summary = (text: string, retained: string): MessagesRequest => ({ ...continuation, messages: [
+        { role: "user", content: [{ type: "text", text: `${COMPACTION_SUMMARY}\n<summary>${text}</summary>\n${retained}` }] },
+        ...continuation.messages,
+      ] });
+      const droidCompacted = summary("The user asked to remember the codename Pine.", "Current TODO List: none");
+      const options = { cwd, hostSessionId: "host-a", reseedOnDroidCompaction: true };
+      // The old native conversation never saw this summary: reusing it would keep the
+      // whole pre-compaction transcript behind Droid's back.
+      expect(resolveSession([owned()], headers, droidCompacted, options).match).toBeUndefined();
+      // A conversation seeded from this summary continues, even when Droid rewrites
+      // the retained lists after it.
+      const seeded = owned({ summaryKey: compactionSummaryKey(droidCompacted) });
+      expect(resolveSession([seeded], headers, droidCompacted, options)).toMatchObject({ match: seeded, reason: "authenticated-history-tail" });
+      expect(resolveSession([seeded], headers, summary("The user asked to remember the codename Pine.", "Current TODO List: one item"), options))
+        .toMatchObject({ match: seeded, reason: "authenticated-history-tail" });
+      // A later Droid compaction is a new summary again.
+      expect(resolveSession([seeded], headers, summary("A second compaction: Pine, then Oak.", ""), options).match).toBeUndefined();
+      // With upstream compaction (BRIDGE_UPSTREAM_COMPACTION=upstream) the old behaviour stays.
+      expect(resolveSession([owned()], headers, droidCompacted, { cwd, hostSessionId: "host-a" })).toMatchObject({ reason: "authenticated-history-tail" });
     });
 
     it("allows an idle model switch on an authenticated retained turn and rejects a busy one without forking", () => {

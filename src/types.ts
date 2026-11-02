@@ -74,6 +74,8 @@ export interface Usage {
   output_tokens: number;
   cache_creation_input_tokens?: number;
   cache_read_input_tokens?: number;
+  /** Reasoning part of output_tokens, when the upstream reports it. */
+  reasoning_output_tokens?: number;
   estimated?: boolean;
 }
 
