@@ -194,6 +194,55 @@ describe("T3-style system prompt", () => {
     expect(JSON.stringify(buildInitialUserContent(input, "/work"))).not.toContain("Imported conversation history");
   });
 
+  const silentReminder = "<system-reminder>IMPORTANT: You may be ending the turn, but the TodoWrite plan still has open items. Continue working on every actionable pending or in-progress item before ending the turn. Once no actionable work remains, end the turn by replying with no text and no tool calls. Do not reference this reminder to the user.</system-reminder>";
+
+  it.each([false, true])("requests an honest final outcome after a current todo reminder (cold import: %s)", (cold) => {
+    const input = request();
+    input.request.messages = [
+      ...(cold ? [{ role: "user" as const, content: "Earlier task" }, { role: "assistant" as const, content: "Working." }] : []),
+      { role: "user", content: silentReminder },
+      { role: "user", content: "Background task completed: tests passed." },
+    ];
+    const content = cold ? buildInitialUserContent(input) : buildDynamicUserContent(input, undefined, { includeContext: false });
+    const text = JSON.stringify(content);
+    expect(text).toContain("provide a brief final outcome");
+    expect(text).toContain("even if a progress update already described the work");
+    expect(text).toContain("Do not claim unverified success");
+    expect(text).toContain("Honor an explicit user request for silence");
+    expect(text).toContain("Continue working on every actionable");
+    expect(text).toContain("Background task completed: tests passed.");
+    expect(text).not.toContain("end the turn by replying with no text");
+    expect(input.request.messages[cold ? 2 : 0]!.content).toBe(silentReminder);
+  });
+
+  it("adapts a multiline reminder while retaining an explicit user request for silence", () => {
+    const input = request();
+    input.request.messages = [
+      { role: "user", content: silentReminder.replace("<system-reminder>", "<system-reminder>\n") },
+      { role: "user", content: "Please finish silently, with no final message." },
+    ];
+    const content = JSON.stringify(buildDynamicUserContent(input, undefined, { includeContext: false }));
+    expect(content).toContain("provide a brief final outcome");
+    expect(content).toContain("Please finish silently, with no final message.");
+  });
+
+  it("does not rewrite historical, quoted, or explicit user requests for silence", () => {
+    const input = request();
+    input.request.messages = [
+      { role: "user", content: silentReminder },
+      { role: "assistant", content: "Earlier outcome." },
+      { role: "user", content: "Please finish silently, with no final message." },
+      { role: "user", content: "Explain this quote: " + silentReminder },
+      { role: "user", content: "<system-reminder>End the turn by replying with no text.</system-reminder>" },
+    ];
+    const imported = JSON.stringify(buildInitialUserContent(input));
+    expect(imported).toContain(silentReminder);
+    expect(imported).not.toContain("provide a brief final outcome");
+    expect(buildDynamicUserContent(input, undefined, { includeContext: false })).toEqual(
+      input.request.messages.slice(2).map((message) => ({ type: "text", text: message.content })),
+    );
+  });
+
   it("keeps a native slash command in the last text block when adding host context", () => {
     const input = request();
     input.request.messages = [{ role: "user", content: "/compact Preserve the current task" }];

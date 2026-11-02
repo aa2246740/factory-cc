@@ -312,6 +312,20 @@ describe("CursorSdkRuntime", () => {
     hung.catch(() => undefined);
   });
 
+  it("runs an exact thinking budget at the nearest named Grok effort", async () => {
+    const sent: Array<CursorSendOptions | undefined> = [];
+    const fake = fakeCursor({ onSend: (options) => { sent.push(options); } });
+    const dir = mkdtempSync(join(tmpdir(), "cursor-runtime-"));
+    dirs.push(dir);
+    const cfg = loadConfig({ dataDir: dir, mode: "sdk", authMode: "subscription", models: cursorMenuFromCatalog(cursorLiveCatalogFixture, "default") });
+    const runtime = new CursorSdkRuntime(cfg, logger, { api: fake.api, env: {} });
+    await runtime.handle(input(session({ model: "cursor:grok-4.7" }), { ...userTurn("budget", "cursor:grok-4.7"),
+      thinking: { type: "enabled", budget_tokens: 12345 },
+    }));
+    expect(sent.at(-1)?.model?.params?.find((param) => param.id === "reasoning_effort")?.value).toBe("medium");
+    await runtime.close();
+  });
+
   it("sends the mapped reasoning effort on the same agent and ignores it for Composer", async () => {
     const sent: Array<CursorSendOptions | undefined> = [];
     const fake = fakeCursor({ onSend: (options) => { sent.push(options); } });

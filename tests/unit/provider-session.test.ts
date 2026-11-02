@@ -54,3 +54,23 @@ describe("provider in the session fingerprint", () => {
       .toThrowError(expect.objectContaining({ code: "session_context_changed" }));
   });
 });
+
+describe("reasoning level changed during a tool loop", () => {
+  const toolUse: Message = { role: "assistant", content: [{ type: "tool_use", id: "exec-1", name: "Read", input: {} }] };
+  const toolResult: Message = { role: "user", content: [{ type: "tool_result", tool_use_id: "exec-1", content: "ok" }] };
+  const parked = (provider: SessionRecord["provider"], sessionModel: string): SessionRecord => {
+    const request = { ...opening, model: sessionModel, output_config: { effort: "medium" } } as MessagesRequest;
+    return {
+      ...session(sessionModel, provider), state: "WAITING_DROID_TOOL", pendingToolIds: ["exec-1"], reasoning: "medium",
+      contextHash: sessionContextHash(headers, request, cwd, provider ?? "claude"),
+    };
+  };
+  const resultAt = (sessionModel: string, effort: string): MessagesRequest => ({
+    ...opening, model: sessionModel, output_config: { effort }, messages: [...opening.messages, toolUse, toolResult],
+  } as MessagesRequest);
+
+  it("keeps Claude callback ownership while the runtime defers the process-level effort change", () => {
+    expect(resolveSession([parked(undefined, "sonnet")], headers, resultAt("sonnet", "high"), { cwd }))
+      .toMatchObject({ reason: "tool-use-id", match: { bridgeSessionId: "bridge-a" } });
+  });
+});

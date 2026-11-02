@@ -92,6 +92,88 @@ beforeEach(() => { vi.stubEnv("BRIDGE_TEST_FAKE_KEY", "offline-placeholder-never
 afterEach(async () => { await Promise.all(runtimes.splice(0).map((runtime) => runtime.close())); vi.unstubAllEnvs(); });
 
 describe("official SDK streaming-input lifecycle (injected offline SDK)", () => {
+  it.each([false, true])("drains a cancelled callback before resuming the selected model (receipt only=%s)", async (receiptOnly) => {
+    let delivered: unknown;
+    let release!: () => void;
+    const boundary = new Promise<void>((resolve) => { release = resolve; });
+    const sdk = new FakeSdk(async function* (_input, index, fake) {
+      if (index === 0) {
+        yield { type: "assistant", message: { content: [{ type: "tool_use", id: "cancelled-fetch", name: "mcp__droid__TaskOutput", input: {} }] } };
+        delivered = await fake.handlers.get("TaskOutput")!({}, { toolUseID: "cancelled-fetch" });
+        await boundary;
+        yield success("Cancelled.");
+      } else yield success("continued on model B");
+    });
+    const { runtime } = create(sdk, { models: modelCatalog });
+    const s = session();
+    const opening = user("inspect");
+    const first = await runtime.handle(request(s, "unused", { model: "first-model", tools: [tool], messages: [opening] }));
+    const oldHandler = sdk.handlers.get("TaskOutput")!;
+    const receipt: ContentBlock = { type: "tool_result", tool_use_id: "cancelled-fetch", content: "Error: Tool execution cancelled by user", is_error: true };
+    const history: Message[] = [opening, { role: "assistant", content: first.response.content }, user([receipt]),
+      { role: "assistant", content: "Request cancelled by user" }, ...(receiptOnly ? [user([receipt])] : [user("continue switched to model B")])];
+    const switching = runtime.handle(request(s, "unused", { model: "second-model", tools: [tool], messages: history }));
+    await vi.waitFor(() => expect(delivered).toBeDefined());
+    expect(delivered).toMatchObject({ isError: true, content: [{ type: "text", text: "Error: Tool execution cancelled by user" }, { type: "text", text: expect.stringContaining("Do not retry") }] });
+    expect(sdk.close).not.toHaveBeenCalled();
+    expect(sdk.calls).toHaveLength(1);
+    release();
+    const reply = await switching;
+    expect(reply.pendingToolIds).toEqual([]);
+    expect(reply.response.model).toBe("second-model");
+    expect(sdk.close).toHaveBeenCalledTimes(1);
+    await expect(oldHandler({}, { toolUseID: "cancelled-fetch" })).rejects.toMatchObject({ code: "stale_native_query" });
+    if (!receiptOnly) {
+      expect(reply.response.content).toContainEqual({ type: "text", text: "continued on model B" });
+      expect(sdk.calls[1]!.options).toMatchObject({ model: "native-model-b", resume: "native-sdk-session" });
+      expect(sdk.inputs[1]!.message.content).toContainEqual({ type: "text", text: "continue switched to model B" });
+      expect(sdk.inputs[1]!.message.content.some((block) => block.type === "tool_result")).toBe(false);
+    }
+    expect(sdk.inputs).toHaveLength(receiptOnly ? 1 : 2);
+  });
+
+  it.each(["close failure", "late background work"])("fails closed after irreversible cancellation delivery on %s", async (failure) => {
+    let delivered: unknown;
+    const sdk = new FakeSdk(async function* (_input, _index, fake) {
+      yield { type: "assistant", message: { content: [{ type: "tool_use", id: "cancelled-fetch", name: "mcp__droid__TaskOutput", input: {} }] } };
+      delivered = await fake.handlers.get("TaskOutput")!({}, { toolUseID: "cancelled-fetch" });
+      if (failure === "late background work") yield { type: "system", subtype: "task_started", task_id: "late-task" };
+      yield success("Cancelled.");
+    });
+    const { runtime } = create(sdk, { models: modelCatalog });
+    const s = session();
+    await runtime.handle(request(s, "inspect", { model: "first-model", tools: [tool] }));
+    if (failure === "close failure") sdk.close.mockImplementation(() => { throw new Error("close failed"); });
+    await expect(runtime.handle(request(s, [{ type: "tool_result", tool_use_id: "cancelled-fetch",
+      content: "Error: Tool execution cancelled by user", is_error: true }], { model: "second-model", tools: [tool] })))
+      .rejects.toMatchObject({ code: "model_switch_failed", status: 502 });
+    expect(delivered).toBeDefined();
+    expect(sdk.calls).toHaveLength(1);
+    expect(runtime.isSessionUsable(s.bridgeSessionId)).toBe(false);
+    expect(runtime.pendingHostCalls(s.bridgeSessionId)).toEqual([]);
+  });
+
+  it("keeps active background work and its cancelled host callback owned on a refused switch", async () => {
+    let delivered: unknown;
+    const sdk = new FakeSdk(async function* (_input, _index, fake) {
+      yield { type: "system", subtype: "task_started", task_id: "still-running" };
+      yield { type: "assistant", message: { content: [{ type: "tool_use", id: "cancelled-fetch", name: "mcp__droid__TaskOutput", input: {} }] } };
+      delivered = await fake.handlers.get("TaskOutput")!({}, { toolUseID: "cancelled-fetch" });
+      yield { type: "system", subtype: "task_notification", task_id: "still-running" };
+      yield success("Cancelled.");
+    });
+    const { runtime } = create(sdk, { models: modelCatalog });
+    const s = session();
+    await runtime.handle(request(s, "inspect", { model: "first-model", tools: [tool] }));
+    const receipt: ContentBlock[] = [{ type: "tool_result", tool_use_id: "cancelled-fetch", content: "Error: Tool execution cancelled by user", is_error: true }];
+    await expect(runtime.handle(request(s, receipt, { model: "second-model", tools: [tool] }))).rejects.toMatchObject({ code: "model_switch_busy" });
+    expect(delivered).toBeUndefined();
+    expect(runtime.pendingHostCalls(s.bridgeSessionId).map((call) => call.toolUseId)).toEqual(["cancelled-fetch"]);
+    expect(sdk.close).not.toHaveBeenCalled();
+    await runtime.handle(request(s, receipt, { model: "first-model", tools: [tool] }));
+    expect(delivered).toBeDefined();
+  });
+
   it("keeps one query for successive turns and does not repeat stable host context", async () => {
     const sdk = new FakeSdk(async function* (_input, index) { yield success(`reply-${index}`); });
     const { runtime } = create(sdk);
@@ -212,6 +294,49 @@ describe("official SDK streaming-input lifecycle (injected offline SDK)", () => 
     expect(sdk.calls[2]!.options.thinking).toEqual({ type: "disabled" });
     expect(sdk.calls[2]!.options.effort).toBeUndefined();
     expect(sdk.calls[2]!.options.resume).toBe("native-sdk-session");
+  });
+
+  it.each([
+    { label: "GPT root effort", first: { reasoning_effort: "high", thinking: { type: "enabled", budget_tokens: 24576 } }, next: { reasoning_effort: "xhigh", thinking: { type: "enabled", budget_tokens: 24576 } }, expected: { effort: "xhigh", thinking: { type: "adaptive", display: "summarized" } } },
+    { label: "exact Haiku budget", first: { thinking: { type: "enabled", budget_tokens: 8192 } }, next: { thinking: { type: "enabled", budget_tokens: 12345 } }, expected: { thinking: { type: "enabled", budgetTokens: 12345 } } },
+  ])("resumes the same native session for $label changes", async ({ first, next, expected }) => {
+    const sdk = new FakeSdk(async function* (_input, index) { yield success(`reply-${index}`); });
+    const { runtime } = create(sdk, { models: modelCatalog });
+    const s = session({ toolNames: [tool.name] });
+    await runtime.handle(request(s, "first", { model: "first-model", tools: [tool], ...first }));
+    await runtime.handle(request(s, "next", { model: "first-model", tools: [tool], ...next,
+      messages: [user("first"), { role: "assistant", content: "reply-0" }, user("next")] }));
+    expect(sdk.close).toHaveBeenCalledOnce();
+    expect(sdk.calls).toHaveLength(2);
+    expect(sdk.calls[1]!.options).toMatchObject({ ...expected, resume: "native-sdk-session" });
+    if (!("effort" in expected)) expect(sdk.calls[1]!.options.effort).toBeUndefined();
+    await runtime.handle(request(s, "off", { model: "first-model", tools: [tool], thinking: { type: "disabled" },
+      messages: [user("first"), { role: "assistant", content: "reply-0" }, user("next"), { role: "assistant", content: "reply-1" }, user("off")] }));
+    expect(sdk.calls[2]!.options.thinking).toEqual({ type: "disabled" });
+    expect(sdk.calls[2]!.options.effort).toBeUndefined();
+  });
+
+  it("delivers a pending callback before applying a new exact thinking budget", async () => {
+    const sdk = new FakeSdk(async function* (_input, index, fake) {
+      if (index === 0) {
+        yield { type: "assistant", message: { content: [{ type: "tool_use", id: "budget-tool", name: "mcp__droid__TaskOutput", input: {} }] } };
+        await fake.handlers.get("TaskOutput")!({}, { toolUseID: "budget-tool" });
+      }
+      yield success(`reply-${index}`);
+    });
+    const { runtime } = create(sdk);
+    const s = session({ toolNames: [tool.name] });
+    const options = { tools: [tool], thinking: { type: "enabled", budget_tokens: 8192 } };
+    await runtime.handle(request(s, "first", options));
+    await runtime.handle(request(s, [{ type: "tool_result", tool_use_id: "budget-tool", content: "complete" }],
+      { ...options, thinking: { type: "enabled", budget_tokens: 12345 } }));
+    expect(sdk.calls).toHaveLength(1);
+    expect(sdk.calls[0]!.options.thinking).toEqual({ type: "enabled", budgetTokens: 8192 });
+    expect(sdk.close).not.toHaveBeenCalled();
+    await runtime.handle(request(s, "next", { ...options, thinking: { type: "enabled", budget_tokens: 12345 },
+      messages: [user("first"), { role: "assistant", content: "reply-0" }, user("next")] }));
+    expect(sdk.calls[1]!.options).toMatchObject({ thinking: { type: "enabled", budgetTokens: 12345 }, resume: "native-sdk-session" });
+    expect(sdk.calls[1]!.options.effort).toBeUndefined();
   });
 
   it("switches subscription models through resume on an allowlisted environment", async () => {
@@ -598,6 +723,32 @@ describe("official SDK streaming-input lifecycle (injected offline SDK)", () => 
     expect(delivered).toBeUndefined();
     await runtime.handle(request(s, [{ type: "tool_result", tool_use_id: "one-id", content: "accepted" }]));
     expect(delivered).toEqual({ content: [{ type: "text", text: "accepted" }], isError: false });
+  });
+
+  it("defers a hot-add reasoning change until pending Opus callbacks finish, then resumes", async () => {
+    const search = { name: "ToolSearch", input_schema: { type: "object" as const, properties: {} } };
+    const fresh = { name: "rea___inspect_artifact", input_schema: { type: "object" as const, properties: {} } };
+    const sdk = new FakeSdk(async function* (_input, index, fake) {
+      if (index === 0) {
+        yield { type: "assistant", message: { content: [{ type: "tool_use", id: "search", name: "mcp__droid__ToolSearch", input: {} }] } };
+        await fake.handlers.get("ToolSearch")!({}, { toolUseID: "search" });
+        expect(fake.handlers.has("rea___inspect_artifact")).toBe(true);
+      }
+      yield success(`reply-${index}`);
+    });
+    const { runtime } = create(sdk);
+    const s = session({ model: "opus" });
+    const opts = { model: "opus", tools: [search], output_config: { effort: "high" } };
+    await runtime.handle(request(s, "load REA", opts));
+    const done = await runtime.handle(request(s, [{ type: "tool_result", tool_use_id: "search", content: "loaded" }],
+      { ...opts, tools: [search, fresh], output_config: { effort: "xhigh" } }));
+    expect(done.response.stop_reason).toBe("end_turn");
+    expect(sdk.calls).toHaveLength(1);
+    expect(sdk.calls[0]!.options.effort).toBe("high");
+    await runtime.handle(request(s, "continue", { ...opts, tools: [search, fresh], output_config: { effort: "xhigh" },
+      messages: [user("load REA"), { role: "assistant", content: "reply-0" }, user("continue")] }));
+    expect(sdk.calls).toHaveLength(2);
+    expect(sdk.calls[1]!.options).toMatchObject({ effort: "xhigh", resume: "native-sdk-session" });
   });
 
   it("adds ToolSearch discoveries before releasing its handler in the same SDK turn", async () => {

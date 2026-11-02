@@ -19,7 +19,7 @@ export interface SessionRecord {
   historyHash?: string;
   /** Stable execution configuration, excluding dynamic host context and tools. */
   contextHash?: string;
-  /** Selector level last applied. Absent when the request carried no level. */
+  /** Canonical effort or budget:<tokens>. Absent when no reasoning selection was supplied. */
   reasoning?: string;
   /** Message fingerprints of the request currently being handled. */
   requestMessageHashes?: string[];

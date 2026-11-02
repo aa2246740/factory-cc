@@ -4,7 +4,7 @@ import type { Logger } from "../../logging.js";
 import { assistantMessage } from "../../protocol/messages.js";
 import { canonicalToolUseId, collectToolResults, textFromBlocks } from "../../protocol/content.js";
 import { providerFromModelId, type CursorModelParameter } from "../../models.js";
-import { applyCursorReasoning, droidReasoningLevel } from "../reasoning.js";
+import { applyCursorReasoning, droidReasoningEffort } from "../reasoning.js";
 import { BridgeError, type ContentBlock, type Json, type Usage } from "../../types.js";
 import { historyMessageHashes } from "../../sessions/correlate.js";
 import { resolveRequestCwd } from "../../workspace.js";
@@ -298,7 +298,7 @@ export class CursorSdkRuntime implements BridgeRuntime {
     if (!profile?.cursor) throw new BridgeError(400, "unknown_model", "This Cursor model is not on the menu.");
     return {
       id: profile.cursor.id,
-      params: applyCursorReasoning(profile.cursor.params, profile.cursor.parameters, droidReasoningLevel(request)),
+      params: applyCursorReasoning(profile.cursor.params, profile.cursor.parameters, droidReasoningEffort(request)),
     };
   }
 

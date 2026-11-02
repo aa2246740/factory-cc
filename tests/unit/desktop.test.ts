@@ -252,6 +252,16 @@ it("pins explicit Droid models without touching Claude Code settings, and restar
   for (const path of [paths.manifest, paths.plist]) expect(statSync(path).mode & 0o777).toBe(0o600);
   expect(existsSync(join(root, "HELPER-RAN"))).toBe(false);
 });
+it("keeps alias labels and selection IDs stable when restart pins the same aliases", async () => {
+  const { deps, paths } = fixture();
+  writeFileSync(join(deps.home, ".claude/settings.json"), JSON.stringify({ apiKeyHelper: "never-run" }));
+  await desktop(["install"], deps);
+  const labels = () => JSON.parse(readFileSync(paths.settings, "utf8")).customModels.map((v: { displayName: string }) => v.displayName);
+  const before = labels();
+  await desktop(["restart", "--models", "sonnet,opus,haiku"], deps);
+  expect(labels()).toEqual(before);
+  expect(labels()).toEqual(["Claude Code · Sonnet", "Claude Code · Opus", "Claude Code · Haiku"]);
+});
 it.each([
   [["restart", "--port", "19876"]], [["install", "--models", ""]], [["install", "--models", "a,a"]],
   [["install", "--models", "a", "--models", "b"]], [["status", "--models", "a"]], [["install", "--port"]],

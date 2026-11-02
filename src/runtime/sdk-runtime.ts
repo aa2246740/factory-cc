@@ -13,6 +13,7 @@ import { appendLogLine, type Logger } from "../logging.js";
 import { claudeToolTraceDetail, isDroidMcpName, selectDroidMcpTools } from "./droid-tools.js";
 import { DroidMcpCatalog, StableDroidToolNames } from "./droid-mcp-catalog.js";
 import { hostAllowsAnyTools, nativeToolAllowed } from "./native-tool-policy.js";
+import { CANCELLED_TOOL_NOTE, CANCELLED_TURN_DENIAL, allToolsCancelled, isUserCancellation as isCancellationResult } from "./cancellation.js";
 import { buildDroidSystemPrompt, buildDynamicUserContent, buildHostContext, buildInitialUserContent, buildPresetSystemPrompt, describePromptLayout, trailingUserMessages } from "./system-prompt.js";
 import { UsageLedger } from "./usage.js";
 import { INTERRUPT_GRACE_MS, TurnWatchdog } from "./turn-watchdog.js";
@@ -194,13 +195,6 @@ type TurnHandoff = { reason: "cancelled" | "steering"; followup: ContentBlock[] 
  * common:toolExecution.cancelledByUser) or interrupts a tool. Droid sends it as
  * "Error: <text>" and then ends its own turn without another request.
  */
-const USER_CANCELLATIONS = new Set([
-  "Tool execution cancelled by user", "工具执行已被用户取消", "ツール実行がユーザーによりキャンセルされました",
-  "사용자가 도구 실행을 취소했습니다", "Esecuzione dello strumento annullata dall'utente",
-  "Tool execution was interrupted", "Request interrupted by user",
-]);
-const CANCELLED_TOOL_NOTE = "The user cancelled or interrupted this tool call in Droid. Preserve any work already done. Do not retry it or try another way. Acknowledge the cancellation in one short sentence, then end your turn.";
-const CANCELLED_TURN_DENIAL = "BRIDGE_USER_CANCELLED: The user cancelled the previous tool call in Droid. Do not retry it or use any other tool now; acknowledge the cancellation and end your turn.";
 const STEERING_TOOL_NOTE = "A new user message is queued. This is the completed tool's actual result. Preserve work already done, finish the current response without starting another tool, then read the new user message and continue any unfinished task.";
 const STEERING_TURN_DENIAL = "BRIDGE_USER_TURN_PENDING: A new user message is queued. Finish the current response without using another tool, then read the new user turn and continue the task.";
 /**
@@ -439,6 +433,38 @@ export class SdkRuntime implements BridgeRuntime {
       if (live.policyKey && live.policyKey !== policy) {
         throw new BridgeError(409, "session_configuration_changed", "Working directory, model, permission policy or role changed; start a separate session");
       }
+      const cancelledSwitch = modelRoute && live.modelRoute && modelRoute.id !== live.modelRoute.id
+        && allToolsCancelled([...live.pending.keys()], results);
+      if (cancelledSwitch) {
+        if (!this.config.persistSessions || !live.sdkSessionId) {
+          throw new BridgeError(409, "model_switch_requires_persistence", "Switching models requires a persisted native session. Select the previous model to finish cancellation, or start a new conversation.");
+        }
+        if (live.backgroundTasks.size || live.approvals.size || live.candidates.size || live.handlerArrivals.size || live.outbox.length) {
+          throw new BridgeError(409, "model_switch_busy", "Other native work is still active. Select the previous model and finish or cancel that work before switching; no tool results were discarded.");
+        }
+        waiting = this.waitForTurn(live);
+        void waiting.catch(() => undefined);
+        this.submitResults(live, results, [], { reason: "cancelled", followup: [] });
+        this.flushOutbox(live);
+        const cancelledTurn = await waiting;
+        waiting = undefined;
+        // Delivery is irreversible. Never report a recoverable rejection that
+        // would restore the HTTP store's now-obsolete pending callback IDs.
+        try { await this.selectModel(live, modelRoute, false); }
+        catch (error) {
+          const failure = new BridgeError(502, "model_switch_failed", `Cancellation was delivered, but the old native turn could not be safely switched: ${error instanceof Error ? error.message : String(error)} Start a new conversation; cancelled tools will not be replayed.`);
+          await this.stop(live, failure);
+          throw failure;
+        }
+        this.logger.info("sdk_cancelled_model_switch", { sessionId: id, sdkSessionId: live.sdkSessionId, cancelledToolIds: results.map((result) => result.tool_use_id), toId: modelRoute.id });
+        if (!this.followupContent(input, live, buildHostContext(input, resolveCwd(input, this.config))).length) {
+          const reply = { ...cancelledTurn, response: { ...cancelledTurn.response, model: input.request.model } };
+          live.lastRequestKey = requestKey;
+          live.lastReply = reply;
+          return reply;
+        }
+        results = [];
+      }
       if (modelRoute) await this.selectModel(live, modelRoute, results.length > 0);
       await this.selectReasoning(live, input, results.length > 0);
       const context = buildHostContext(input, resolveCwd(input, this.config));
@@ -570,7 +596,7 @@ export class SdkRuntime implements BridgeRuntime {
     if (hasResults || live.active || live.starting || live.pending.size || live.handlerArrivals.size
         || live.candidates.size || live.hostResultConsumptions.size || live.approvals.size
         || live.backgroundTasks.size || live.outbox.length) {
-      throw new BridgeError(409, "model_switch_busy", "Finish the current turn, tools and background tasks before switching models.");
+      throw new BridgeError(409, "model_switch_busy", `Cannot switch from ${previous.id} to ${route.id} while native work is active. Select ${previous.id} again and finish or cancel its tools and background tasks, then switch once idle. If cancellation results are unavailable, start a new conversation; tools will not be replayed.`);
     }
     if (!this.config.persistSessions || !live.sdkSessionId) {
       throw new BridgeError(409, "model_switch_requires_persistence", "Switching models requires a persisted native session. Keep the current model or start a separate conversation.");
@@ -604,6 +630,9 @@ export class SdkRuntime implements BridgeRuntime {
   private async selectReasoning(live: LiveSdk, input: RuntimeRequest, hasResults: boolean): Promise<void> {
     const next = claudeReasoningKey(input.request);
     if (live.reasoningKey === next) return;
+    // Keep the process owning these callbacks alive; the next user turn resumes
+    // the native history with the requested effort after all results drain.
+    if (hasResults) return;
     if (!live.query) {
       live.reasoningKey = next;
       return;
@@ -1550,11 +1579,7 @@ function latestToolResults(input: RuntimeRequest, includeTrailingUserMessages = 
 }
 
 function isUserCancellation(result: DroidResult): boolean {
-  if (!result.is_error) return false;
-  const text = typeof result.content === "string" ? result.content
-    : result.content.map((block) => block.type === "text" && typeof block.text === "string" ? block.text : "\u0000").join("");
-  // Droid's session file stores the bare text; only its API request adds the prefix.
-  return USER_CANCELLATIONS.has(text.trim().replace(/^Error:\s*/, ""));
+  return isCancellationResult(result.content, result.is_error);
 }
 
 function hasNewUserContent(input: RuntimeRequest): boolean {

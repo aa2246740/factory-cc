@@ -170,6 +170,19 @@ function revertDroid(settingsPath: string, backup: string, absentMarker: string,
  */
 export const DROID_BASE_MODEL = "claude-sonnet-5-5";
 
+/**
+ * Built-ins outside script_tool_models whose request encoding the bridge
+ * decodes. Only an exact upstream ID claims one: an alias such as `haiku`
+ * resolves inside Claude Code and may be an older model with another thinking
+ * format.
+ */
+const EXACT_BASE_MODELS = new Set(["claude-haiku-5-5"]);
+export const DROID_BASE_MODELS = [DROID_BASE_MODEL, ...EXACT_BASE_MODELS];
+
+export function droidBaseModel(model: BridgeModel): string {
+  return (model.provider ?? "claude") === "claude" && EXACT_BASE_MODELS.has(model.model) ? model.model : DROID_BASE_MODEL;
+}
+
 export function configureDroid(argv: string[], env: NodeJS.ProcessEnv = process.env, catalog?: BridgeModel[]): Record<string, unknown> {
   const args = parseArgs(argv);
   if (args.help === "1") return { help };
@@ -209,7 +222,7 @@ export function configureDroid(argv: string[], env: NodeJS.ProcessEnv = process.
   const owned = ownedModels(existing, previous);
   const kept = existing.filter((item) => !owned.has(item));
   const incoming: CustomModel[] = configured.map((model) => ({ model: model.id, displayName: model.displayName, baseUrl, apiKey: token,
-    baseModelId: DROID_BASE_MODEL, provider: "anthropic", authMode: "bearer", maxOutputTokens: 4096 }));
+    baseModelId: droidBaseModel(model), provider: "anthropic", authMode: "bearer", maxOutputTokens: 4096 }));
   const combined = [...kept, ...incoming], oldIds = selectionIds(existing), newIds = selectionIds(combined);
   const defaultSelection = newIds[kept.length + configured.findIndex((model) => model.id === defaultId)]!;
   const canonicalForModel = new Map(configured.map((model, index) => [model.id, newIds[kept.length + index]!]));

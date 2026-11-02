@@ -28,6 +28,33 @@ const headers = { "x-bridge-session": "factory-conversation" };
 const request = (model: string, text = "remember this") => ({ model, max_tokens: 32, messages: [{ role: "user", content: text }] });
 
 describe("HTTP model selection", () => {
+  it.each([false, true])("delivers cancellation receipts to their old owner before switching instead of looping on admission (explicit=%s)", async (explicit) => {
+    const { app, token } = await start();
+    runtime.handle.mockImplementationOnce(async ({ request }: RuntimeRequest) => ({
+      response: assistantMessage(request.model, [{ type: "tool_use", id: "cancelled-fetch", name: "FetchUrl", input: {} }], "tool_use"),
+      pendingToolIds: ["cancelled-fetch"], sdkSessionId: "same-native-session",
+    }));
+    const opening = request("sonnet");
+    const first = await postMessages(app.url, token, opening, explicit ? headers : {});
+    const previous = structuredClone(app.store.get(first.session!)!);
+    const switched = { ...opening, model: "haiku", messages: [...opening.messages,
+      { role: "assistant", content: first.json.content },
+      { role: "user", content: [{ type: "tool_result", tool_use_id: "cancelled-fetch", content: "Error: Tool execution cancelled by user", is_error: true }] },
+      { role: "assistant", content: "Request cancelled by user" },
+      { role: "user", content: "continue switched model" },
+    ] };
+    runtime.handle.mockRejectedValueOnce(new BridgeError(409, "model_switch_busy", "Background task is still active"));
+    expect((await postMessages(app.url, token, switched, explicit ? headers : {})).status).toBe(409);
+    expect(app.store.get(first.session!)).toMatchObject({ ...previous, updatedAt: expect.any(String) });
+    const second = await postMessages(app.url, token, switched, explicit ? headers : {});
+    expect(second.status).toBe(200);
+    expect(second.session).toBe(first.session);
+    expect(runtime.handle.mock.calls.at(-1)![0].session.bridgeSessionId).toBe(first.session);
+    expect(app.store.list()).toHaveLength(1);
+    expect(app.store.get(first.session!)).toMatchObject({ state: "IDLE", model: "haiku", pendingToolIds: [] });
+    expect(runtime.cancel).not.toHaveBeenCalled();
+  });
+
   it("publishes authenticated actual model choices without provider secrets", async () => {
     const { app, token } = await start();
     expect((await fetch(`${app.url}/v1/models`)).status).toBe(401);

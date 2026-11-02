@@ -105,13 +105,27 @@ export function trailingUserMessages(messages: RuntimeRequest["request"]["messag
   return messages.slice(start);
 }
 
+const TODO_SILENT_COMPLETION = "Once no actionable work remains, end the turn by replying with no text and no tool calls.";
+const TODO_VISIBLE_COMPLETION = "Once no actionable work remains, provide a brief final outcome and any remaining blocker or activation step, even if a progress update already described the work. Do not claim unverified success. Honor an explicit user request for silence.";
+
+function currentUserBlocks(content: string | ContentBlock[]): ContentBlock[] {
+  return userBlocks(content).map((block) => {
+    if (block.type !== "text" || typeof block.text !== "string") return block;
+    const text = block.text.trim();
+    // Only adapt the host's standalone todo reminder, not quoted history or user requests.
+    if (!/^<system-reminder>\s*IMPORTANT: You may be ending the turn, but the TodoWrite plan still has open items\./.test(text)
+      || !text.endsWith("</system-reminder>") || !text.includes(TODO_SILENT_COMPLETION)) return block;
+    return { ...block, text: block.text.replace(TODO_SILENT_COMPLETION, TODO_VISIBLE_COMPLETION) };
+  });
+}
+
 /** Append only the new user content; Claude Code retains the earlier native transcript. */
 export function buildDynamicUserContent(
   input: RuntimeRequest,
   cwd?: string,
   options: { includeContext?: boolean } = {},
 ): ContentBlock[] {
-  const blocks = trailingUserMessages(input.request.messages).flatMap((message) => userBlocks(message.content));
+  const blocks = trailingUserMessages(input.request.messages).flatMap((message) => currentUserBlocks(message.content));
   const context = options.includeContext === false ? "" : buildHostContext(input, cwd);
   if (!context) return blocks;
   // Claude Code recognizes native slash commands only in the last text block.
