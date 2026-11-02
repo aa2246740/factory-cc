@@ -20,6 +20,16 @@ export const STABLE_DROID_APPEND = [
   "When a Droid MCP tool is required, call it and wait; Droid will execute it and return the result.",
 ].join(" ");
 
+/** Droid's tools reach Claude as MCP tools, so their names gain a prefix Droid's prompt does not mention. */
+export const DROID_TOOL_NAME_NOTE = "Tool names: every tool named in these instructions is available with the mcp__droid__ prefix, for example Read is mcp__droid__Read and Execute is mcp__droid__Execute.";
+
+/** BRIDGE_PROMPT=droid: Droid's own system prompt replaces Claude Code's preset. */
+export function buildDroidSystemPrompt(input: RuntimeRequest): string {
+  const host = systemText(input.request.system).trim();
+  if (!host) throw new BridgeError(400, "missing_host_system_prompt", "BRIDGE_PROMPT=droid needs Droid's system prompt in the request.");
+  return `${host}\n\n${DROID_TOOL_NAME_NOTE}`;
+}
+
 export interface PresetSystemPrompt {
   type: "preset";
   preset: "claude_code";
@@ -54,6 +64,8 @@ export function buildHostContext(input: RuntimeRequest, cwd?: string): string {
   const host = systemText(input.request.system);
   const header = input.headers["x-bridge-mission-dir"];
   const missionDir = Array.isArray(header) ? header[0] : header;
+  // Droid's prompt is already the system prompt and Claude has no native tools: only the workspace is added.
+  if (input.droidPrompt) return cwd ? buildWorkspaceAppendix(cwd, missionDir) : "";
   // X-Bridge-Role identifies a model configuration, which Factory Task subagents
   // can inherit. The host's actual instructions own roles, skills and workflow.
   const roleContext = host.trim()
@@ -93,13 +105,27 @@ export function trailingUserMessages(messages: RuntimeRequest["request"]["messag
   return messages.slice(start);
 }
 
+const TODO_SILENT_COMPLETION = "Once no actionable work remains, end the turn by replying with no text and no tool calls.";
+const TODO_VISIBLE_COMPLETION = "Once no actionable work remains, provide a brief final outcome and any remaining blocker or activation step, even if a progress update already described the work. Do not claim unverified success. Honor an explicit user request for silence.";
+
+function currentUserBlocks(content: string | ContentBlock[]): ContentBlock[] {
+  return userBlocks(content).map((block) => {
+    if (block.type !== "text" || typeof block.text !== "string") return block;
+    const text = block.text.trim();
+    // Only adapt the host's standalone todo reminder, not quoted history or user requests.
+    if (!/^<system-reminder>\s*IMPORTANT: You may be ending the turn, but the TodoWrite plan still has open items\./.test(text)
+      || !text.endsWith("</system-reminder>") || !text.includes(TODO_SILENT_COMPLETION)) return block;
+    return { ...block, text: block.text.replace(TODO_SILENT_COMPLETION, TODO_VISIBLE_COMPLETION) };
+  });
+}
+
 /** Append only the new user content; Claude Code retains the earlier native transcript. */
 export function buildDynamicUserContent(
   input: RuntimeRequest,
   cwd?: string,
   options: { includeContext?: boolean } = {},
 ): ContentBlock[] {
-  const blocks = trailingUserMessages(input.request.messages).flatMap((message) => userBlocks(message.content));
+  const blocks = trailingUserMessages(input.request.messages).flatMap((message) => currentUserBlocks(message.content));
   const context = options.includeContext === false ? "" : buildHostContext(input, cwd);
   if (!context) return blocks;
   // Claude Code recognizes native slash commands only in the last text block.
@@ -157,7 +183,14 @@ export function buildDynamicUserPrompt(input: RuntimeRequest, cwd?: string): str
   return textFromBlocks(buildDynamicUserContent(input, cwd));
 }
 
-export function describePromptLayout(): Record<string, string> {
+export function describePromptLayout(promptMode: "claude-code" | "droid" = "claude-code"): Record<string, string> {
+  if (promptMode === "droid") {
+    return {
+      systemPrompt: "Droid's own system prompt (BRIDGE_PROMPT=droid)",
+      dynamicPlacement: "user input on initial turn or context change",
+      tools: "no Claude Code built-ins; every Droid tool through MCP",
+    };
+  }
   return {
     systemPrompt: "preset:claude_code + stable append",
     dynamicPlacement: "user input on initial turn or context change",

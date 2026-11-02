@@ -5,8 +5,10 @@ import type { ContentBlock, Message, MessagesRequest, RoleTag } from "../types.j
 import { BridgeError } from "../types.js";
 import { providerFromModelId, type ModelProvider } from "../models.js";
 import { droidReasoningLevel, requestAtReasoningLevel, requestWithoutReasoningLevel } from "../runtime/reasoning.js";
+import { allToolsCancelled } from "../runtime/cancellation.js";
 import { isEnded, type SessionRecord } from "./state.js";
 import { canonicalWorkspacePath, resolveRequestCwd } from "../workspace.js";
+import { compactionSummaryKey } from "./compaction.js";
 
 type Headers = Record<string, string | string[] | undefined>;
 
@@ -57,14 +59,17 @@ export function sessionProvider(session: Pick<SessionRecord, "provider" | "model
  * substitutes only the model: the request's provider stays in the hash.
  */
 export function sessionContextHash(headers: Headers, request: MessagesRequest, cwd?: string, provider: ModelProvider = "claude"): string {
+  return reasoningContextHash(headers, request, cwd, provider, droidReasoningLevel(request));
+}
+
+function reasoningContextHash(headers: Headers, request: MessagesRequest, cwd: string | undefined, provider: ModelProvider, reasoning: string | undefined): string {
   const workspace = cwd ?? resolveRequestCwd(headers, request);
-  const reasoning = droidReasoningLevel(request);
   return hash({
     model: request.model,
     role: roleFromHeaders(headers),
     cwd: workspace ? canonicalWorkspacePath(workspace) : null,
-    // A selector level replaces the adaptive/between_tools thinking object.
-    // Other thinking shapes, such as a provider's enabled budget, stay in the hash.
+    // Named efforts and exact budgets are canonical; unknown thinking shapes
+    // remain raw so a metadata change cannot silently reuse a native session.
     thinking: reasoning ? undefined : request.thinking,
     ...(reasoning ? { reasoning } : {}),
     ...(provider === "cursor" ? { provider } : {}),
@@ -75,7 +80,9 @@ export function resolveSession(
   sessions: SessionRecord[],
   headers: Headers,
   request: MessagesRequest,
-  options: { cwd?: string; hostSessionId?: string; allowModelSwitch?: boolean; continueIdenticalTranscripts?: boolean; provider?: ModelProvider } = {},
+  options: { cwd?: string; hostSessionId?: string; allowModelSwitch?: boolean; allowCancelledModelSwitch?: boolean; continueIdenticalTranscripts?: boolean; provider?: ModelProvider;
+    /** Droid owns compaction (BRIDGE_UPSTREAM_COMPACTION=off): a new Droid summary starts a new native conversation. */
+    reseedOnDroidCompaction?: boolean } = {},
 ): { match?: SessionRecord; reason: string } {
   const explicit = explicitSessionId(headers, request);
   const requestProvider = options.provider ?? providerFromModelId(request.model);
@@ -100,8 +107,13 @@ export function resolveSession(
     if (isEnded(session)) {
       throw new BridgeError(409, "session_unavailable", "This session has ended; start a new session.");
     }
-    if (session.state !== "IDLE" || session.pendingToolIds.length > 0 || session.cancelRequested) {
-      throw new BridgeError(409, "model_switch_busy", "Model changes require an idle session with no pending tool calls; finish the current turn first.");
+    // A cancellation receipt must reach its existing native callback before the
+    // model can change. The runtime still proves the turn has actually ended.
+    const cancelledCallbacks = options.allowCancelledModelSwitch === true && sessionProvider(session) === "claude"
+      && session.state === "WAITING_DROID_TOOL" && !session.cancelRequested
+      && allToolsCancelled(session.pendingToolIds, collectToolResults(request.messages.filter((message) => message.role === "user")));
+    if ((session.state !== "IDLE" || session.pendingToolIds.length > 0 || session.cancelRequested) && !cancelledCallbacks) {
+      throw new BridgeError(409, "model_switch_busy", `Cannot switch from ${session.model} to ${request.model} while the previous turn or tools are pending. Select ${session.model} again and continue to return outstanding tool results, then switch once idle. If you cancelled a tool but its cancellation receipt is missing, start a new conversation; pending tools will not be replayed.`);
     }
   };
   const results = collectToolResults(request.messages);
@@ -151,6 +163,7 @@ export function resolveSession(
       && canonicalWorkspacePath(session.factoryCwd) === workspace);
   };
   const canChangeReasoningLevel = (session: SessionRecord): boolean => {
+    if (session.cancelRequested || isEnded(session)) return false;
     if (switchingModel(session) || session.model !== request.model || !session.contextHash || !hostAgrees(session)) return false;
     if (sessionProvider(session) !== requestProvider || session.role !== roleFromHeaders(headers)) return false;
     if (session.toolNames.length === 0 || !request.tools?.length) return false;
@@ -159,7 +172,16 @@ export function resolveSession(
     const previous = session.reasoning
       ? sessionContextHash(headers, requestAtReasoningLevel(request, session.reasoning), options.cwd, requestProvider)
       : sessionContextHash(headers, requestWithoutReasoningLevel(request), options.cwd, requestProvider);
-    return session.contextHash === previous;
+    if (session.contextHash === previous) return true;
+    // Older checkpoints did not decode root efforts or fixed budgets. Adopt
+    // one only when its exact historical fingerprint still matches; the caller
+    // must independently prove transcript/callback continuity and idle safety.
+    if (session.reasoning !== undefined) return false;
+    const thinking = request.thinking as Record<string, unknown> | undefined;
+    const output = request.output_config as Record<string, unknown> | undefined;
+    const oldEffort = thinking?.type === "between_tools" ? "off"
+      : typeof output?.effort === "string" && output.effort.trim() ? output.effort.trim() : undefined;
+    return session.contextHash === reasoningContextHash(headers, request, options.cwd, requestProvider, oldEffort);
   };
   const historyContextMatches = (session: SessionRecord): boolean => session.contextHash === compatibleContextHash(session)
     || canChangeHostThinking(session) || canChangeReasoningLevel(session);
@@ -201,6 +223,7 @@ export function resolveSession(
     }
     if (hit) {
       assertHostScope(hit);
+      if (owners.includes(hit) && canChangeReasoningLevel(hit)) return { match: hit, reason: "explicit-id" };
       assertSelectedContext(hit, (canChangeHostThinking(hit) || canChangeReasoningLevel(hit)) && (hasCompleteHistory(hit) || hasAuthenticatedTail(hit)));
       return { match: hit, reason: "explicit-id" };
     }
@@ -211,7 +234,9 @@ export function resolveSession(
   if (owners.length > 1) throw ambiguous("tool results belong to multiple sessions");
   if (owners[0]) {
     assertHostScope(owners[0]);
-    assertSelectedContext(owners[0]);
+    // Pending callback ownership proves continuity. A selector change must not
+    // strand its results; Claude defers the process change until the next turn.
+    if (!canChangeReasoningLevel(owners[0])) assertSelectedContext(owners[0]);
     return { match: owners[0], reason: "tool-use-id" };
   }
 
@@ -234,8 +259,14 @@ export function resolveSession(
   // exact user/assistant tail, followed by exactly one new user message. Neither
   // a summary-looking prompt nor a host ID alone can establish continuity.
   // Tool-free auxiliary requests remain independent, even if they copy context.
+  // When Droid owns compaction, a request continuing from a summary the native
+  // conversation was not seeded with must not reuse it: that conversation still
+  // holds the full pre-compaction transcript and never sees Droid's summary, so
+  // the model and Droid's context meter would drift apart until an overflow.
+  const summaryKey = options.reseedOnDroidCompaction ? compactionSummaryKey(request) : undefined;
   const authenticatedTail = sessions.filter((session) => {
       return hasAuthenticatedTail(session) && historyContextMatches(session)
+        && (!summaryKey || session.summaryKey === summaryKey)
         // Identify a genuine model-switch continuation before rejecting busy
         // state; filtering it out would silently fork the native conversation.
         && (switchingModel(session) || canChangeReasoningLevel(session) || (session.state === "IDLE" && !session.cancelRequested && session.pendingToolIds.length === 0))

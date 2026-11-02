@@ -162,13 +162,33 @@ function revertDroid(settingsPath: string, backup: string, absentMarker: string,
 }
 
 /**
- * Droid infers a custom model's capabilities from its name. Its remote
- * script_tool_models flag puts names such as claude-opus-5-5 in Script mode, where
- * Read, Execute, Create and Edit are only reachable inside Droid scripts. Every
- * entry runs Claude Code behind this Bridge, so pin one built-in base that uses
- * direct tools and gives every entry the same request settings.
+ * Droid takes a custom model's behavior (prompt, default effort, effort encoding,
+ * and Script or direct tools) from its `baseModelId`. Routes without a matching
+ * built-in share this direct-tool base.
  */
 export const DROID_BASE_MODEL = "claude-sonnet-5-5";
+/**
+ * Output ceiling written for every route. The old 4096 only made Droid ask for short
+ * replies; the bridge cannot enforce max_tokens through Claude Code anyway.
+ */
+export const DROID_MAX_OUTPUT_TOKENS = 128_000;
+
+/**
+ * Claude models that get their own built-in base. Matched on the model the route
+ * really runs: its exact ID, or `upstream` when Claude Code's settings resolve an
+ * alias (`claudeAliasUpstream`). An unresolved alias keeps the shared base.
+ * Opus 5.5 is on Droid's script_tool_models list, so its routes run in Script
+ * mode as they do natively in Droid; the bridge forwards Script and WaitForScript
+ * like any other Droid tool.
+ */
+const OWN_BASE_MODELS = new Set(["claude-haiku-5-5", "claude-opus-5-5"]);
+/** Bases meant to keep direct tools; `desktop status` warns if Droid moves one to Script mode. */
+export const DIRECT_BASE_MODELS = [DROID_BASE_MODEL, "claude-haiku-5-5"];
+
+export function droidBaseModel(model: BridgeModel): string {
+  const runs = model.upstream ?? model.model;
+  return (model.provider ?? "claude") === "claude" && OWN_BASE_MODELS.has(runs) ? runs : DROID_BASE_MODEL;
+}
 
 export function configureDroid(argv: string[], env: NodeJS.ProcessEnv = process.env, catalog?: BridgeModel[]): Record<string, unknown> {
   const args = parseArgs(argv);
@@ -209,7 +229,7 @@ export function configureDroid(argv: string[], env: NodeJS.ProcessEnv = process.
   const owned = ownedModels(existing, previous);
   const kept = existing.filter((item) => !owned.has(item));
   const incoming: CustomModel[] = configured.map((model) => ({ model: model.id, displayName: model.displayName, baseUrl, apiKey: token,
-    baseModelId: DROID_BASE_MODEL, provider: "anthropic", authMode: "bearer", maxOutputTokens: 4096 }));
+    baseModelId: droidBaseModel(model), provider: "anthropic", authMode: "bearer", maxOutputTokens: DROID_MAX_OUTPUT_TOKENS }));
   const combined = [...kept, ...incoming], oldIds = selectionIds(existing), newIds = selectionIds(combined);
   const defaultSelection = newIds[kept.length + configured.findIndex((model) => model.id === defaultId)]!;
   const canonicalForModel = new Map(configured.map((model, index) => [model.id, newIds[kept.length + index]!]));

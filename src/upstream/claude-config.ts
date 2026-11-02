@@ -95,6 +95,30 @@ export function claudeConfigNeedsLogin(config: ClaudeConfig): boolean {
 
 export const CLAUDE_LOGIN_REQUIRED = "Claude Code is not logged in. Run claude and log in, then retry.";
 
+/**
+ * The model Claude Code runs for an alias under these settings, when known: a
+ * remap (`ANTHROPIC_DEFAULT_<ALIAS>_MODEL`) wins; otherwise only `opus` on
+ * Anthropic's own endpoint is known (claude-opus-5-5 with SDK 0.3.300). A
+ * third-party gateway may serve anything under an alias, so it stays unknown.
+ */
+export function claudeAliasUpstream(config: ClaudeConfig, alias: string): string | undefined {
+  if (!(slots as readonly string[]).includes(alias)) return undefined;
+  const mapped = config.env[`ANTHROPIC_DEFAULT_${alias.toUpperCase()}_MODEL`];
+  if (mapped) return mapped;
+  const base = config.env.ANTHROPIC_BASE_URL;
+  if (base && !isAnthropicHost(new URL(base).hostname)) return undefined;
+  return alias === "opus" ? "claude-opus-5-5" : undefined;
+}
+
+/** Record what each alias entry really runs, so Droid can be given the matching base model. */
+export function withClaudeUpstream(config: ClaudeConfig, models: BridgeModel[]): BridgeModel[] {
+  return models.map((model) => {
+    if ((model.provider ?? "claude") !== "claude") return model;
+    const upstream = claudeAliasUpstream(config, model.model);
+    return upstream ? { ...model, upstream } : model;
+  });
+}
+
 export function claudeConfigModels(config: ClaudeConfig): { models: BridgeModel[]; defaultModel: string } {
   let models = slots.flatMap((alias) => {
     const mapped = config.env[`ANTHROPIC_DEFAULT_${alias.toUpperCase()}_MODEL`];

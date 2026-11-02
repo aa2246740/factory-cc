@@ -64,6 +64,8 @@ export interface MessagesRequest {
   thinking?: Json;
   /** Droid's reasoning selector. `effort` is the level; `format` stays rejected. */
   output_config?: Json;
+  /** Messages-compatible gateways can carry a named reasoning effort here. */
+  reasoning_effort?: Json;
   cache_control?: Json;
 }
 
@@ -72,6 +74,8 @@ export interface Usage {
   output_tokens: number;
   cache_creation_input_tokens?: number;
   cache_read_input_tokens?: number;
+  /** Reasoning part of output_tokens, when the upstream reports it. */
+  reasoning_output_tokens?: number;
   estimated?: boolean;
 }
 

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { asBlocks } from "../protocol/content.js";
 import type { MessagesRequest } from "../types.js";
 import { COMPACTION_SUMMARY } from "../workspace.js";
@@ -44,6 +45,22 @@ export function compactedSummaryText(request: MessagesRequest): string | undefin
   const first = request.messages.find((message) => message.role === "user");
   const block = first ? asBlocks(first.content)[0] : undefined;
   return block?.type === "text" && typeof block.text === "string" && block.text.startsWith(COMPACTION_SUMMARY) ? block.text : undefined;
+}
+
+/** Where the generated summary body may end and Droid's retained lists begin. */
+const SUMMARY_BODY_ENDS = ["</summary>", "Current TODO List:", "IMPORTANT: This summary was created"];
+
+/**
+ * Identifies which Droid compaction a conversation continues from. The summary
+ * message is resent with every request: its generated body stays the same, while the
+ * lists after it (todos, skills, images) may change. So only the
+ * text before the first such marker is compared, at most 4000 characters of it.
+ */
+export function compactionSummaryKey(request: MessagesRequest): string | undefined {
+  const text = compactedSummaryText(request);
+  if (!text) return undefined;
+  const end = Math.min(4000, ...SUMMARY_BODY_ENDS.map((marker) => text.indexOf(marker)).filter((index) => index >= 0));
+  return createHash("sha256").update(text.slice(0, end)).digest("hex");
 }
 
 /** What Droid quotes of a summary: it replaces the closing tag with its own TODO list. */

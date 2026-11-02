@@ -14,7 +14,7 @@ describe("Droid reasoning levels", () => {
     expect(droidReasoningLevel(request({ thinking: { type: "adaptive", display: "summarized" }, output_config: { effort: "high" } }))).toBe("high");
     expect(droidReasoningLevel(request({ thinking: { type: "between_tools" }, output_config: { effort: "high" } }))).toBe("off");
     expect(droidReasoningLevel(request({ output_config: { effort: "max" } }))).toBe("max");
-    expect(droidReasoningLevel(request({ thinking: { type: "enabled", budget_tokens: 1024 } }))).toBeUndefined();
+    expect(droidReasoningLevel(request({ thinking: { type: "enabled", budget_tokens: 1024 } }))).toBe("budget:1024");
   });
 
   it("maps Grok effort from the catalog and leaves Composer, fast, and context pinned", () => {

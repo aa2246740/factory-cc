@@ -10,8 +10,8 @@ import { modelsFromIds, parseModelIds, type BridgeModel } from "../src/models.js
 import { coerceCursorCatalog, cursorMenuFromCatalog, formatCursorCatalog, type CursorCatalogItem } from "../src/runtime/cursor/catalog.js";
 import { CURSOR_LOGIN_COMMAND, cursorApiKey, cursorCredentialStatus, cursorExpiryWarning, formatCursorStatus, loginCursor, type CursorLogin } from "../src/runtime/cursor/credentials.js";
 import { cursorLoginFromSdk, loadCursorSdk, type CursorPlatformModule } from "../src/runtime/cursor/sdk-load.js";
-import { assertClaudeCredential, claudeConfigModels, readClaudeConfig } from "../src/upstream/claude-config.js";
-import { configureDroid, DROID_BASE_MODEL } from "./configure-droid.js";
+import { assertClaudeCredential, claudeConfigModels, readClaudeConfig, withClaudeUpstream } from "../src/upstream/claude-config.js";
+import { configureDroid, DIRECT_BASE_MODELS } from "./configure-droid.js";
 
 const LABEL = "ai.factory-cc.bridge";
 const installationSchema = z.object({ version: z.literal(1), port: z.number().int().min(1).max(65535), repo: z.string(), node: z.string(), path: z.string(),
@@ -146,8 +146,8 @@ function syncModels(deps: DesktopDependencies, install: Installation, cursorMenu
   // Deliberately use exactly the environment launchd will receive. Never inherit shell credentials.
   const config = readDesktopClaudeConfig(deps, install);
   assertClaudeCredential(config);
-  const claude = install.models ? modelsFromIds(install.models, "claude-config").map(explicitLabel)
-    : claudeConfigModels(config).models.map((model) => ({ ...model, displayName: `Claude Code · ${model.displayName.replace(/^Claude /, "")}` }));
+  const claude = withClaudeUpstream(config, install.models ? modelsFromIds(install.models, "claude-config").map(explicitLabel)
+    : claudeConfigModels(config).models.map((model) => ({ ...model, displayName: `Claude Code · ${model.displayName.replace(/^Claude /, "")}` })));
   const models = [...claude, ...(cursorMenu ?? [])];
   // A literal key, not an apiKeyHelper: Droid strips executable credential
   // commands from the runtime settings that Mission workers and validators load.
@@ -163,10 +163,16 @@ function scriptToolModels(home: string): string[] {
     return Array.isArray(models) ? models.filter((model): model is string => typeof model === "string") : [];
   } catch { return []; }
 }
-/** claude-opus-5-5 -> "Claude Code · Opus 5.5 (claude-opus-5-5)"; other IDs are shown as given. */
+/**
+ * claude-opus-5-5 -> "Claude Code · Opus 5.5 (claude-opus-5-5)"; opus -> "Claude Code · Opus"; other IDs are shown as given.
+ * Bare aliases match the labels of an unpinned install because Droid derives selection IDs from
+ * display names, so a relabel on restart orphans every open session using that entry.
+ */
 function explicitLabel(model: BridgeModel): BridgeModel {
+  const capitalize = (word: string) => `${word[0]!.toUpperCase()}${word.slice(1)}`;
   const match = /^claude-(opus|sonnet|haiku|fable)-(\d+)-(\d+)$/.exec(model.id);
-  const name = match ? `${match[1]![0]!.toUpperCase()}${match[1]!.slice(1)} ${match[2]}.${match[3]} (${model.id})` : model.id;
+  const name = match ? `${capitalize(match[1]!)} ${match[2]}.${match[3]} (${model.id})`
+    : /^(opus|sonnet|haiku|fable)$/.test(model.id) ? capitalize(model.id) : model.id;
   return { ...model, displayName: `Claude Code · ${name}` };
 }
 type DesktopOptions = Partial<Pick<Installation, "port" | "models" | "cursorModels" | "claudeConfigDir">>;
@@ -298,7 +304,7 @@ export async function desktop(argv: string[], deps: DesktopDependencies): Promis
   if (action === "status") {
     const install = readInstallation(deps);
     const loaded = deps.run("launchctl", ["print", `${domain}/${LABEL}`]).status === 0;
-    const scriptMode = scriptToolModels(deps.home).includes(DROID_BASE_MODEL);
+    const scriptBases = DIRECT_BASE_MODELS.filter((base) => scriptToolModels(deps.home).includes(base));
     const { env, now } = cursorClock(deps);
     const cursorStatus = cursorCredentialStatus(paths.data, env, now);
     const cursorWarning = cursorExpiryWarning(cursorStatus, now);
@@ -310,7 +316,7 @@ export async function desktop(argv: string[], deps: DesktopDependencies): Promis
         expires: cursorStatus.expiresAt ?? (cursorStatus.source === "env" ? "unknown" : "none"),
         account: cursorStatus.accountPresent ? "present" : "absent",
       },
-      ...(scriptMode ? { warning: `Droid now runs ${DROID_BASE_MODEL} in Script mode, so these models lose direct Read/Execute/Create/Edit tools. Update factory-cc to a base model outside script_tool_models.` } : {}),
+      ...(scriptBases.length ? { warning: `Droid now runs ${scriptBases.join(", ")} in Script mode, so entries meant for direct tools on that base now get Script mode instead. Update factory-cc to a base model outside script_tool_models.` } : {}),
       ...(cursorWarning ? { cursorWarning } : {}) };
   }
   if (action === "uninstall") {

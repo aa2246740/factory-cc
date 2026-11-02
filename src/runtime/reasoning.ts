@@ -1,14 +1,6 @@
 import type { CursorModelParameter } from "../models.js";
-import type { MessagesRequest } from "../types.js";
+import { BridgeError, type MessagesRequest } from "../types.js";
 
-/**
- * Droid 0.236.0 with baseModelId claude-sonnet-5-5 (captured on port 18797).
- * Every selector level sends both fields. `off` does not send effort "off":
- * thinking becomes `{ type: "between_tools" }` and effort stays the base
- * model's default, which is `high`. The other levels keep adaptive thinking
- * and set `output_config.effort`. No flag still sends effort `high`, because
- * that is Sonnet 5's default. A request that omits both signals has no level.
- */
 const EFFORT_PARAMETER_IDS = new Set(["reasoning_effort", "effort"]);
 const CLAUDE_EFFORT = new Set(["low", "medium", "high", "xhigh", "max"]);
 /** Low to high. Equidistant catalog values pick the lower rank. */
@@ -21,18 +13,70 @@ export interface CursorParameterSpec {
 
 export interface ClaudeReasoningOptions {
   effort?: "low" | "medium" | "high" | "xhigh" | "max";
-  thinking?: { type: "disabled" } | { type: "adaptive"; display: "summarized" };
+  thinking?: { type: "disabled" } | { type: "adaptive"; display: "summarized" } | { type: "enabled"; budgetTokens: number };
 }
 
 function object(value: unknown): Record<string, unknown> | undefined {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
 }
 
-/** The selector level, or undefined when the request does not carry one. */
-export function droidReasoningLevel(request: Pick<MessagesRequest, "thinking" | "output_config">): string | undefined {
-  if (object(request.thinking)?.type === "between_tools") return "off";
-  const effort = object(request.output_config)?.effort;
-  return typeof effort === "string" && effort.trim() ? effort.trim() : undefined;
+type ReasoningRequest = Pick<MessagesRequest, "thinking" | "output_config" | "reasoning_effort">;
+
+function namedEffort(value: unknown): string | undefined {
+  if (value === undefined) return;
+  if (typeof value !== "string" || !RANK.includes(value.trim())) {
+    throw new BridgeError(400, "invalid_reasoning", "Reasoning effort must be off, none, minimal, low, medium, high, xhigh or max.");
+  }
+  return value.trim();
+}
+
+function fixedBudget(value: unknown): number {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 1024) {
+    throw new BridgeError(400, "invalid_reasoning", "Enabled thinking requires an integer budget_tokens of at least 1024.");
+  }
+  return value;
+}
+
+function budgetFromLevel(level: string): number | undefined {
+  const match = /^budget:(\d+)$/.exec(level);
+  return match ? fixedBudget(Number(match[1])) : undefined;
+}
+
+/** A named effort or an exact budget:<tokens> key, never an inferred effort. */
+export function droidReasoningLevel(request: ReasoningRequest): string | undefined {
+  const thinking = object(request.thinking);
+  const output = namedEffort(object(request.output_config)?.effort);
+  const root = namedEffort(request.reasoning_effort);
+  if (output !== undefined && root !== undefined && output !== root) {
+    throw new BridgeError(400, "conflicting_reasoning", "output_config.effort and reasoning_effort disagree.");
+  }
+  // Sonnet's off encoding can retain a valid output_config.effort=high.
+  if (thinking?.type === "between_tools" || thinking?.type === "disabled") return "off";
+  // GPT-over-Messages includes a fallback token budget alongside its named effort.
+  const effort = output ?? root;
+  if (effort !== undefined) return effort;
+  if (thinking?.type === "enabled") return `budget:${fixedBudget(thinking.budget_tokens)}`;
+  return undefined;
+}
+
+/**
+ * Droid 1.1.0's default Anthropic thinking budgets per selector level. High and
+ * xhigh share 24576 and max sends no thinking at all, so neither xhigh nor max
+ * can be recovered from a budget.
+ */
+const BUDGET_EFFORTS: ReadonlyArray<readonly [number, string]> = [[4096, "low"], [12288, "medium"], [24576, "high"]];
+
+/** Nearest Droid default level by token ratio; ties pick the lower level. */
+export function effortForBudget(tokens: number): string {
+  const distance = (budget: number) => Math.abs(Math.log(tokens / budget));
+  return BUDGET_EFFORTS.reduce((best, entry) => distance(entry[0]) < distance(best[0]) ? entry : best)[1];
+}
+
+/** Non-Claude native APIs take named efforts only, so an exact budget maps to the nearest level. */
+export function droidReasoningEffort(request: ReasoningRequest): string | undefined {
+  const level = droidReasoningLevel(request);
+  const budget = level === undefined ? undefined : budgetFromLevel(level);
+  return budget === undefined ? level : effortForBudget(budget);
 }
 
 function rankOf(value: string): number {
@@ -83,36 +127,42 @@ export function applyCursorReasoning(
  */
 export function claudeReasoningOptions(level: string | undefined): ClaudeReasoningOptions | undefined {
   if (!level) return undefined;
+  const budgetTokens = budgetFromLevel(level);
+  if (budgetTokens !== undefined) return { thinking: { type: "enabled", budgetTokens } };
   if (level === "off" || level === "none") return { thinking: { type: "disabled" } };
   if (level === "minimal") return { effort: "low", thinking: { type: "adaptive", display: "summarized" } };
   if (CLAUDE_EFFORT.has(level)) return { effort: level as ClaudeReasoningOptions["effort"], thinking: { type: "adaptive", display: "summarized" } };
   return undefined;
 }
 
-export function claudeReasoningKey(request: Pick<MessagesRequest, "thinking" | "output_config">): string {
+export function claudeReasoningKey(request: ReasoningRequest): string {
   return JSON.stringify(claudeReasoningOptions(droidReasoningLevel(request)) ?? null);
 }
 
-/** Hash input for a request whose selector level is the one already stored on the session. */
+/** Synthetic hash input only; never send this reconstructed selection upstream. */
 export function requestAtReasoningLevel(request: MessagesRequest, level: string): MessagesRequest {
-  const thinking = level === "off" || level === "none" ? { type: "between_tools" } : { type: "adaptive", display: "summarized" };
-  const effort = level === "off" || level === "none" ? "high" : level;
-  const output = { ...(object(request.output_config) ?? {}), effort };
-  return { ...request, thinking: thinking as MessagesRequest["thinking"], output_config: output as MessagesRequest["output_config"] };
+  const output = { ...(object(request.output_config) ?? {}) };
+  delete output.effort;
+  const budgetTokens = budgetFromLevel(level);
+  return {
+    ...request,
+    thinking: budgetTokens !== undefined ? { type: "enabled", budget_tokens: budgetTokens } : undefined,
+    reasoning_effort: budgetTokens === undefined ? level : undefined,
+    output_config: Object.keys(output).length ? output as MessagesRequest["output_config"] : undefined,
+  };
 }
 
-/**
- * Drop the selector so the hash matches a session recorded before a level was
- * stored. `between_tools` becomes the adaptive shape Droid sends for every
- * other level; that is the only thinking change the selector makes.
- */
+/** Remove known reasoning encodings for comparison with an unselected session. */
 export function requestWithoutReasoningLevel(request: MessagesRequest): MessagesRequest {
   const output = { ...(object(request.output_config) ?? {}) };
   delete output.effort;
-  const thinking = object(request.thinking)?.type === "between_tools" ? { type: "adaptive", display: "summarized" } : request.thinking;
+  const type = object(request.thinking)?.type;
+  const thinking = type === "between_tools" ? { type: "adaptive", display: "summarized" }
+    : type === "enabled" || type === "disabled" ? undefined : request.thinking;
   return {
     ...request,
     thinking: thinking as MessagesRequest["thinking"],
+    reasoning_effort: undefined,
     output_config: Object.keys(output).length ? output as MessagesRequest["output_config"] : undefined,
   };
 }

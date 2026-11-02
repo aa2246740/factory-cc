@@ -23,6 +23,13 @@ export interface LedgerUsage extends UsageSnapshot {
   estimated: boolean;
   /** Newly observed provider message IDs; excludes unexposed auxiliary requests. */
   modelRequests: number;
+  /**
+   * The most recent main-agent provider call (not a subagent lane). Droid's context
+   * meter and compaction follow the latest call's usage, so this is what a reply
+   * reports; the summed counters above stay for logs. fresh is false when no
+   * main-agent call was observed since the previous reply.
+   */
+  lastCall?: UsageSnapshot & { fresh: boolean; complete: boolean };
 }
 
 export interface BillingSnapshot extends UsageSnapshot {
@@ -83,6 +90,8 @@ export class UsageLedger {
   private archivedDirty = false;
   private archivedKnown = new Set<Counter>(COUNTERS);
   private readonly maxMessages = 4096;
+  private lastMain?: { key: string; usage: PartialUsage };
+  private lastMainFresh = false;
 
   ingest(message: Record<string, unknown>): UsageLedgerEvent | undefined {
     const sdkSessionId = label(message.session_id);
@@ -175,6 +184,10 @@ export class UsageLedger {
       }
       this.messages.set(key, { usage: merged });
       if (changed) this.dirty.add(key);
+      if (!parentToolUseId) {
+        this.lastMain = { key, usage: merged };
+        if (changed) this.lastMainFresh = true;
+      }
       while (this.messages.size > this.maxMessages) {
         const oldest = this.messages.keys().next().value!;
         const row = this.messages.get(oldest)!;
@@ -215,7 +228,12 @@ export class UsageLedger {
       status: hasDirty ? "reported" : "unknown",
       coverage, knownFields, scope: "provider_messages", estimated: coverage !== "complete",
       modelRequests: this.archivedRequests + this.messages.size - this.drainedRequests,
+      ...(this.lastMain ? { lastCall: {
+        ...completeUsage(this.lastMain.usage), fresh: this.lastMainFresh,
+        complete: COUNTERS.every((key) => this.lastMain!.usage[key] !== undefined),
+      } } : {}),
     };
+    this.lastMainFresh = false;
     this.drained = total;
     this.drainedRequests = this.archivedRequests + this.messages.size;
     this.dirty.clear();

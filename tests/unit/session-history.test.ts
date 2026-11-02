@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { explicitSessionId, historyMessageHashes, resolveSession, sessionContextHash } from "../../src/sessions/correlate.js";
 import type { SessionRecord } from "../../src/sessions/state.js";
 import type { Message, MessagesRequest } from "../../src/types.js";
+import { compactionSummaryKey } from "../../src/sessions/compaction.js";
+import { COMPACTION_SUMMARY } from "../../src/workspace.js";
 
 const headers = { "x-bridge-role": "chat" };
 const cwd = "/tmp/project-a";
@@ -37,6 +39,21 @@ function resolve(sessions: SessionRecord[], request = continuation, extraHeaders
 }
 
 describe("conversation continuity and isolation", () => {
+  it.each([false, true])("delivers pending Opus results after high to xhigh with hot-added MCP tools (explicit=%s)", (explicit) => {
+    const high = { ...initial, model: "opus", thinking: { type: "adaptive", display: "summarized" }, output_config: { effort: "high" } };
+    const record = session({ model: "opus", reasoning: "high", state: "WAITING_DROID_TOOL", pendingToolIds: ["pending"],
+      contextHash: sessionContextHash(headers, high, cwd) });
+    const next: MessagesRequest = { ...high, output_config: { effort: "xhigh" }, tools: catalogChanges[0]![1],
+      messages: [{ role: "user", content: [{ type: "tool_result", tool_use_id: "pending", content: "REA tools loaded" }] }] };
+    expect(resolve([record], next, explicit ? { "x-bridge-session": "droid-a" } : {})).toMatchObject({ match: record });
+    expect(() => resolve([record], { ...next, model: "haiku" }))
+      .toThrowError(expect.objectContaining({ code: "session_context_changed" }));
+    expect(() => resolve([record], next, { "x-bridge-role": "worker" }))
+      .toThrowError(expect.objectContaining({ code: "session_context_changed" }));
+    expect(() => resolveSession([record], headers, next, { cwd: "/tmp/other" }))
+      .toThrowError(expect.objectContaining({ code: "session_context_changed" }));
+  });
+
   it("continues a completed transcript without requiring an explicit ID", () => {
     const record = session();
     expect(resolve([record])).toMatchObject({ match: record, reason: "history-prefix" });
@@ -137,7 +154,7 @@ describe("conversation continuity and isolation", () => {
 
   it.each([
     ["model", { ...continuation, model: "other-model" }],
-    ["thinking configuration", { ...continuation, thinking: { type: "enabled", budget_tokens: 1024 } }],
+    ["unknown thinking configuration", { ...continuation, thinking: { type: "unknown", budget_tokens: 1024 } }],
   ])("isolates a changed %s and refuses to mutate an explicitly selected session", (_name, request) => {
     expect(resolve([session()], request).match).toBeUndefined();
     expect(() => resolve([session()], request, { "x-bridge-session": "bridge-a" }))
@@ -286,6 +303,26 @@ describe("conversation continuity and isolation", () => {
   });
 
   describe("optional model switching", () => {
+    it.each([false, true])("routes complete owned cancellation receipts to the native switch recovery (explicit=%s)", (explicit) => {
+      const record = session({ state: "WAITING_DROID_TOOL", pendingToolIds: ["cancelled"] });
+      const receipt: Message = { role: "user", content: [{ type: "tool_result", tool_use_id: "cancelled", content: "Error: Tool execution cancelled by user", is_error: true }] };
+      const next = { ...continuation, model: "other-model", messages: [...completed, receipt, { role: "assistant" as const, content: "Request cancelled by user" }, { role: "user" as const, content: "continue switched to opus" }] };
+      const selectedHeaders = { ...headers, ...(explicit ? { "x-bridge-session": "droid-a" } : {}) };
+      const options = { cwd, allowModelSwitch: true, allowCancelledModelSwitch: true };
+      expect(resolveSession([record], selectedHeaders, next, options).match).toBe(record);
+      expect(record.pendingToolIds).toEqual(["cancelled"]);
+      for (const patch of [
+        { pendingToolIds: ["cancelled", "active"] }, { cancelRequested: true }, { state: "GENERATING" as const },
+      ]) expect(() => resolveSession([session({ ...record, ...patch })], selectedHeaders, next, options))
+        .toThrowError(expect.objectContaining({ code: "model_switch_busy" }));
+      for (const badReceipt of [
+        { ...receipt, role: "assistant" as const },
+        { role: "user" as const, content: [{ type: "tool_result", tool_use_id: "cancelled", content: "ordinary failure", is_error: true }] },
+        { role: "user" as const, content: [{ type: "tool_result", tool_use_id: "cancelled", content: "Tool execution cancelled by user", is_error: false }] },
+      ]) expect(() => resolveSession([record], { ...selectedHeaders, "x-bridge-session": "droid-a" }, { ...next, messages: [badReceipt] }, options))
+        .toThrowError(expect.objectContaining({ code: "model_switch_busy" }));
+    });
+
     const nextModel = { ...continuation, model: "other-model" };
     const resolveSwitch = (records: SessionRecord[], request = nextModel, extraHeaders = {}) =>
       resolveSession(records, { ...headers, ...extraHeaders }, request, { cwd, allowModelSwitch: true });
@@ -490,6 +527,28 @@ describe("conversation continuity and isolation", () => {
     it("keeps the native session after prefix rewriting using the exact retained complete turn", () => {
       const record = owned();
       expect(resolveOwned([record])).toMatchObject({ match: record, reason: "authenticated-history-tail" });
+    });
+
+    it("starts a new native conversation for a new Droid summary when Droid owns compaction", () => {
+      const summary = (text: string, retained: string): MessagesRequest => ({ ...continuation, messages: [
+        { role: "user", content: [{ type: "text", text: `${COMPACTION_SUMMARY}\n<summary>${text}</summary>\n${retained}` }] },
+        ...continuation.messages,
+      ] });
+      const droidCompacted = summary("The user asked to remember the codename Pine.", "Current TODO List: none");
+      const options = { cwd, hostSessionId: "host-a", reseedOnDroidCompaction: true };
+      // The old native conversation never saw this summary: reusing it would keep the
+      // whole pre-compaction transcript behind Droid's back.
+      expect(resolveSession([owned()], headers, droidCompacted, options).match).toBeUndefined();
+      // A conversation seeded from this summary continues, even when Droid rewrites
+      // the retained lists after it.
+      const seeded = owned({ summaryKey: compactionSummaryKey(droidCompacted) });
+      expect(resolveSession([seeded], headers, droidCompacted, options)).toMatchObject({ match: seeded, reason: "authenticated-history-tail" });
+      expect(resolveSession([seeded], headers, summary("The user asked to remember the codename Pine.", "Current TODO List: one item"), options))
+        .toMatchObject({ match: seeded, reason: "authenticated-history-tail" });
+      // A later Droid compaction is a new summary again.
+      expect(resolveSession([seeded], headers, summary("A second compaction: Pine, then Oak.", ""), options).match).toBeUndefined();
+      // With upstream compaction (BRIDGE_UPSTREAM_COMPACTION=upstream) the old behaviour stays.
+      expect(resolveSession([owned()], headers, droidCompacted, { cwd, hostSessionId: "host-a" })).toMatchObject({ reason: "authenticated-history-tail" });
     });
 
     it("allows an idle model switch on an authenticated retained turn and rejects a busy one without forking", () => {

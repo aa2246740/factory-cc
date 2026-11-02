@@ -8,14 +8,15 @@ import { appendLogLine, type Logger } from "../logging.js";
 import { parseMessagesRequest } from "../protocol/validate.js";
 import { apiError } from "../protocol/messages.js";
 import { explicitSessionId, historyMessageHashes, historyPrefixHash, resolveSession, roleFromHeaders, sessionContextHash } from "../sessions/correlate.js";
-import { droidReasoningLevel } from "../runtime/reasoning.js";
+import { droidReasoningEffort, droidReasoningLevel } from "../runtime/reasoning.js";
 import { isEnded } from "../sessions/state.js";
 import { HUMAN_WAIT_TOOLS, MISSION_SPAWN_TOOLS, MISSION_WORKER_END_TOOL } from "../runtime/mission-tools.js";
-import { compactedSummaryText, lastSummarizedToolCall, sameToolInput, summaryQuote } from "../sessions/compaction.js";
+import { compactedSummaryText, compactionSummaryKey, lastSummarizedToolCall, sameToolInput, summaryQuote } from "../sessions/compaction.js";
+import { CONTEXT_OVERFLOW_CODE } from "../runtime/upstream-error.js";
 import { hostAllowsAnyTools } from "../runtime/native-tool-policy.js";
 import { DEFAULT_SESSION_RETENTION, SessionStore } from "../sessions/store.js";
 import { createRuntime } from "../runtime/factory.js";
-import type { BridgeRuntime, RuntimeTurn, StreamSink } from "../runtime/types.js";
+import type { BridgeRuntime, Continuity, ContinuityKind, RuntimeTurn, StreamSink } from "../runtime/types.js";
 import { TurnWatchdog, type TurnTimeout } from "../runtime/turn-watchdog.js";
 import { header, requireAdminOrHookToken, requireAdminToken, requireClientToken } from "../security/auth.js";
 import { assertBodySize } from "../security/limits.js";
@@ -50,6 +51,8 @@ function listenUrl(host: string, port: number): string {
 }
 
 export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath: string, runtime: BridgeRuntime = createRuntime(config, logger, canaryPath)): BridgeApp {
+  /** How each reply's upstream conversation related to Droid's history, since start. */
+  const continuityCounts: Record<ContinuityKind, number> = { new: 0, reused: 0, resumed: 0, reseeded: 0, "cold-import": 0 };
   const store = new SessionStore(join(config.dataDir, "sessions"), config.persistSessions, config.maxSessions, logger, {
     ...DEFAULT_SESSION_RETENTION, maxRecords: config.sessionMaxRecords ?? 1000, maxAgeMs: config.sessionRetentionMs ?? DEFAULT_SESSION_RETENTION.maxAgeMs,
   });
@@ -374,6 +377,10 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
     const request = prepared.request;
     const listed = configuredModels(config).find((model) => model.id === request.model);
     const provider: ModelProvider = listed?.provider ?? providerFromModelId(request.model);
+    const reasoning = droidReasoningLevel(request);
+    if (provider !== "claude" && reasoning?.startsWith("budget:")) {
+      logger.info("reasoning_budget_mapped", { model: request.model, provider, budget: reasoning, effort: droidReasoningEffort(request) });
+    }
     // Before this conversation takes a slot, free the one it replaces.
     releaseCompacted(request);
     const summarized = summarizedSession(request);
@@ -385,10 +392,13 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
       && session.retryableRequestHash === requestFingerprint && (!explicit || session.bridgeSessionId === explicit || session.droidSessionId === explicit));
     if (retries.length > 1) throw new BridgeError(409, "ambiguous_session", "Multiple failed requests match; supply X-Bridge-Session");
     const resolved = retries[0] ? { match: retries[0], reason: "upstream-retry" } : resolveSession(store.list(), headers, request, {
-      cwd, hostSessionId: control.hostSessionId(prepared.binding), allowModelSwitch: config.models !== undefined, provider,
+      cwd, hostSessionId: control.hostSessionId(prepared.binding), allowModelSwitch: config.models !== undefined,
+      allowCancelledModelSwitch: config.mode === "sdk" && provider === "claude", provider,
       // Droid desktop has no conversation ID header or hooks to disambiguate.
       continueIdenticalTranscripts: config.desktopProfile,
+      reseedOnDroidCompaction: config.upstreamCompaction !== "upstream",
     });
+    const summaryKey = compactionSummaryKey(request);
     const session = resolved.match
       ?? withSlot(() => store.create({
         role,
@@ -397,9 +407,10 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
         droidSessionId: explicitSessionId(headers, request),
         historyHash: historyPrefixHash(request),
         contextHash,
-        reasoning: droidReasoningLevel(request),
+        reasoning,
         requestMessageHashes: incomingHashes,
         toolNames: (request.tools ?? []).map((t) => t.name),
+        ...(summaryKey ? { summaryKey } : {}),
       }));
 
     const sessionId = session.bridgeSessionId;
@@ -495,6 +506,20 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
       toolTrace: (name, detail) => { watchdog.touch(); if (writer && !completed && !cancellationRequested) writer.toolTrace(name, detail); },
       activity: () => watchdog.touch(),
       approvalsPending: (count) => watchdog.setPaused(count > 0),
+      continuity: (continuity) => noteContinuity(continuity),
+    };
+    let continuityNoted = false;
+    // Every reply says how its upstream conversation relates to the history Droid
+    // sent. A cold import is a downgrade (the model sees earlier turns only as quoted
+    // text), so it is logged as a warning and shown on the desktop once per session.
+    const noteContinuity = (continuity: Continuity): void => {
+      if (continuityNoted) return;
+      continuityNoted = true;
+      continuityCounts[continuity.kind]++;
+      if (!res.headersSent) res.setHeader("X-Bridge-Continuity", continuity.kind);
+      const data = { sessionId, model: request.model, provider, continuity: continuity.kind, reason: continuity.reason ?? resolved.reason, importedMessages: continuity.importedMessages };
+      if (continuity.kind === "cold-import") logger.warn("continuity_downgrade", data);
+      else logger.info("continuity", data);
     };
     try {
       store.update(sessionId, {
@@ -504,7 +529,7 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
         model: request.model,
         ...(provider === "cursor" ? { provider } : {}),
         contextHash,
-        reasoning: droidReasoningLevel(request),
+        reasoning,
         historyHash: historyPrefixHash(request),
         requestMessageHashes: incomingHashes,
         toolNames: (request.tools ?? []).map((t) => t.name),
@@ -533,8 +558,9 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
 
       const turn: RuntimeTurn = await Promise.race([
         interrupted,
-        runtime.handle({ request, role, session, headers, ...(resolved.reason === "upstream-retry" ? { recovery: "cold-import" as const } : {}) }, sink),
+        runtime.handle({ request, role, session, headers, continuityReason: resolved.reason, ...(resolved.reason === "upstream-retry" ? { recovery: "cold-import" as const } : {}) }, sink),
       ]);
+      if (turn.continuity) noteContinuity(turn.continuity);
       if (cancellationRequested || store.get(sessionId)?.cancelRequested) {
         throw new BridgeError(499, "cancelled", "session cancelled");
       }
@@ -556,6 +582,8 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
         sdkSessionId: turn.sdkSessionId ?? session.sdkSessionId,
         responseId: turn.response.id,
         usage: turn.response.usage,
+        ...(turn.turnUsage ? { turnUsage: turn.turnUsage } : {}),
+        ...(turn.continuity ? { continuity: turn.continuity } : {}),
         sdkBillingUsage: turn.sdkBillingUsage,
         compactMetadata: turn.compactMetadata,
         // Handoff and Task batch events carry only IDs and tool names: how pending tools finished and which calls went to Droid together.
@@ -569,7 +597,10 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
       const current = store.get(sessionId);
       const recoverableSwitch = error instanceof BridgeError && error.status === 409
         && ["model_switch_busy", "model_switch_requires_persistence", "model_switch_unavailable", "reasoning_switch_busy", "reasoning_switch_requires_persistence", "reasoning_switch_unavailable"].includes(error.code);
-      const rejectedInput = error instanceof BridgeError && [400, 409, 422].includes(error.status) && runtime.isSessionUsable?.(sessionId) === true;
+      // A full context window is not a rejected input: the native conversation cannot
+      // take another turn, and Droid retries after compacting, in a new session.
+      const rejectedInput = error instanceof BridgeError && [400, 409, 422].includes(error.status) && error.code !== CONTEXT_OVERFLOW_CODE
+        && runtime.isSessionUsable?.(sessionId) === true;
       const retryableUpstream = error instanceof BridgeError && ([429, 529].includes(error.status) || error.code === "sdk_start_timeout") && error.extra.retry_from_history === true
         && !cancellationRequested && current && !current.cancelRequested && current.hostEnded === undefined
         && (current.state === "GENERATING" || current.state === "RESUMING")
@@ -712,6 +743,7 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
   function runtimeStatus(): Record<string, unknown> {
     return { ...runtime.describe?.(), control: control.describe(), authFailureCount, activeRequests: activeRequests.size,
       retainedSessions: store.list().length, workerEndTimers: workerEndTimers.size, compactionLinks: compactions.size,
+      upstreamCompaction: config.upstreamCompaction ?? "off", continuity: { ...continuityCounts },
       memory: { rss: process.memoryUsage().rss, heapUsed: process.memoryUsage().heapUsed }, closing };
   }
 }
