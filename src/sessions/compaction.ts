@@ -1,17 +1,30 @@
-import { asBlocks } from "../protocol/content.js";
+import { asBlocks, systemText } from "../protocol/content.js";
 import type { MessagesRequest } from "../types.js";
-import { COMPACTION_SUMMARY } from "../workspace.js";
+import { isDroidCompactionSummary } from "../workspace.js";
 
 /**
  * Droid compacts a conversation in two requests. A tool-free summarizer gets the
  * transcript as text, each tool call written `TOOL_CALL: <name> input=<json>` and
  * followed by its `TOOL_RESULT`. Droid then continues with a first message that
- * starts with COMPACTION_SUMMARY and quotes the summary it received.
+ * starts with one of Droid's summary headings and quotes the summary it received.
  */
 
 export interface SummarizedToolCall { name: string; input: unknown }
 
 const TOOL_CALL = /^TOOL_CALL: (\S+) input=(\{.*\})$/;
+
+/** A first compaction may summarize only startup context, before any tool call. */
+export function isDroidSummarizerRequest(request: MessagesRequest): boolean {
+  if (request.messages.length !== 1 || request.messages[0]?.role !== "user") return false;
+  const blocks = asBlocks(request.messages[0].content);
+  if (!blocks.length || blocks.some((block) => block.type !== "text")) return false;
+  const text = blocks.map((block) => block.type === "text" ? block.text : "").join("\n").trim();
+  const system = systemText(request.system);
+  return text.startsWith("Please summarize the following conversation:\n```\n")
+    && text.endsWith("\n```\n\nRemember to wrap your final summary in <summary> tags.")
+    && system.includes("Summarize this conversation or agent trajectory so the assistant can continue effectively after compaction.")
+    && system.includes("Return the summary inside <summary> tags.");
+}
 
 /** The last tool call a summarizer transcript shows answered, or undefined. */
 export function lastSummarizedToolCall(request: MessagesRequest): SummarizedToolCall | undefined {
@@ -43,7 +56,7 @@ export function lastSummarizedToolCall(request: MessagesRequest): SummarizedTool
 export function compactedSummaryText(request: MessagesRequest): string | undefined {
   const first = request.messages.find((message) => message.role === "user");
   const block = first ? asBlocks(first.content)[0] : undefined;
-  return block?.type === "text" && typeof block.text === "string" && block.text.startsWith(COMPACTION_SUMMARY) ? block.text : undefined;
+  return block?.type === "text" && typeof block.text === "string" && isDroidCompactionSummary(block.text) ? block.text : undefined;
 }
 
 /** What Droid quotes of a summary: it replaces the closing tag with its own TODO list. */

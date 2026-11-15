@@ -36,6 +36,34 @@ function resolve(sessions: SessionRecord[], request = continuation, extraHeaders
   return resolveSession(sessions, { ...headers, ...extraHeaders }, request, { cwd });
 }
 
+describe("rewritten desktop tool identities", () => {
+  const original: Message = { role: "assistant", content: [{ type: "text", text: "Check the real result." }, { type: "tool_use", id: "native-pending", name: "Read", input: { path: "receipt.txt" } }] };
+  const desktop: Message = { role: "assistant", content: [{ type: "text", text: "Check the real result." }, { type: "tool_use", id: "call_0123456789abcdef_1", name: "Read", input: { path: "receipt.txt" } }] };
+  const result: Message = { role: "user", content: [{ type: "tool_result", tool_use_id: "call_0123456789abcdef_1", content: "Genuine local result." }] };
+  const record = () => session({ state: "WAITING_DROID_TOOL", pendingToolIds: ["native-pending"], lastResponseToolIds: ["native-pending"], historyMessageHashes: historyMessageHashes([...initial.messages, original]) });
+  const next: MessagesRequest = { ...initial, messages: [...initial.messages, desktop, result] };
+
+  it("proves the complete request and response before naming the native callback", () => {
+    const held = record();
+    expect(resolve([held], next)).toEqual({ match: held, reason: "tool-use-rewrite", toolUseAliases: { call_0123456789abcdef_1: "native-pending" } });
+    expect(held.toolUseAliases).toBeUndefined();
+  });
+
+  it.each(["name", "arguments", "text", "prior-message"])("does not infer ownership when %s differs", (changed) => {
+    const request = structuredClone(next);
+    if (changed === "prior-message") request.messages[0] = { role: "user", content: "Different original task." };
+    else request.messages[1] = { role: "assistant", content: [
+      { type: "text", text: changed === "text" ? "Different response." : "Check the real result." },
+      { type: "tool_use", id: "call_0123456789abcdef_1", name: changed === "name" ? "Execute" : "Read", input: { path: changed === "arguments" ? "different.txt" : "receipt.txt" } },
+    ] };
+    expect(resolve([record()], request).match).toBeUndefined();
+  });
+
+  it("rejects ambiguous identical pending transcripts instead of guessing", () => {
+    expect(() => resolve([record(), { ...record(), bridgeSessionId: "other" }], next)).toThrowError(expect.objectContaining({ code: "ambiguous_session" }));
+  });
+});
+
 describe("conversation continuity and isolation", () => {
   it("continues a completed transcript without requiring an explicit ID", () => {
     const record = session();

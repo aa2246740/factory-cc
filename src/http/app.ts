@@ -11,7 +11,7 @@ import { explicitSessionId, historyMessageHashes, historyPrefixHash, resolveSess
 import { droidReasoningLevel } from "../runtime/reasoning.js";
 import { isEnded } from "../sessions/state.js";
 import { HUMAN_WAIT_TOOLS, MISSION_SPAWN_TOOLS, MISSION_WORKER_END_TOOL } from "../runtime/mission-tools.js";
-import { compactedSummaryText, lastSummarizedToolCall, sameToolInput, summaryQuote } from "../sessions/compaction.js";
+import { compactedSummaryText, isDroidSummarizerRequest, lastSummarizedToolCall, sameToolInput, summaryQuote } from "../sessions/compaction.js";
 import { hostAllowsAnyTools } from "../runtime/native-tool-policy.js";
 import { DEFAULT_SESSION_RETENTION, SessionStore } from "../sessions/store.js";
 import { createRuntime } from "../runtime/factory.js";
@@ -24,6 +24,7 @@ import { BridgeError, type MessagesRequest, type RedactedRequestRecord } from ".
 import { SseWriter } from "./sse-stream.js";
 import { statusPageHtml } from "./status-page.js";
 import { messageId } from "../protocol/messages.js";
+import { retainToolUseAliases, requestWithNativeToolIds } from "../protocol/desktop-tool-ids.js";
 import { ControlBroker } from "../control/broker.js";
 import { controlPageHtml, controlPageHeaders } from "./control-page.js";
 import { configuredModels, providerFromModelId, resolveRequestModel, type ModelProvider } from "../models.js";
@@ -188,7 +189,26 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
    * produced. Anything ambiguous or unmatched releases nothing.
    */
   const compactions = new Map<string, { sessionId: string; pendingToolIds: string; at: number }>();
+  const producedSummaries = new Map<string, number>();
   const COMPACTION_LINK_MS = 60 * 60 * 1000;
+  function rememberProducedSummary(summary: string): void {
+    const quote = summaryQuote(summary).replace(/^<summary>\s*/, "");
+    if (quote.length < 200) return;
+    const now = Date.now();
+    for (const [key, at] of producedSummaries) if (now - at > COMPACTION_LINK_MS) producedSummaries.delete(key);
+    producedSummaries.set(quote, now);
+    if (producedSummaries.size > 256) producedSummaries.delete(producedSummaries.keys().next().value!);
+  }
+  function hasProducedSummary(request: MessagesRequest): boolean {
+    const text = compactedSummaryText(request);
+    if (!text) return false;
+    const now = Date.now();
+    for (const [quote, at] of producedSummaries) {
+      if (now - at > COMPACTION_LINK_MS) { producedSummaries.delete(quote); continue; }
+      if (text.includes(quote)) return true;
+    }
+    return false;
+  }
   function summarizedSession(request: MessagesRequest): { sessionId: string; pendingToolIds: string } | undefined {
     if (hostAllowsAnyTools(request)) return undefined;
     const call = lastSummarizedToolCall(request);
@@ -374,9 +394,9 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
     const request = prepared.request;
     const listed = configuredModels(config).find((model) => model.id === request.model);
     const provider: ModelProvider = listed?.provider ?? providerFromModelId(request.model);
-    // Before this conversation takes a slot, free the one it replaces.
-    releaseCompacted(request);
     const summarized = summarizedSession(request);
+    const summarizerRequest = !hostAllowsAnyTools(request)
+      && (lastSummarizedToolCall(request) !== undefined || isDroidSummarizerRequest(request));
     const contextHash = sessionContextHash(headers, request, cwd, provider);
     const incomingHashes = historyMessageHashes(request.messages);
     const requestFingerprint = createHash("sha256").update(JSON.stringify({ request, role, cwd, provider, contextHash, host: control.hostSessionId(prepared.binding) ?? null })).digest("hex");
@@ -384,11 +404,17 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
     const retries = store.list().filter((session) => session.state === "IDLE" && session.hostEnded === undefined && !session.pendingToolIds.length
       && session.retryableRequestHash === requestFingerprint && (!explicit || session.bridgeSessionId === explicit || session.droidSessionId === explicit));
     if (retries.length > 1) throw new BridgeError(409, "ambiguous_session", "Multiple failed requests match; supply X-Bridge-Session");
-    const resolved = retries[0] ? { match: retries[0], reason: "upstream-retry" } : resolveSession(store.list(), headers, request, {
+    const resolved: ReturnType<typeof resolveSession> = retries[0] ? { match: retries[0], reason: "upstream-retry" } : resolveSession(store.list(), headers, request, {
       cwd, hostSessionId: control.hostSessionId(prepared.binding), allowModelSwitch: config.models !== undefined, provider,
       // Droid desktop has no conversation ID header or hooks to disambiguate.
       continueIdenticalTranscripts: config.desktopProfile,
+      // This receipt is server-owned. A client summary heading alone never
+      // permits shortened-history callback correlation.
+      compactedHistory: hasProducedSummary(request),
     });
+    // A retained callback still belongs to its live query. Only release an
+    // abandoned query when this request could not prove that continuation.
+    if (!resolved.match) releaseCompacted(request);
     const session = resolved.match
       ?? withSlot(() => store.create({
         role,
@@ -403,6 +429,7 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
       }));
 
     const sessionId = session.bridgeSessionId;
+    const toolUseAliases = { ...session.toolUseAliases, ...resolved.toolUseAliases };
     if (activeRequests.has(sessionId)) {
       throw new BridgeError(409, "session_busy", "another request is already running for this session");
     }
@@ -507,6 +534,7 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
         reasoning: droidReasoningLevel(request),
         historyHash: historyPrefixHash(request),
         requestMessageHashes: incomingHashes,
+        toolUseAliases: retainToolUseAliases(toolUseAliases, session.pendingToolIds),
         toolNames: (request.tools ?? []).map((t) => t.name),
       });
       record(req, true, {
@@ -530,10 +558,11 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
       res.setHeader("X-Bridge-Role", role);
       res.setHeader("X-Bridge-Mode", config.mode);
       logger.info("request_admitted", { sessionId, admissionMs: Date.now() - admissionStarted, messages: request.messages.length });
+      if (resolved.reason === "compacted-tool-use-rewrite") logger.info("compacted_tool_result_continued", { sessionId, messages: request.messages.length });
 
       const turn: RuntimeTurn = await Promise.race([
         interrupted,
-        runtime.handle({ request, role, session, headers, ...(resolved.reason === "upstream-retry" ? { recovery: "cold-import" as const } : {}) }, sink),
+        runtime.handle({ request: provider === "claude" ? requestWithNativeToolIds(request, toolUseAliases) : request, role, session, headers, ...(resolved.reason === "upstream-retry" ? { recovery: "cold-import" as const } : {}) }, sink),
       ]);
       if (cancellationRequested || store.get(sessionId)?.cancelRequested) {
         throw new BridgeError(499, "cancelled", "session cancelled");
@@ -542,6 +571,8 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
       const assistantContent = writer ? writer.completeContent(turn.response) : turn.response.content;
       store.update(sessionId, {
         pendingToolIds: turn.pendingToolIds,
+        toolUseAliases: retainToolUseAliases(toolUseAliases, turn.pendingToolIds),
+        lastResponseToolIds: assistantContent.flatMap((block) => block.type === "tool_use" && typeof block.id === "string" ? [block.id] : []),
         notes,
         sdkSessionId: turn.sdkSessionId ?? session.sdkSessionId,
         historyMessageHashes: historyMessageHashes([...request.messages, { role: "assistant", content: assistantContent }]),
@@ -550,6 +581,7 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
       store.setState(sessionId, turn.pendingToolIds.length ? "WAITING_DROID_TOOL" : "IDLE");
       if (turn.pendingToolIds.length) scheduleWorkerEnd(sessionId, turn.pendingToolIds);
       if (summarized) rememberCompaction(summarized, turn.response.content.map((block) => (block.type === "text" && typeof block.text === "string" ? block.text : "")).join("\n"));
+      if (summarizerRequest) rememberProducedSummary(turn.response.content.map((block) => (block.type === "text" && typeof block.text === "string" ? block.text : "")).join("\n"));
       appendLogLine(turnLog, JSON.stringify(redactJson({
         at: new Date().toISOString(),
         session: sessionId,
@@ -585,7 +617,7 @@ export function createBridgeApp(config: BridgeConfig, logger: Logger, canaryPath
         if (!cancellationRequested && current && !current.cancelRequested && current.hostEnded === undefined
           && (current.state === "GENERATING" || current.state === "RESUMING")) {
           // Restore only our pending request, never a later host lifecycle event.
-          store.update(sessionId, { ...previous, hostEnded: previous.hostEnded });
+          store.update(sessionId, { ...previous, toolUseAliases: previous.toolUseAliases, hostEnded: previous.hostEnded });
         }
       } else if (!timedOut && current?.state !== "CANCELLED" && !(error instanceof BridgeError && error.code === "host_session_ended")) {
         store.setState(sessionId, "FAILED");

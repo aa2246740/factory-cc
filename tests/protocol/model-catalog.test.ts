@@ -104,6 +104,10 @@ it("desktop rejects missing cwd before session creation and isolates different p
   expect(switched.status).toBe(409); expect(switched.json).toMatchObject({ error: { type: "session_context_changed" } });
   const fresh = await postMessages(app.url, token, body(two), { "x-bridge-session": "another-project" });
   expect(fresh.status).toBe(200); expect(app.store.list()).toHaveLength(2);
+  const compacted = body(one);
+  compacted.messages[0]!.content.unshift({ type: "text", text: "You summarized the conversation thus far earlier in this session, as follows:\n\n<summary>Retained task.</summary>" });
+  const continued = await postMessages(app.url, token, compacted, { "x-bridge-session": "same-instance-summary" });
+  expect(continued.status).toBe(200);
   // A tool-free request, such as Droid's compaction summary, needs no project.
   const summary = await postMessages(app.url, token, { ...request("sonnet"), tools: [] }, { "x-bridge-session": "summary" });
   expect(summary.status).toBe(200);
