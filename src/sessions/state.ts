@@ -29,6 +29,10 @@ export interface SessionRecord {
   createdAt: string;
   updatedAt: string;
   pendingToolIds: string[];
+  /** Client-visible desktop IDs mapped to the native callbacks this session owns. */
+  toolUseAliases?: Record<string, string>;
+  /** Ordered IDs in the last client-visible response, for exact transcript rewrite proofs. */
+  lastResponseToolIds?: string[];
   /** IDs that were pending when the session ended. Never matched as owners; kept so a retried result gets a clear 409. */
   endedToolIds?: string[];
   cancelRequested: boolean;

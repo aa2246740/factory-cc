@@ -21,8 +21,8 @@ const text = (value: string): RuntimeTurn => ({ response: assistantMessage(model
 const summarizer = (call: { name: string; input: unknown }) => ({ model, max_tokens: 4096, messages: [{ role: "user", content:
   `Please summarize the following conversation:\n\`\`\`\nUSER: run the mission\n\nASSISTANT: Starting.\n\nTOOL_CALL: ${call.name} input=${JSON.stringify(call.input)}\n\n---\n\nTOOL: TOOL_RESULT: {"status":"paused"}\n\`\`\`\nWrite the summary.` }] });
 /** Like Droid after compacting: a new first message quoting the summary, without its closing tag. */
-const continuation = (summary = SUMMARY) => ({ model, max_tokens: 64, tools, messages: [{ role: "user", content: [
-  { type: "text", text: `${COMPACTION_SUMMARY}\n${summary.replace("</summary>", "")}\nCurrent TODO List:\nin_progress [high] Finish the feature` },
+const continuation = (summary = SUMMARY, prefix = COMPACTION_SUMMARY) => ({ model, max_tokens: 64, tools, messages: [{ role: "user", content: [
+  { type: "text", text: `${prefix}\n${summary.replace("</summary>", "")}\nCurrent TODO List:\nin_progress [high] Finish the feature` },
   { type: "text", text: "Continue." },
 ] }] });
 const released = (logDir: string) => (existsSync(join(logDir, "bridge.jsonl")) ? readFileSync(join(logDir, "bridge.jsonl"), "utf8").trim().split("\n") : [])
@@ -110,7 +110,10 @@ describe("a conversation Droid compacted away while it waited on a tool", () => 
     expect(app.store.require(old.sessionId).state).toBe("WAITING_DROID_TOOL");
   });
 
-  it("is released when Droid continues with the summary this Bridge produced, before the new one takes a slot", async () => {
+  it.each([
+    { kind: "previous instance", prefix: COMPACTION_SUMMARY },
+    { kind: "same instance", prefix: "You summarized the conversation thus far earlier in this session, as follows:\n" },
+  ])("releases the old slot when Droid continues with the produced $kind summary", async ({ prefix }) => {
     const { app, token, config } = await bridge();
     const old = await parkOrchestrator(app, token, "old");
     await compact(app, token);
@@ -118,7 +121,7 @@ describe("a conversation Droid compacted away while it waited on a tool", () => 
     expect(runtime.cancel).not.toHaveBeenCalled();
     expect(app.store.require(old.sessionId).state).toBe("WAITING_DROID_TOOL");
 
-    const next = await postMessages(app.url, token, continuation());
+    const next = await postMessages(app.url, token, continuation(SUMMARY, prefix));
     expect(next.status).toBe(200);
     expect(next.session).not.toBe(old.sessionId);
     expect(runtime.cancel).toHaveBeenCalledExactlyOnceWith(old.sessionId, "compacted-by-droid");

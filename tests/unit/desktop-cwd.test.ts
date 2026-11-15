@@ -75,9 +75,12 @@ it("keeps canonical cwd in session identity", () => {
   const cwd = resolveRequestCwd({}, req, config, {});
   expect(sessionContextHash({}, req, cwd)).not.toBe(sessionContextHash({}, req, root));
 });
-it("finds the environment reminder Droid places after its summary in a compacted conversation", () => {
+it.each([
+  { kind: "previous instance", prefix: "A previous instance of Droid has summarized the conversation thus far as follows:\n" },
+  { kind: "same instance", prefix: "You summarized the conversation thus far earlier in this session, as follows:\n" },
+])("finds the environment reminder after Droid's $kind summary", ({ prefix }) => {
   // Shape of Droid 0.243.0's first request after automatic compaction.
-  const summary = { type: "text" as const, text: "A previous instance of Droid has summarized the conversation thus far as follows:\n\n<summary>\n1. Remember OSPREY-2290.\n</summary>" };
+  const summary = { type: "text" as const, text: `${prefix}\n<summary>\n1. Remember OSPREY-2290.\n</summary>` };
   const req = request([summary, reminder("/compacted")]);
   req.messages.push({ role: "user", content: "Remember OSPREY-2290." }, { role: "assistant", content: "STORED" }, { role: "user", content: "What value?" });
   expect(droidWorkingDirectory(req)).toBe("/compacted");

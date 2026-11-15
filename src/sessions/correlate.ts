@@ -1,12 +1,13 @@
 import { createHash } from "node:crypto";
 import { header } from "../security/auth.js";
-import { asBlocks, canonicalToolUseId, collectToolResults } from "../protocol/content.js";
+import { asBlocks, canonicalToolUseId, collectToolResults, collectToolUses } from "../protocol/content.js";
+import { nativeToolUseId, type ToolUseAliases } from "../protocol/desktop-tool-ids.js";
 import type { ContentBlock, Message, MessagesRequest, RoleTag } from "../types.js";
 import { BridgeError } from "../types.js";
 import { providerFromModelId, type ModelProvider } from "../models.js";
 import { droidReasoningLevel, requestAtReasoningLevel, requestWithoutReasoningLevel } from "../runtime/reasoning.js";
 import { isEnded, type SessionRecord } from "./state.js";
-import { canonicalWorkspacePath, resolveRequestCwd } from "../workspace.js";
+import { canonicalWorkspacePath, isDroidCompactionSummary, resolveRequestCwd } from "../workspace.js";
 
 type Headers = Record<string, string | string[] | undefined>;
 
@@ -75,8 +76,8 @@ export function resolveSession(
   sessions: SessionRecord[],
   headers: Headers,
   request: MessagesRequest,
-  options: { cwd?: string; hostSessionId?: string; allowModelSwitch?: boolean; continueIdenticalTranscripts?: boolean; provider?: ModelProvider } = {},
-): { match?: SessionRecord; reason: string } {
+  options: { cwd?: string; hostSessionId?: string; allowModelSwitch?: boolean; continueIdenticalTranscripts?: boolean; provider?: ModelProvider; compactedHistory?: boolean } = {},
+): { match?: SessionRecord; reason: string; toolUseAliases?: Record<string, string> } {
   const explicit = explicitSessionId(headers, request);
   const requestProvider = options.provider ?? providerFromModelId(request.model);
   const contextHash = sessionContextHash(headers, request, options.cwd, requestProvider);
@@ -108,7 +109,7 @@ export function resolveSession(
   // Factory keeps old tool_results in its history. An ended session can no
   // longer consume one, so it must not own the conversation they appear in.
   const owners = sessions.filter((session) => !isEnded(session)
-    && results.some((result) => holdsToolId(session.pendingToolIds, result.tool_use_id)));
+    && results.some((result) => holdsToolId(session.pendingToolIds, result.tool_use_id, session.toolUseAliases)));
   if (owners.length === 0) {
     // Only a request that does nothing but return the abandoned tool's result is
     // a retry. Any new user content makes it a new turn over imported history.
@@ -117,7 +118,7 @@ export function resolveSession(
     if (latestBlocks.length > 0 && latestBlocks.every((block) => block.type === "tool_result")) {
       const retried = collectToolResults([latest!]);
       const held = (session: SessionRecord): string[] => [...(session.endedToolIds ?? []), ...session.pendingToolIds];
-      if (sessions.some((session) => isEnded(session) && retried.some((result) => holdsToolId(held(session), result.tool_use_id)))) {
+      if (sessions.some((session) => isEnded(session) && retried.some((result) => holdsToolId(held(session), result.tool_use_id, session.toolUseAliases)))) {
         throw new BridgeError(409, "session_unavailable", "This tool result belongs to a session that was cancelled, timed out or interrupted. Its tool call will not be replayed; send a new message to continue in a new session.");
       }
     }
@@ -192,27 +193,45 @@ export function resolveSession(
       && completed.at(-2) === tail[0] && completed.at(-1) === tail[1]);
   };
 
+  const rewritten = requestProvider === "claude" ? sessions.flatMap((session) => {
+    const aliases = rewrittenToolAliases(session, request, incoming, options.compactedHistory === true);
+    const compacted = !session.requestMessageHashes?.every((value, index) => value === incoming[index]);
+    return aliases ? [{ session, aliases, compacted }] : [];
+  }) : [];
+  const combinedOwners = [...new Set([...owners, ...rewritten.filter(({ session }) => !isEnded(session)).map(({ session }) => session)])];
+  const selected = (match: SessionRecord, reason: string): ReturnType<typeof resolveSession> => {
+    const aliases = rewritten.find(({ session }) => session === match)?.aliases;
+    return { match, reason, ...(aliases ? { toolUseAliases: aliases } : {}) };
+  };
+  const latest = request.messages.at(-1);
+  const latestBlocks = latest?.role === "user" ? asBlocks(latest.content) : [];
+  if (!combinedOwners.length && latestBlocks.length && latestBlocks.every((block) => block.type === "tool_result")
+    && rewritten.some(({ session }) => isEnded(session))) {
+    throw new BridgeError(409, "session_unavailable", "The rewritten tool result belongs to an ended native session; its callback will not be replayed.");
+  }
+
   if (explicit) {
     const hits = sessions.filter((session) => session.bridgeSessionId === explicit || session.droidSessionId === explicit);
     if (hits.length > 1) throw ambiguous("multiple sessions claim the explicit session ID");
     const hit = hits[0];
-    if (owners.some((owner) => owner !== hit)) {
+    if (combinedOwners.some((owner) => owner !== hit)) {
       throw new BridgeError(409, "cross_session_tool_result", "tool_result does not belong to X-Bridge-Session");
     }
     if (hit) {
       assertHostScope(hit);
       assertSelectedContext(hit, (canChangeHostThinking(hit) || canChangeReasoningLevel(hit)) && (hasCompleteHistory(hit) || hasAuthenticatedTail(hit)));
-      return { match: hit, reason: "explicit-id" };
+      return selected(hit, "explicit-id");
     }
     // An explicit new conversation may intentionally share the same prompt.
     return { reason: "new-explicit-session" };
   }
 
-  if (owners.length > 1) throw ambiguous("tool results belong to multiple sessions");
-  if (owners[0]) {
-    assertHostScope(owners[0]);
-    assertSelectedContext(owners[0]);
-    return { match: owners[0], reason: "tool-use-id" };
+  if (combinedOwners.length > 1) throw ambiguous("tool results belong to multiple sessions");
+  if (combinedOwners[0]) {
+    assertHostScope(combinedOwners[0]);
+    assertSelectedContext(combinedOwners[0]);
+    const rewrite = rewritten.find(({ session }) => session === combinedOwners[0]);
+    return selected(combinedOwners[0], rewrite ? rewrite.compacted ? "compacted-tool-use-rewrite" : "tool-use-rewrite" : "tool-use-id");
   }
 
   const candidates = sessions.filter((session) => {
@@ -261,9 +280,10 @@ export function resolveSession(
   }
   // Cursor can be handed the same completed tool-result body again a few seconds
   // later. That retry is not a new conversation. Claude keeps the old behavior.
-  if (requestProvider === "cursor") {
+  if (requestProvider === "cursor" || sessions.some((session) => session.toolUseAliases && Object.keys(session.toolUseAliases).length)) {
     const replays = sessions.filter((session) => {
       if (!inHostScope(session) || isEnded(session) || !historyContextMatches(session)) return false;
+      if (requestProvider !== "cursor" && !Object.keys(session.toolUseAliases ?? {}).length) return false;
       // Idle: the turn already finished. Waiting: the turn parked a tool and Droid
       // repeated that same request body. A busy generating session is not a replay.
       if (session.cancelRequested || (session.state !== "IDLE" && session.state !== "WAITING_DROID_TOOL")) return false;
@@ -277,6 +297,70 @@ export function resolveSession(
     }
   }
   return { reason: "new-session" };
+}
+
+/** An ID rewrite is authenticated by the entire prior request and response,
+ * including every name, argument, text block and their order. No name-only,
+ * pending-count or host-ID guess can grant a native callback's authority. */
+function rewrittenToolAliases(session: SessionRecord, request: MessagesRequest, incoming: string[], compactedHistory: boolean): Record<string, string> | undefined {
+  const prior = session.requestMessageHashes;
+  const completed = session.historyMessageHashes;
+  if (!prior?.length || !completed || completed.length !== prior.length + 1
+    || !prior.every((value, index) => value === completed[index])) return undefined;
+  const completePrefix = incoming.length > completed.length && prior.every((value, index) => value === incoming[index]);
+  const responses = completePrefix ? [prior.length] : compactedHistory
+    ? request.messages.flatMap((message, index) => message.role === "assistant" && retainedCompactionResponse(prior, request, incoming, index) ? [index] : []) : [];
+  const matches = responses.map((assistantIndex): Record<string, string> | undefined => {
+    const assistant = request.messages[assistantIndex];
+    if (assistant?.role !== "assistant" || request.messages[assistantIndex + 1]?.role !== "user") return undefined;
+    const uses = collectToolUses([assistant]);
+    const expected = session.lastResponseToolIds ?? session.pendingToolIds.map((id) => {
+      const aliases = Object.entries(session.toolUseAliases ?? {}).filter(([, native]) => native === id);
+      return aliases.length === 1 ? aliases[0]![0] : id;
+    });
+    if (!uses.length || uses.length !== expected.length || new Set(uses.map((call) => call.id)).size !== uses.length
+      || asBlocks(assistant.content).filter((block) => block.type === "tool_use").length !== uses.length) return undefined;
+    let index = 0;
+    const restored: Message = { ...assistant, content: asBlocks(assistant.content).map((block) => block.type === "tool_use" ? { ...block, id: expected[index++] } : block) };
+    if (historyMessageHashes([restored])[0] !== completed.at(-1)) return undefined;
+    const returned = new Set(collectToolResults(request.messages.slice(assistantIndex + 1)).map((result) => result.tool_use_id));
+    const held = new Set([...session.pendingToolIds, ...(session.endedToolIds ?? [])]);
+    const aliases: Record<string, string> = {};
+    for (const [index, call] of uses.entries()) {
+      const native = nativeToolUseId(expected[index], session.toolUseAliases);
+      if (call.id === expected[index] || !held.has(native) || !returned.has(call.id)) continue;
+      if (Object.hasOwn(session.toolUseAliases ?? {}, call.id) && nativeToolUseId(call.id, session.toolUseAliases) !== native) {
+        throw new BridgeError(409, "conflicting_tool_id_alias", "The desktop tool ID already belongs to a different native callback");
+      }
+      aliases[call.id] = native;
+    }
+    return Object.keys(aliases).length ? aliases : undefined;
+  }).filter((aliases): aliases is Record<string, string> => aliases !== undefined);
+  if (matches.length > 1) throw ambiguous("multiple retained responses match the native callback");
+  return matches[0];
+}
+
+/** Preserve a live callback only after a server-produced summary receipt,
+ * every retained message, a completed tool round trip and the complete pending
+ * response prove continuity. Newly inserted user instructions are not history. */
+function retainedCompactionResponse(prior: string[], request: MessagesRequest, incoming: string[], end: number): boolean {
+  const first = request.messages[0];
+  const firstBlocks = first?.role === "user" ? asBlocks(first.content) : [];
+  const summary = firstBlocks[0];
+  if (summary?.type !== "text" || typeof summary.text !== "string" || !isDroidCompactionSummary(summary.text)) return false;
+  const reminder = (message: Message): boolean => message.role === "user" && asBlocks(message.content).length > 0
+    && asBlocks(message.content).every((block) => block.type === "text" && typeof block.text === "string"
+      && /^<system-reminder>[\s\S]*<\/system-reminder>$/.test(block.text.trim()));
+  if (firstBlocks.length > 1 && !reminder({ role: "user", content: firstBlocks.slice(1) })) return false;
+  for (let start = 1; start <= end - 4; start++) {
+    if (start > 1 && !reminder(request.messages[start - 1])) break;
+    const count = end - start;
+    if (count > prior.length || !incoming.slice(start, end).every((value, index) => value === prior[prior.length - count + index])) continue;
+    const retained = request.messages.slice(start, end);
+    const calls = new Set(collectToolUses(retained.filter((message) => message.role === "assistant")).map((call) => call.id));
+    if (collectToolResults(retained.filter((message) => message.role === "user")).some((result) => calls.has(result.tool_use_id))) return true;
+  }
+  return false;
 }
 
 /**
@@ -309,8 +393,8 @@ function assertContext(session: SessionRecord, contextHash: string, headers: Hea
   }
 }
 
-function holdsToolId(ids: readonly string[] | undefined, toolUseId: string): boolean {
-  const wanted = canonicalToolUseId(toolUseId);
+function holdsToolId(ids: readonly string[] | undefined, toolUseId: string, aliases?: ToolUseAliases): boolean {
+  const wanted = canonicalToolUseId(nativeToolUseId(toolUseId, aliases));
   return (ids ?? []).some((id) => canonicalToolUseId(id) === wanted);
 }
 
